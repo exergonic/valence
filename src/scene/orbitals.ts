@@ -64,11 +64,10 @@ export function renderOrbitals(
     const sigmaBonds = neighbors.length;
     let lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
-    // sp² atoms adjacent to π bonds: move one σ lone pair into the p orbital (π conjugation)
+    // Conjugation: any atom adjacent to a π bond moves one σ lone pair into the p orbital
     const hasPiNeighbor = neighbors.some((ni) => piCount[ni] > 0);
-    if (hyb.hybridization === 'sp2' && lonePairs > 0 && hasPiNeighbor) {
-      lonePairs -= 1;
-    }
+    const conjugated = lonePairs > 0 && hasPiNeighbor;
+    if (conjugated) lonePairs -= 1;
 
     const color = getElementColor(atom.element);
 
@@ -79,28 +78,21 @@ export function renderOrbitals(
       group.add(mesh);
     }
 
-    // Compute σ plane normal for sp² atoms with 1 neighbor (carbonyl O-like)
-    let sigmaPlaneNormal: [number, number, number] | null = null;
-    if (hyb.hybridization === 'sp2' && neighborVectors.length === 1 && neighbors.length > 0) {
-      const neighborIdx = neighbors[0];
-      const neighborOtherBonds = adj[neighborIdx].filter((ni) => ni !== i);
-      if (neighborOtherBonds.length >= 2) {
-        const nb = molecule.atoms[neighborIdx];
-        const s1 = molecule.atoms[neighborOtherBonds[0]];
-        const s2 = molecule.atoms[neighborOtherBonds[1]];
-        const v1: [number, number, number] = [s1.x - nb.x, s1.y - nb.y, s1.z - nb.z];
-        const v2: [number, number, number] = [s2.x - nb.x, s2.y - nb.y, s2.z - nb.z];
-        const nrm = vecNormalize(crossProduct(v1, v2));
-        if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) {
-          sigmaPlaneNormal = nrm;
-        }
-      }
+    // Compute π direction for conjugated atoms
+    let piDirection: [number, number, number] | null = null;
+    if (conjugated) {
+      piDirection = getPiDirectionFromNeighbor(i, adj, molecule, piCount, atomPos);
+    }
+    // Fallback: sp² with enough own neighbors can compute π from own σ plane
+    if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2) {
+      const nrm = vecNormalize(crossProduct(neighborVectors[0], neighborVectors[1]));
+      if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
     }
 
     // Lone pairs in unfilled hybrid orbital directions
     if (lonePairs > 0) {
       const totalHybrids = stericNumber;
-      const lpDirs = getLonePairDirections(neighborVectors, totalHybrids, sigmaPlaneNormal);
+      const lpDirs = getLonePairDirections(neighborVectors, totalHybrids, piDirection);
       for (const lpDir of lpDirs) {
         const mesh = createLobeMesh(lonePairLobe(), 0xffaa44, 0.5);
         orientLobe(mesh, atomPos, lpDir);
@@ -109,19 +101,12 @@ export function renderOrbitals(
     }
 
     // Pi orbitals based on hybridization
-    if (hyb.hybridization === 'sp2' && neighborVectors.length >= 2) {
-      const normal = crossProduct(neighborVectors[0], neighborVectors[1]);
-      const len = Math.sqrt(normal[0] ** 2 + normal[1] ** 2 + normal[2] ** 2);
-      if (len > 1e-6) {
-        normal[0] /= len; normal[1] /= len; normal[2] /= len;
-        addPiOrbital(group, atomPos, [normal], 0x4488ff);
-      }
-    } else if (hyb.hybridization === 'sp2' && neighborVectors.length === 1 && sigmaPlaneNormal) {
-      addPiOrbital(group, atomPos, [sigmaPlaneNormal], 0x4488ff);
+    if (piDirection) {
+      addPiOrbital(group, atomPos, [piDirection], 0x4488ff);
     } else if (hyb.hybridization === 'sp' && neighborVectors.length >= 2) {
       const axis = neighborVectors[0];
-      const perp = findPerpendicular(axis);
-      const perp2 = crossProduct(axis, perp);
+      const perp = vecNormalize(findPerpendicular(axis));
+      const perp2 = vecNormalize(crossProduct(axis, perp));
       addPiOrbital(group, atomPos, [perp, perp2], 0x4488ff);
     }
   }
@@ -187,6 +172,40 @@ function crossProduct(
     a[2] * b[0] - a[0] * b[2],
     a[0] * b[1] - a[1] * b[0],
   ];
+}
+
+function getPiDirectionFromNeighbor(
+  atomIdx: number,
+  adj: number[][],
+  molecule: Molecule,
+  piCount: number[],
+  atomPos: [number, number, number],
+): [number, number, number] | null {
+  const piNeighbor = adj[atomIdx].find((ni) => piCount[ni] > 0);
+  if (piNeighbor === undefined) return null;
+
+  const otherBonds = adj[piNeighbor].filter((ni) => ni !== atomIdx);
+  if (otherBonds.length >= 2) {
+    const nb = molecule.atoms[piNeighbor];
+    const s1 = molecule.atoms[otherBonds[0]];
+    const s2 = molecule.atoms[otherBonds[1]];
+    const v1: [number, number, number] = [s1.x - nb.x, s1.y - nb.y, s1.z - nb.z];
+    const v2: [number, number, number] = [s2.x - nb.x, s2.y - nb.y, s2.z - nb.z];
+    return vecNormalize(crossProduct(v1, v2));
+  }
+
+  if (otherBonds.length === 1) {
+    const nb = molecule.atoms[piNeighbor];
+    const s1 = molecule.atoms[otherBonds[0]];
+    const v1: [number, number, number] = [s1.x - nb.x, s1.y - nb.y, s1.z - nb.z];
+    const bd: [number, number, number] = [nb.x - atomPos[0], nb.y - atomPos[1], nb.z - atomPos[2]];
+    return vecNormalize(crossProduct(v1, bd));
+  }
+
+  // Fallback: perpendicular to the bond to the π neighbor
+  const nb = molecule.atoms[piNeighbor];
+  const bd: [number, number, number] = [nb.x - atomPos[0], nb.y - atomPos[1], nb.z - atomPos[2]];
+  return vecNormalize(findPerpendicular(bd));
 }
 
 function vecNormalize(v: [number, number, number]): [number, number, number] {
