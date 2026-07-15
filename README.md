@@ -6,6 +6,8 @@ Draw a molecule in JSME, click **Render Molecule**, and toggle between a ball-an
 
 ![Web VBVis displaying furane](./demo.png)
 
+<img src="./water.png" alt="water" style="zoom:25%;" /><img src="./ethyne.png" alt="ethyne" style="zoom:30%;" />	
+
 ## 🎯 Scope & Intent
 
 This webapp is designed for **educational and qualitative visualization** using VSEPR rules and geometric algorithms to render textbook-style hybrid (sp, sp2, sp3) and unhybridized (p) orbitals.
