@@ -3,7 +3,7 @@ import type { Molecule } from '../mol-parser';
 import { assignHybridization } from '../hybridization';
 import { createLobeMesh, orientLobe } from '../orbitals';
 import { sigmaLobe, piLobe, lonePairLobe } from '../orbitals/lathe';
-import { getElementColor } from './chem-data';
+import { getElementColor, getElementRadius } from './chem-data';
 
 export function renderOrbitals(
   group: THREE.Group,
@@ -78,10 +78,11 @@ export function renderOrbitals(
     if (conjugated) lonePairs -= 1;
 
     const color = getElementColor(atom.element);
+    const atomScale = getElementRadius(atom.element) / 0.6;
 
     // Sigma bonds: lobes pointing toward each neighbor
     for (const vec of neighborVectors) {
-      const mesh = createLobeMesh(sigmaLobe(), color, 0.6, preset);
+      const mesh = createLobeMesh(sigmaLobe(), color, 0.6, preset, atomScale);
       orientLobe(mesh, atomPos, vec);
       group.add(mesh);
     }
@@ -106,7 +107,7 @@ export function renderOrbitals(
       const totalHybrids = sigmaBonds + lonePairs;
       const lpDirs = getLonePairDirections(neighborVectors, totalHybrids, piDirection);
       for (const lpDir of lpDirs) {
-        const mesh = createLobeMesh(lonePairLobe(), 0xffaa44, 0.5, preset);
+        const mesh = createLobeMesh(lonePairLobe(), 0xffaa44, 0.5, preset, atomScale);
         orientLobe(mesh, atomPos, lpDir);
         group.add(mesh);
       }
@@ -114,7 +115,7 @@ export function renderOrbitals(
 
     // Pi orbitals based on hybridization
     if (piDirection) {
-      addPiOrbital(group, atomPos, [piDirection], 0x4488ff, preset);
+      addPiOrbital(group, atomPos, [piDirection], 0x4488ff, preset, atomScale);
     } else if (hyb.hybridization === 'sp' && neighborVectors.length >= 2) {
       const axis = neighborVectors[0];
       const perp = vecNormalize(findPerpendicular(axis));
@@ -138,6 +139,7 @@ function addPiOrbital(
   directions: [number, number, number][],
   color: number,
   preset: 'glass' | 'glossy' | 'matte' = 'glass',
+  atomScale: number = 1,
 ): void {
   for (const dir of directions) {
     const normalized: [number, number, number] = [
@@ -149,11 +151,11 @@ function addPiOrbital(
     normalized[1] /= len;
     normalized[2] /= len;
 
-    const positive = createLobeMesh(piLobe(), color, 0.75, preset);
+    const positive = createLobeMesh(piLobe(), color, 0.75, preset, atomScale);
     orientLobe(positive, origin, normalized);
     group.add(positive);
 
-    const negative = createLobeMesh(piLobe(), color, 0.75, preset);
+    const negative = createLobeMesh(piLobe(), color, 0.75, preset, atomScale);
     orientLobe(negative, origin, [
       -normalized[0],
       -normalized[1],

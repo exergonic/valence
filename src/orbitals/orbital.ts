@@ -6,8 +6,9 @@ export function createLobeMesh(
   color: number,
   opacity: number = 0.7,
   preset: 'glass' | 'glossy' | 'matte' = 'glass',
+  scale: number = 1,
 ): THREE.Mesh {
-  const points = profile.points.map((p) => new THREE.Vector2(p.x, p.y));
+  const points = profile.points.map((p) => new THREE.Vector2(p.x * scale, p.y * scale));
   const geo = new THREE.LatheGeometry(points, profile.segments);
 
   let mat: THREE.MeshPhongMaterial;
