@@ -65,6 +65,12 @@ export function renderOrbitals(
     const sigmaBonds = neighbors.length;
     let lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
+    // sp² with 2 neighbors and no π bonds is likely an OH-type oxygen misclassified
+    // by angle measurement (S-O-H in H₂SO₄ gl ~120°); force sp³ with 2 σ lone pairs.
+    if (hyb.hybridization === 'sp2' && sigmaBonds === 2 && piCount[i] === 0) {
+      lonePairs = 2;
+    }
+
     // Conjugation: if any neighbor has external π bonds and atom itself has none,
     // promote one σ lone pair into the p orbital (furan O, aniline N, amide N).
     // Skip if atom already has π bonds (pyridine N with N=C).
