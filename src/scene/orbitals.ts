@@ -64,27 +64,16 @@ export function renderOrbitals(
     const sigmaBonds = neighbors.length;
     let lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
-    // Conjugation: atoms adjacent to a π bond move one σ lone pair into the p orbital
-    const piNeighborCount = neighbors.filter((ni) => {
+    // Conjugation: if any neighbor has external π bonds and atom itself has none,
+    // promote one σ lone pair into the p orbital (furan O, aniline N, amide N).
+    // Skip if atom already has π bonds (pyridine N with N=C).
+    const hasExtPiNeighbor = neighbors.some((ni) => {
       const sharedPi = molecule.bonds
         .filter((b) => (b.atom1Index === i && b.atom2Index === ni) || (b.atom1Index === ni && b.atom2Index === i))
         .reduce((s, b) => s + Math.max(0, b.order - 1), 0);
       return (piCount[ni] - sharedPi) > 0;
-    }).length;
-    const isCarbonylAdjacent = neighbors.some((ni) =>
-      molecule.atoms[ni].element === 'C' &&
-      molecule.bonds.some((b) => {
-        const oth = b.atom1Index === ni ? b.atom2Index : b.atom2Index === ni ? b.atom1Index : -1;
-        return oth >= 0 && oth !== i && molecule.atoms[oth].element === 'O' && b.order >= 2;
-      })
-    );
-    // Conjugate if: (a) adjacent to carbonyl, or (b) both neighbors π-rich but self has no π (furan-like)
-    const selfHasPi = piCount[i] > 0;
-    const bothNeighborsPiRich = neighbors.length === 2 && piNeighborCount === 2 && !selfHasPi;
-    const conjugated = lonePairs > 0 && (
-      (neighbors.length === 2 && (isCarbonylAdjacent || bothNeighborsPiRich)) ||
-      (neighbors.length !== 2 && piNeighborCount > 0 && piNeighborCount < neighbors.length)
-    );
+    });
+    const conjugated = lonePairs > 0 && hasExtPiNeighbor && piCount[i] === 0;
     if (conjugated) lonePairs -= 1;
 
     const color = getElementColor(atom.element);
