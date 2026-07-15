@@ -192,3 +192,37 @@ html, body {
 
 #ctrl-bg-custom::-webkit-color-swatch-wrapper { padding: 0; }
 #ctrl-bg-custom::-webkit-color-swatch { border: 2px solid rgba(255,255,255,0.15); border-radius: 4px; }
+
+/* ── Export ── */
+
+.export-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.export-btn {
+  flex: 1;
+  padding: 6px 0;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: #bbb;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.export-btn:hover {
+  border-color: rgba(255,255,255,0.35);
+  color: #fff;
+  background: #4488ff;
+  border-color: #4488ff;
+}
+
+.export-note {
+  font-size: 10px;
+  color: #666;
+}

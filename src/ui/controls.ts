@@ -65,4 +65,22 @@ export function setupControls(ctx: SceneContext) {
   bgCustom.addEventListener('input', () => {
     setBg(bgCustom.value);
   });
+
+  // Export PNG
+  const exportBtn = panel.querySelector<HTMLButtonElement>('#ctrl-export-png')!;
+  exportBtn.addEventListener('click', () => {
+    const scale = 2;
+    const w = ctx.renderer.domElement.width;
+    const h = ctx.renderer.domElement.height;
+    ctx.renderer.setSize(w * scale, h * scale, false);
+    ctx.renderer.render(ctx.scene, ctx.camera);
+    const dataUrl = ctx.renderer.domElement.toDataURL('image/png');
+    ctx.renderer.setSize(w, h, false);
+    ctx.renderer.render(ctx.scene, ctx.camera);
+
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = 'molecule.png';
+    a.click();
+  });
 }
