@@ -5,16 +5,34 @@ export function createLobeMesh(
   profile: LobeProfile,
   color: number,
   opacity: number = 0.7,
+  preset: 'glass' | 'glossy' | 'matte' = 'glass',
 ): THREE.Mesh {
   const points = profile.points.map((p) => new THREE.Vector2(p.x, p.y));
   const geo = new THREE.LatheGeometry(points, profile.segments);
-  const mat = new THREE.MeshPhongMaterial({
-    color,
-    transparent: true,
-    opacity,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
+
+  let mat: THREE.MeshPhongMaterial;
+  switch (preset) {
+    case 'glossy':
+      mat = new THREE.MeshPhongMaterial({
+        color, transparent: true, opacity: Math.min(1, opacity + 0.2),
+        side: THREE.DoubleSide, depthWrite: false,
+        shininess: 80, specular: 0x444444,
+      });
+      break;
+    case 'matte':
+      mat = new THREE.MeshPhongMaterial({
+        color, transparent: true, opacity: Math.min(1, opacity + 0.25),
+        side: THREE.DoubleSide, depthWrite: false,
+        shininess: 5, specular: 0x000000,
+      });
+      break;
+    default:
+      mat = new THREE.MeshPhongMaterial({
+        color, transparent: true, opacity,
+        side: THREE.DoubleSide, depthWrite: false,
+        shininess: 30, specular: 0x222222,
+      });
+  }
   return new THREE.Mesh(geo, mat);
 }
 

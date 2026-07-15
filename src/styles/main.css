@@ -51,20 +51,110 @@ html, body {
   transition: background 0.15s;
 }
 
-#render-btn:hover {
-  background: #1d4ed8;
-}
-
-#render-btn:active {
-  background: #1e40af;
-}
-
-#render-btn:disabled {
-  background: #93c5fd;
-  cursor: default;
-}
+#render-btn:hover { background: #1d4ed8; }
+#render-btn:active { background: #1e40af; }
+#render-btn:disabled { background: #93c5fd; cursor: default; }
 
 #canvas-container {
   flex: 1;
   overflow: hidden;
+  position: relative;
+}
+
+/* ── Controls Panel (right-side overlay) ── */
+
+#controls-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 180px;
+  background: rgba(30, 30, 35, 0.88);
+  border-radius: 8px;
+  padding: 12px;
+  color: #ddd;
+  font-size: 12px;
+  user-select: none;
+  backdrop-filter: blur(6px);
+  z-index: 10;
+}
+
+.ctrl-section {
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.ctrl-section:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.ctrl-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: #bbb;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ctrl-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+
+.ctrl-toggle input[type="checkbox"] {
+  accent-color: #4488ff;
+}
+
+.ctrl-slider {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 0;
+}
+
+.ctrl-slider span {
+  font-size: 11px;
+  color: #ccc;
+}
+
+.ctrl-slider input[type="range"] {
+  width: 100%;
+  accent-color: #4488ff;
+  height: 4px;
+}
+
+.preset-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.preset-btn {
+  flex: 1;
+  padding: 4px 0;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: #bbb;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.preset-btn:hover {
+  border-color: rgba(255,255,255,0.35);
+  color: #fff;
+}
+
+.preset-btn.active {
+  background: #4488ff;
+  border-color: #4488ff;
+  color: #fff;
 }

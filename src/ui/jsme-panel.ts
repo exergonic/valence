@@ -12,8 +12,52 @@ declare global {
   }
 }
 
+function buildScene(ctx: SceneContext) {
+  if (!ctx.currentMolecule) return;
+
+  const clearGroup = (g: THREE.Group) => {
+    while (g.children.length > 0) {
+      const child = g.children[0];
+      g.remove(child);
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => m.dispose());
+        } else {
+          child.material.dispose();
+        }
+      }
+    }
+  };
+  clearGroup(ctx.moleculeGroup);
+  clearGroup(ctx.orbitalGroup);
+
+  const { atoms, bonds } = ctx.currentMolecule;
+  renderAtoms(ctx.moleculeGroup, atoms, ctx.display);
+  renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
+  renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset);
+
+  const center = new THREE.Vector3();
+  ctx.moleculeGroup.children.forEach((child) => {
+    if (child instanceof THREE.Mesh) {
+      center.add(child.position);
+    }
+  });
+  center.divideScalar(ctx.moleculeGroup.children.length || 1);
+
+  const box = new THREE.Box3().setFromObject(ctx.moleculeGroup);
+  const size = box.getSize(new THREE.Vector3()).length();
+  const dist = size * 1.5;
+  ctx.camera.position.set(center.x, center.y, center.z + dist);
+  ctx.camera.lookAt(center);
+  ctx.controls.target.set(center.x, center.y, center.z);
+  ctx.controls.update();
+}
+
 export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
   const renderBtn = document.getElementById('render-btn')! as HTMLButtonElement;
+  ctx.rerender = () => { if (ctx.currentMolecule) buildScene(ctx); };
+
   renderBtn.onclick = async () => {
     const applet = window.jsmeApplet;
     if (!applet) return;
@@ -45,42 +89,8 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
         };
       }
 
-      const clearGroup = (g: THREE.Group) => {
-        while (g.children.length > 0) {
-          const child = g.children[0];
-          g.remove(child);
-          if (child instanceof THREE.Mesh) {
-            child.geometry.dispose();
-            if (Array.isArray(child.material)) {
-              child.material.forEach(m => m.dispose());
-            } else {
-              child.material.dispose();
-            }
-          }
-        }
-      };
-      clearGroup(ctx.moleculeGroup);
-      clearGroup(ctx.orbitalGroup);
-
-      renderAtoms(ctx.moleculeGroup, molecule.atoms);
-      renderBonds(ctx.moleculeGroup, molecule.atoms, molecule.bonds);
-      renderOrbitals(ctx.orbitalGroup, molecule);
-
-      const center = new THREE.Vector3();
-      ctx.moleculeGroup.children.forEach((child) => {
-        if (child instanceof THREE.Mesh) {
-          center.add(child.position);
-        }
-      });
-      center.divideScalar(ctx.moleculeGroup.children.length || 1);
-
-      const box = new THREE.Box3().setFromObject(ctx.moleculeGroup);
-      const size = box.getSize(new THREE.Vector3()).length();
-      const dist = size * 1.5;
-      ctx.camera.position.set(center.x, center.y, center.z + dist);
-      ctx.camera.lookAt(center);
-      ctx.controls.target.set(center.x, center.y, center.z);
-      ctx.controls.update();
+      ctx.currentMolecule = molecule;
+      buildScene(ctx);
     } finally {
       renderBtn.textContent = 'Render Molecule';
       renderBtn.disabled = false;

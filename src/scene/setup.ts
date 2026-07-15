@@ -1,5 +1,13 @@
 import * as THREE from 'three';
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
+import type { Molecule } from '../mol-parser';
+
+export interface DisplaySettings {
+  atomScale: number;
+  bondScale: number;
+  showLabels: boolean;
+  orbitalPreset: 'glass' | 'glossy' | 'matte';
+}
 
 export interface SceneContext {
   scene: THREE.Scene;
@@ -8,6 +16,9 @@ export interface SceneContext {
   controls: TrackballControls;
   moleculeGroup: THREE.Group;
   orbitalGroup: THREE.Group;
+  display: DisplaySettings;
+  currentMolecule?: Molecule;
+  rerender: () => void;
 }
 
 export function initScene(container: HTMLElement): SceneContext {
@@ -52,5 +63,9 @@ export function initScene(container: HTMLElement): SceneContext {
   };
   window.addEventListener('resize', handleResize);
 
-  return { scene, camera, renderer, controls, moleculeGroup, orbitalGroup };
+  return {
+    scene, camera, renderer, controls, moleculeGroup, orbitalGroup,
+    display: { atomScale: 1, bondScale: 1, showLabels: false, orbitalPreset: 'glass' },
+    rerender: () => {},
+  };
 }

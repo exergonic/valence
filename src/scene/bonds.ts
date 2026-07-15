@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import type { Atom, Bond } from '../mol-parser';
+import type { DisplaySettings } from './setup';
 
-export function renderBonds(group: THREE.Group, atoms: Atom[], bonds: Bond[]) {
+export function renderBonds(group: THREE.Group, atoms: Atom[], bonds: Bond[], display?: DisplaySettings) {
+  const scale = display?.bondScale ?? 1;
   for (const bond of bonds) {
     const a1 = atoms[bond.atom1Index];
     const a2 = atoms[bond.atom2Index];
@@ -14,7 +16,7 @@ export function renderBonds(group: THREE.Group, atoms: Atom[], bonds: Bond[]) {
     const length = dir.length();
     dir.normalize();
 
-    const bondRadius = 0.12;
+    const bondRadius = 0.12 * scale;
     const geo = new THREE.CylinderGeometry(bondRadius, bondRadius, length, 8);
     const mat = new THREE.MeshPhongMaterial({ color: 0xcccccc });
     const mesh = new THREE.Mesh(geo, mat);

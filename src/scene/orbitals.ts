@@ -8,6 +8,7 @@ import { getElementColor } from './chem-data';
 export function renderOrbitals(
   group: THREE.Group,
   molecule: Molecule,
+  preset: 'glass' | 'glossy' | 'matte' = 'glass',
 ): void {
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
@@ -80,7 +81,7 @@ export function renderOrbitals(
 
     // Sigma bonds: lobes pointing toward each neighbor
     for (const vec of neighborVectors) {
-      const mesh = createLobeMesh(sigmaLobe(), color, 0.6);
+      const mesh = createLobeMesh(sigmaLobe(), color, 0.6, preset);
       orientLobe(mesh, atomPos, vec);
       group.add(mesh);
     }
@@ -105,7 +106,7 @@ export function renderOrbitals(
       const totalHybrids = sigmaBonds + lonePairs;
       const lpDirs = getLonePairDirections(neighborVectors, totalHybrids, piDirection);
       for (const lpDir of lpDirs) {
-        const mesh = createLobeMesh(lonePairLobe(), 0xffaa44, 0.5);
+        const mesh = createLobeMesh(lonePairLobe(), 0xffaa44, 0.5, preset);
         orientLobe(mesh, atomPos, lpDir);
         group.add(mesh);
       }
@@ -113,7 +114,7 @@ export function renderOrbitals(
 
     // Pi orbitals based on hybridization
     if (piDirection) {
-      addPiOrbital(group, atomPos, [piDirection], 0x4488ff);
+      addPiOrbital(group, atomPos, [piDirection], 0x4488ff, preset);
     } else if (hyb.hybridization === 'sp' && neighborVectors.length >= 2) {
       const axis = neighborVectors[0];
       const perp = vecNormalize(findPerpendicular(axis));
@@ -136,6 +137,7 @@ function addPiOrbital(
   origin: [number, number, number],
   directions: [number, number, number][],
   color: number,
+  preset: 'glass' | 'glossy' | 'matte' = 'glass',
 ): void {
   for (const dir of directions) {
     const normalized: [number, number, number] = [
@@ -147,11 +149,11 @@ function addPiOrbital(
     normalized[1] /= len;
     normalized[2] /= len;
 
-    const positive = createLobeMesh(piLobe(), color, 0.75);
+    const positive = createLobeMesh(piLobe(), color, 0.75, preset);
     orientLobe(positive, origin, normalized);
     group.add(positive);
 
-    const negative = createLobeMesh(piLobe(), color, 0.75);
+    const negative = createLobeMesh(piLobe(), color, 0.75, preset);
     orientLobe(negative, origin, [
       -normalized[0],
       -normalized[1],

@@ -12,7 +12,42 @@
         <div id="jsme_container"></div>
         <button id="render-btn">Render Molecule</button>
       </div>
-      <div id="canvas-container"></div>
+      <div id="canvas-container">
+        <div id="controls-panel">
+          <div class="ctrl-section">
+            <label class="ctrl-toggle">
+              <input type="checkbox" id="ctrl-show-mol" checked />
+              <span>Atoms & Bonds</span>
+            </label>
+            <label class="ctrl-toggle">
+              <input type="checkbox" id="ctrl-show-orb" />
+              <span>Orbitals</span>
+            </label>
+            <label class="ctrl-toggle">
+              <input type="checkbox" id="ctrl-show-labels" />
+              <span>Atom Labels</span>
+            </label>
+          </div>
+          <div class="ctrl-section">
+            <label class="ctrl-slider">
+              <span>Atom Size</span>
+              <input type="range" id="ctrl-atom-scale" min="0.2" max="2.5" step="0.05" />
+            </label>
+            <label class="ctrl-slider">
+              <span>Bond Size</span>
+              <input type="range" id="ctrl-bond-scale" min="0.2" max="3" step="0.1" />
+            </label>
+          </div>
+          <div class="ctrl-section">
+            <span class="ctrl-label">Style</span>
+            <div class="preset-row">
+              <button class="preset-btn active" data-preset="glass">Glass</button>
+              <button class="preset-btn" data-preset="glossy">Glossy</button>
+              <button class="preset-btn" data-preset="matte">Matte</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
     <script src="/jsme/jsme.nocache.js"></script>
     <script>
