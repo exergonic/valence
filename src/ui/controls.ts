@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import type { SceneContext } from '../scene';
 
 export function setupControls(ctx: SceneContext) {
@@ -39,7 +40,7 @@ export function setupControls(ctx: SceneContext) {
     ctx.labelGroup.visible = labelsToggle.checked;
   });
 
-  // Orbital Presets
+  // Orbital Presets (only .preset-btn, not .bg-btn)
   const presetBtns = panel.querySelectorAll<HTMLButtonElement>('.preset-btn');
   presetBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -48,5 +49,21 @@ export function setupControls(ctx: SceneContext) {
       ctx.display.orbitalPreset = btn.dataset.preset as 'glass' | 'glossy' | 'matte';
       rerender();
     });
+  });
+
+  // Background presets
+  const bgBtns = panel.querySelectorAll<HTMLButtonElement>('.bg-btn');
+  const bgCustom = panel.querySelector<HTMLInputElement>('#ctrl-bg-custom')!;
+  const setBg = (hex: string) => {
+    ctx.display.bgColor = hex;
+    ctx.scene.background = new THREE.Color(hex);
+    bgCustom.value = hex;
+    bgBtns.forEach((b) => b.classList.toggle('active', b.dataset.bg === hex));
+  };
+  bgBtns.forEach((btn) => {
+    btn.addEventListener('click', () => setBg(btn.dataset.bg!));
+  });
+  bgCustom.addEventListener('input', () => {
+    setBg(bgCustom.value);
   });
 }

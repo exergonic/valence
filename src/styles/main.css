@@ -158,3 +158,37 @@ html, body {
   border-color: #4488ff;
   color: #fff;
 }
+
+/* ── Background ── */
+
+.bg-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.bg-btn {
+  width: 24px;
+  height: 24px;
+  border: 2px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: border-color 0.12s;
+}
+
+.bg-btn:hover { border-color: rgba(255,255,255,0.4); }
+.bg-btn.active { border-color: #4488ff; }
+
+#ctrl-bg-custom {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+  background: none;
+}
+
+#ctrl-bg-custom::-webkit-color-swatch-wrapper { padding: 0; }
+#ctrl-bg-custom::-webkit-color-swatch { border: 2px solid rgba(255,255,255,0.15); border-radius: 4px; }
