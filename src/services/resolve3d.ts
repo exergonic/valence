@@ -14,27 +14,21 @@ function parsePubChemMeta(sdf: string): Partial<PubChemInfo> {
   const info: Partial<PubChemInfo> = {};
   const lines = sdf.split('\n');
 
-  // First non-empty line is often the compound name
-  for (let i = 0; i < Math.min(5, lines.length); i++) {
-    const t = lines[i].trim();
-    if (t && !t.startsWith('>') && !t.startsWith('M  END')) {
-      info.name = t;
-      break;
-    }
+  // First non-empty line is the compound name
+  for (let i = 0; i < 3; i++) {
+    const t = lines[i]?.trim();
+    if (t && !t.startsWith('>')) { info.name = t; break; }
   }
 
-  // Look for > <PUBCHEM_*> data fields after M END
-  let inData = false;
-  for (const line of lines) {
-    if (line.startsWith('M  END')) { inData = true; continue; }
-    if (!inData) continue;
-
+  // Walk lines after M END, tracking index for the value on the next line
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (line.startsWith('> <PUBCHEM_COMPOUND_CID>')) {
-      info.cid = lines[lines.indexOf(line) + 1]?.trim();
+      info.cid = lines[i + 1]?.trim();
     } else if (line.startsWith('> <PUBCHEM_MOLECULAR_FORMULA>')) {
-      info.formula = lines[lines.indexOf(line) + 1]?.trim();
+      info.formula = lines[i + 1]?.trim();
     } else if (line.startsWith('> <PUBCHEM_MOLECULAR_WEIGHT>')) {
-      info.weight = lines[lines.indexOf(line) + 1]?.trim();
+      info.weight = lines[i + 1]?.trim();
     }
   }
   return info;

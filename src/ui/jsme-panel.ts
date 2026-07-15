@@ -4,6 +4,7 @@ import { parseMolBlock } from '../mol-parser';
 import { fillMissingHydrogens } from '../hydrogens';
 import { place3D } from '../embedder';
 import { fetch3D } from '../services/resolve3d';
+import type { PubChemInfo } from '../services/resolve3d';
 import { renderAtoms, renderBonds, renderOrbitals, renderLabels } from '../scene';
 
 declare global {
@@ -63,20 +64,50 @@ function buildScene(ctx: SceneContext) {
   ctx.controls.update();
 }
 
-function setStatus(info: { source: string; name?: string; formula?: string }) {
+function setStatus(info: PubChemInfo) {
   const bar = document.getElementById('status-bar')!;
+  const popup = document.getElementById('info-popup')!;
+
   if (info.source === 'pubchem') {
-    bar.innerHTML = `<span class="source pubchem">PubChem 3D</span>${info.name ? `<span class="name">${info.name}</span>` : ''}${info.formula ? `<span class="formula">${info.formula}</span>` : ''}`;
+    bar.innerHTML = `<span class="source pubchem">PubChem 3D</span>${info.name ? `<span class="name">${info.name}</span>` : ''}`;
+
+    const sourceEl = document.getElementById('info-source')!;
+    sourceEl.className = 'pubchem';
+    sourceEl.textContent = '✓ PubChem 3D';
+    document.getElementById('info-name')!.textContent = info.name || '';
+    document.getElementById('info-formula')!.textContent = info.formula || '';
+    document.getElementById('info-weight')!.textContent = info.weight ? `MW ${info.weight}` : '';
+    const link = document.getElementById('info-link')! as HTMLAnchorElement;
+    if (info.cid) {
+      link.href = `https://pubchem.ncbi.nlm.nih.gov/compound/${info.cid}`;
+      link.style.display = '';
+    } else {
+      link.style.display = 'none';
+    }
+    popup.classList.remove('hidden');
   } else if (info.source === 'cir') {
     bar.innerHTML = `<span class="source fallback">CIR fallback</span>`;
+    const sourceEl = document.getElementById('info-source')!;
+    sourceEl.className = 'fallback';
+    sourceEl.textContent = '⚠ CIR fallback';
+    document.getElementById('info-name')!.textContent = '';
+    document.getElementById('info-formula')!.textContent = '';
+    document.getElementById('info-weight')!.textContent = '';
+    document.getElementById('info-link')!.style.display = 'none';
+    popup.classList.remove('hidden');
   } else {
     bar.innerHTML = `<span class="source fallback">Embedder fallback</span>`;
+    popup.classList.add('hidden');
   }
 }
 
 export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
   const renderBtn = document.getElementById('render-btn')! as HTMLButtonElement;
   ctx.rerender = () => rebuildDisplay(ctx);
+
+  document.getElementById('info-close')!.addEventListener('click', () => {
+    document.getElementById('info-popup')!.classList.add('hidden');
+  });
 
   renderBtn.onclick = async () => {
     const applet = window.jsmeApplet;
