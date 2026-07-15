@@ -37,6 +37,17 @@ html, body {
   background: #fff;
 }
 
+#jsme_container .gwt-Button {
+  padding: 6px 10px !important;
+  font-size: 13px !important;
+  min-width: 36px !important;
+  min-height: 32px !important;
+}
+
+#jsme_container .gwt-Button img {
+  transform: scale(1.15);
+}
+
 #render-btn {
   margin-top: 10px;
   flex-shrink: 0;
