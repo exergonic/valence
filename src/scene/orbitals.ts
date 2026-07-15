@@ -74,10 +74,28 @@ export function renderOrbitals(
       group.add(mesh);
     }
 
+    // Compute σ plane normal for sp² atoms with 1 neighbor (carbonyl O-like)
+    let sigmaPlaneNormal: [number, number, number] | null = null;
+    if (hyb.hybridization === 'sp2' && neighborVectors.length === 1 && neighbors.length > 0) {
+      const neighborIdx = neighbors[0];
+      const neighborOtherBonds = adj[neighborIdx].filter((ni) => ni !== i);
+      if (neighborOtherBonds.length >= 2) {
+        const nb = molecule.atoms[neighborIdx];
+        const s1 = molecule.atoms[neighborOtherBonds[0]];
+        const s2 = molecule.atoms[neighborOtherBonds[1]];
+        const v1: [number, number, number] = [s1.x - nb.x, s1.y - nb.y, s1.z - nb.z];
+        const v2: [number, number, number] = [s2.x - nb.x, s2.y - nb.y, s2.z - nb.z];
+        const nrm = vecNormalize(crossProduct(v1, v2));
+        if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) {
+          sigmaPlaneNormal = nrm;
+        }
+      }
+    }
+
     // Lone pairs in unfilled hybrid orbital directions
     if (lonePairs > 0) {
       const totalHybrids = stericNumber;
-      const lpDirs = getLonePairDirections(neighborVectors, totalHybrids);
+      const lpDirs = getLonePairDirections(neighborVectors, totalHybrids, sigmaPlaneNormal);
       for (const lpDir of lpDirs) {
         const mesh = createLobeMesh(lonePairLobe(), 0xffaa44, 0.5);
         orientLobe(mesh, atomPos, lpDir);
@@ -93,10 +111,8 @@ export function renderOrbitals(
         normal[0] /= len; normal[1] /= len; normal[2] /= len;
         addPiOrbital(group, atomPos, [normal], 0x4488ff);
       }
-    } else if (hyb.hybridization === 'sp2' && neighborVectors.length === 1) {
-      // Carbonyl O: find perpendicular to the sigma bond for π orbital
-      const perp = findPerpendicular(neighborVectors[0]);
-      addPiOrbital(group, atomPos, [perp], 0x4488ff);
+    } else if (hyb.hybridization === 'sp2' && neighborVectors.length === 1 && sigmaPlaneNormal) {
+      addPiOrbital(group, atomPos, [sigmaPlaneNormal], 0x4488ff);
     } else if (hyb.hybridization === 'sp' && neighborVectors.length >= 2) {
       const axis = neighborVectors[0];
       const perp = findPerpendicular(axis);
@@ -218,6 +234,7 @@ function rotateToward(
 function getLonePairDirections(
   sigmaDirs: [number, number, number][],
   total: number,
+  sigmaPlaneNormal?: [number, number, number] | null,
 ): [number, number, number][] {
   const missing = total - sigmaDirs.length;
   if (missing <= 0) return [];
@@ -231,8 +248,7 @@ function getLonePairDirections(
     return [lp];
   }
 
-  // 2 lone pairs: exact tetrahedral positions
-  // Given two sigma vectors a and b, find the two remaining tetrahedral vertices
+  // 2 lone pairs: exact tetrahedral (sp³) or trigonal planar (sp²) positions
   if (missing === 2 && sigmaDirs.length >= 2) {
     const a = vecNormalize(sigmaDirs[0]);
     const b = vecNormalize(sigmaDirs[1]);
@@ -261,10 +277,21 @@ function getLonePairDirections(
     return [vecNormalize(lp1), vecNormalize(lp2)];
   }
 
+  // sp² with 1 σ bond (carbonyl O): 2 lone pairs at ±120° in σ plane
+  if (missing === 2 && sigmaDirs.length === 1 && sigmaPlaneNormal) {
+    const a = vecNormalize(sigmaDirs[0]);
+    const axis = sigmaPlaneNormal;
+    const cos120 = -0.5;
+    const sin120 = Math.sqrt(3) / 2;
+    const lp1 = rotateRodrigues(a, axis, cos120, sin120);
+    const lp2 = rotateRodrigues(a, axis, cos120, -sin120);
+    return [vecNormalize(lp1), vecNormalize(lp2)];
+  }
+
+  // Fallback for missing=2 with only 1 sigma dir and no plane normal
   if (missing === 2 && sigmaDirs.length >= 1) {
     const a = vecNormalize(sigmaDirs[0]);
     const perp = findPerpendicular(a);
-    // sp² with 1 σ bond: 2 lone pairs at ±120° (trigonal planar)
     const cos120 = -0.5;
     const sin120 = Math.sqrt(3) / 2;
     const lp1: [number, number, number] = [
