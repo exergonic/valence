@@ -94,6 +94,16 @@ function setStatus(info: PubChemInfo) {
     document.getElementById('info-cid')!.textContent = '';
     document.getElementById('info-link')!.style.display = 'none';
     popup.classList.remove('hidden');
+  } else if (info.source === 'rdkit') {
+    const sourceEl = document.getElementById('info-source')!;
+    sourceEl.className = 'fallback';
+    sourceEl.textContent = '⚡ RDKit.js (ETKDG + MMFF94)';
+    document.getElementById('info-name')!.textContent = info.name || '';
+    document.getElementById('info-formula')!.textContent = info.formula || '';
+    document.getElementById('info-weight')!.textContent = info.weight ? `MW ${info.weight}` : '';
+    document.getElementById('info-cid')!.textContent = '';
+    document.getElementById('info-link')!.style.display = 'none';
+    popup.classList.remove('hidden');
   } else {
     popup.classList.add('hidden');
   }
@@ -120,7 +130,10 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
       let molecule = parseMolBlock(molBlock);
       if (molecule.atoms.length === 0) return;
 
-      const result = await fetch3D(smiles);
+      const result = document.getElementById('ctrl-force-fallback') &&
+        (document.getElementById('ctrl-force-fallback') as HTMLInputElement).checked
+        ? null
+        : await fetch3D(smiles);
       if (result) {
         const fetched = parseMolBlock(result.sdf);
         if (fetched.atoms.length > 0) molecule = fetched;
@@ -134,7 +147,7 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
           const fetched = parseMolBlock(rdkitSdf);
           if (fetched.atoms.length > 0) molecule = fetched;
           const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-          setStatus({ source: 'fallback', formula, weight: `${weight}` });
+          setStatus({ source: 'rdkit', formula, weight: `${weight}` });
         } else {
           // Fallback 2: graph-walk embedder
           molecule = fillMissingHydrogens(molecule);
