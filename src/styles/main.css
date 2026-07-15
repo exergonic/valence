@@ -35,17 +35,7 @@ html, body {
   border: 1px solid #e0e0e0;
   border-radius: 4px;
   background: #fff;
-}
-
-#jsme_container .gwt-Button {
-  padding: 6px 10px !important;
-  font-size: 13px !important;
-  min-width: 36px !important;
-  min-height: 32px !important;
-}
-
-#jsme_container .gwt-Button img {
-  transform: scale(1.15);
+  zoom: 1.15;
 }
 
 #render-btn {
