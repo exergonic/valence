@@ -64,7 +64,7 @@ export function renderOrbitals(
     const sigmaBonds = neighbors.length;
     let lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
-    // Conjugation: any atom adjacent to a π bond moves one σ lone pair into the p orbital
+    // Conjugation: atoms adjacent to a π bond move one σ lone pair into the p orbital
     const hasPiNeighbor = neighbors.some((ni) => piCount[ni] > 0);
     const conjugated = lonePairs > 0 && hasPiNeighbor;
     if (conjugated) lonePairs -= 1;
