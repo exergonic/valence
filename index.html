@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Valence Bond Visualization</title>
+    <link rel="stylesheet" href="/src/styles/main.css" />
+  </head>
+  <body>
+    <div id="app">
+      <div id="jsme-panel">
+        <div id="jsme_container"></div>
+        <button id="render-btn" style="margin-top:10px">Render Molecule</button>
+      </div>
+      <div id="canvas-container"></div>
+    </div>
+    <script src="/jsme/jsme.nocache.js"></script>
+    <script>
+      function jsmeOnLoad() {
+        window.jsmeApplet = new JSApplet.JSME("jsme_container", "100%", "300px", {"options": "oldlook,star"});
+      }
+    </script>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

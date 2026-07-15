@@ -1,0 +1,15 @@
+#app {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+}
+
+#jsme-panel {
+  width: 300px;
+  border-right: 1px solid #ccc;
+  padding: 10px;
+}
+
+#canvas-container {
+  flex: 1;
+}
