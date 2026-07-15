@@ -78,7 +78,7 @@ export function renderOrbitals(
     if (conjugated) lonePairs -= 1;
 
     const color = getElementColor(atom.element);
-    const atomScale = getElementRadius(atom.element) / 0.6;
+    const atomScale = getElementRadius(atom.element) + 0.4;
 
     // Sigma bonds: lobes pointing toward each neighbor
     for (const vec of neighborVectors) {
