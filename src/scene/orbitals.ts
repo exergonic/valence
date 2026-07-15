@@ -64,10 +64,10 @@ export function renderOrbitals(
     const sigmaBonds = neighbors.length;
     let lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
-    // sp² N with 2 neighbors adjacent to π bonds: lone pair is delocalized into p orbital (amide)
+    // sp² atoms adjacent to π bonds: move one σ lone pair into the p orbital (π conjugation)
     const hasPiNeighbor = neighbors.some((ni) => piCount[ni] > 0);
-    if (hyb.hybridization === 'sp2' && sigmaBonds === 2 && hasPiNeighbor) {
-      lonePairs = 0;
+    if (hyb.hybridization === 'sp2' && lonePairs > 0 && hasPiNeighbor) {
+      lonePairs -= 1;
     }
 
     const color = getElementColor(atom.element);
