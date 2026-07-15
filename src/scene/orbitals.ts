@@ -74,6 +74,9 @@ export function renderOrbitals(
     }).length;
     // Only conjugate if not all neighbors are π-rich (prevents ring delocalization like pyridine)
     const conjugated = lonePairs > 0 && piNeighborCount > 0 && piNeighborCount < neighbors.length;
+    if (atom.element === 'N' && neighbors.length === 2) {
+      console.log(`N: elem=${atom.element} n=${neighbors.length} piNbr=${piNeighborCount} lp=${lonePairs} conj=${conjugated}`);
+    }
     if (conjugated) lonePairs -= 1;
 
     const color = getElementColor(atom.element);
