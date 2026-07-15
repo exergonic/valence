@@ -68,7 +68,11 @@ export function renderOrbitals(
     // Conjugation: if any neighbor has external π bonds and atom itself has none,
     // promote one σ lone pair into the p orbital (furan O, aniline N, amide N).
     // Skip if atom already has π bonds (pyridine N with N=C).
+    // Only period-2 neighbors (C, N, O) can act as conjugation sources — S, P, etc.
+    // have expanded octets and their π bonds don't propagate through σ single bonds.
+    const PI_CONJ_SOURCES = new Set(['C', 'N', 'O']);
     const hasExtPiNeighbor = neighbors.some((ni) => {
+      if (!PI_CONJ_SOURCES.has(molecule.atoms[ni].element)) return false;
       const sharedPi = molecule.bonds
         .filter((b) => (b.atom1Index === i && b.atom2Index === ni) || (b.atom1Index === ni && b.atom2Index === i))
         .reduce((s, b) => s + Math.max(0, b.order - 1), 0);
