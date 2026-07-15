@@ -3,26 +3,27 @@ import type { Molecule } from '../mol-parser';
 
 function makeTextSprite(text: string): THREE.Sprite {
   const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 64;
+  canvas.width = 80;
+  canvas.height = 80;
   const ctx = canvas.getContext('2d')!;
+  const cx = 40, cy = 40, r = 32;
 
   ctx.fillStyle = 'rgba(0,0,0,0.55)';
   ctx.beginPath();
-  ctx.roundRect(4, 8, 120, 48, 8);
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 30px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.font = 'bold 28px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, 64, 36);
+  ctx.fillText(text, cx, cy + 1);
 
   const tex = new THREE.CanvasTexture(canvas);
   tex.needsUpdate = true;
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
   const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(0.6, 0.3, 1);
+  sprite.scale.set(0.5, 0.5, 1);
   return sprite;
 }
 
