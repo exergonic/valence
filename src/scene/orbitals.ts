@@ -1,5 +1,5 @@
 import type { SceneContext } from './setup';
 
-export function renderOrbitals(ctx: SceneContext) {
+export function renderOrbitals(_ctx: SceneContext) {
   // TODO: render orbital lobes
 }

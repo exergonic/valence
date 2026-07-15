@@ -6,6 +6,7 @@ export interface SceneContext {
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
   controls: OrbitControls;
+  moleculeGroup: THREE.Group;
 }
 
 export function initScene(container: HTMLElement): SceneContext {
@@ -25,6 +26,9 @@ export function initScene(container: HTMLElement): SceneContext {
   directionalLight.position.set(1, 1, 1);
   scene.add(directionalLight);
 
+  const moleculeGroup = new THREE.Group();
+  scene.add(moleculeGroup);
+
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
@@ -32,5 +36,14 @@ export function initScene(container: HTMLElement): SceneContext {
   }
   animate();
 
-  return { scene, camera, renderer, controls };
+  const handleResize = () => {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  };
+  window.addEventListener('resize', handleResize);
+
+  return { scene, camera, renderer, controls, moleculeGroup };
 }

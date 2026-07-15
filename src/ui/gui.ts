@@ -1,7 +1,7 @@
 import GUI from 'lil-gui';
 import type { SceneContext } from '../scene';
 
-export function setupGui(ctx: SceneContext): GUI {
+export function setupGui(_ctx: SceneContext): GUI {
   const gui = new GUI();
   const params = {
     showAtoms: true,

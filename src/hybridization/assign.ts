@@ -1,6 +1,6 @@
 import type { HybridizationResult } from './types';
 
-export function assignHybridization(coordinationNumber: number): HybridizationResult {
+export function assignHybridization(_coordinationNumber: number): HybridizationResult {
   return {
     hybridization: 'sp3',
     geometry: 'tetrahedral',

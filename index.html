@@ -10,14 +10,14 @@
     <div id="app">
       <div id="jsme-panel">
         <div id="jsme_container"></div>
-        <button id="render-btn" style="margin-top:10px">Render Molecule</button>
+        <button id="render-btn">Render Molecule</button>
       </div>
       <div id="canvas-container"></div>
     </div>
     <script src="/jsme/jsme.nocache.js"></script>
     <script>
       function jsmeOnLoad() {
-        window.jsmeApplet = new JSApplet.JSME("jsme_container", "100%", "300px", {"options": "oldlook,star"});
+        window.jsmeApplet = new JSApplet.JSME("jsme_container", "100%", "100%", {"options": "oldlook,star"});
       }
     </script>
     <script type="module" src="/src/main.ts"></script>

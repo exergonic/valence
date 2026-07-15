@@ -7,7 +7,7 @@ export interface PlacedAtom {
 }
 
 export function place3D(molecule: Molecule): PlacedAtom[] {
-  return molecule.atoms.map((atom, i) => ({
+  return molecule.atoms.map((atom) => ({
     index: atom.index,
     element: atom.element,
     position: [atom.x, atom.y, atom.z],

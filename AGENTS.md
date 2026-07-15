@@ -31,6 +31,8 @@ JSME (MOL block) → parse atoms/bonds → hybridization engine → 3D embedder 
 - Orbital lobes are surfaces of revolution → use `THREE.LatheGeometry`
 - Unit-test hybridization logic independently of Three.js (pure functions)
 - Static deploy target (GitHub Pages / SDF.org) — no server-side code
+- Render pipeline is state-driven: change a toggle → rebuild affected scene objects → redraw
+- Model follows MolView's plugin pattern: single facade in `src/scene/` with separate modules for atoms, bonds, orbitals
 
 ## Commands
 | Task | Command |

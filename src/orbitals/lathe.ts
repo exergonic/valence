@@ -5,7 +5,7 @@ export interface OrbitalProfile {
   segments: number;
 }
 
-export function createOrbitalProfile(type: Hybridization): OrbitalProfile {
+export function createOrbitalProfile(_type: Hybridization): OrbitalProfile {
   return {
     points: [],
     segments: 32,
