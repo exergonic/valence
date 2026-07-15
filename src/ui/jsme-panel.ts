@@ -12,23 +12,24 @@ declare global {
   }
 }
 
-function buildScene(ctx: SceneContext) {
-  if (!ctx.currentMolecule) return;
-
-  const clearGroup = (g: THREE.Group) => {
-    while (g.children.length > 0) {
-      const child = g.children[0];
-      g.remove(child);
-      if (child instanceof THREE.Mesh) {
-        child.geometry.dispose();
-        if (Array.isArray(child.material)) {
-          child.material.forEach(m => m.dispose());
-        } else {
-          child.material.dispose();
-        }
+function clearGroup(g: THREE.Group) {
+  while (g.children.length > 0) {
+    const child = g.children[0];
+    g.remove(child);
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      if (Array.isArray(child.material)) {
+        child.material.forEach(m => m.dispose());
+      } else {
+        child.material.dispose();
       }
     }
-  };
+  }
+}
+
+// Rebuild meshes without touching camera position
+function rebuildDisplay(ctx: SceneContext) {
+  if (!ctx.currentMolecule) return;
   clearGroup(ctx.moleculeGroup);
   clearGroup(ctx.orbitalGroup);
   clearGroup(ctx.labelGroup);
@@ -39,6 +40,11 @@ function buildScene(ctx: SceneContext) {
   renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset);
   renderLabels(ctx.labelGroup, ctx.currentMolecule);
   ctx.labelGroup.visible = ctx.display.showLabels;
+}
+
+// Full build including camera framing
+function buildScene(ctx: SceneContext) {
+  rebuildDisplay(ctx);
 
   const center = new THREE.Vector3();
   ctx.moleculeGroup.children.forEach((child) => {
@@ -59,7 +65,8 @@ function buildScene(ctx: SceneContext) {
 
 export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
   const renderBtn = document.getElementById('render-btn')! as HTMLButtonElement;
-  ctx.rerender = () => { if (ctx.currentMolecule) buildScene(ctx); };
+  // Only refresh meshes — keep camera where user put it
+  ctx.rerender = () => rebuildDisplay(ctx);
 
   renderBtn.onclick = async () => {
     const applet = window.jsmeApplet;
