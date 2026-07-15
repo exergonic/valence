@@ -25,7 +25,7 @@ export interface SceneContext {
 
 export function initScene(container: HTMLElement): SceneContext {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x111118);
+  scene.background = new THREE.Color(0x1a1a2e);
   const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
   camera.position.z = 5;
 
@@ -70,7 +70,7 @@ export function initScene(container: HTMLElement): SceneContext {
 
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup,
-    display: { atomScale: 1, bondScale: 1, showLabels: false, orbitalPreset: 'glass', bgColor: '#111118' },
+    display: { atomScale: 1, bondScale: 1, showLabels: false, orbitalPreset: 'glass', bgColor: '#1a1a2e' },
     rerender: () => {},
   };
 }
