@@ -3,7 +3,7 @@ import type { SceneContext } from '../scene';
 import { parseMolBlock } from '../mol-parser';
 import { fillMissingHydrogens } from '../hydrogens';
 import { place3D } from '../embedder';
-import { fetch3D } from '../services/resolve3d';
+import { fetch3D, type PubChemInfo } from '../services/resolve3d';
 import { renderAtoms, renderBonds, renderOrbitals, renderLabels } from '../scene';
 
 declare global {
@@ -27,7 +27,6 @@ function clearGroup(g: THREE.Group) {
   }
 }
 
-// Rebuild meshes without touching camera position
 function rebuildDisplay(ctx: SceneContext) {
   if (!ctx.currentMolecule) return;
   clearGroup(ctx.moleculeGroup);
@@ -42,7 +41,6 @@ function rebuildDisplay(ctx: SceneContext) {
   ctx.labelGroup.visible = ctx.display.showLabels;
 }
 
-// Full build including camera framing
 function buildScene(ctx: SceneContext) {
   rebuildDisplay(ctx);
 
@@ -63,10 +61,49 @@ function buildScene(ctx: SceneContext) {
   ctx.controls.update();
 }
 
+function showInfo(info: PubChemInfo) {
+  const box = document.getElementById('info-box')!;
+  const sourceEl = document.getElementById('info-source')!;
+  const nameEl = document.getElementById('info-name')!;
+  const formulaEl = document.getElementById('info-formula')!;
+  const weightEl = document.getElementById('info-weight')!;
+  const linkEl = document.getElementById('info-link')! as HTMLAnchorElement;
+
+  if (info.source === 'pubchem') {
+    sourceEl.className = 'pubchem';
+    sourceEl.textContent = '✓ PubChem 3D';
+    nameEl.textContent = info.name || '';
+    formulaEl.textContent = info.formula || '';
+    weightEl.textContent = info.weight ? `MW ${info.weight.toFixed(2)}` : '';
+    if (info.cid) {
+      linkEl.href = `https://pubchem.ncbi.nlm.nih.gov/compound/${info.cid}`;
+      linkEl.style.display = '';
+    } else {
+      linkEl.style.display = 'none';
+    }
+    box.style.display = '';
+  } else if (info.source === 'cir') {
+    sourceEl.className = 'fallback';
+    sourceEl.textContent = '⚠ CIR fallback';
+    nameEl.textContent = '';
+    formulaEl.textContent = '';
+    weightEl.textContent = '';
+    linkEl.style.display = 'none';
+    box.style.display = '';
+  } else {
+    hideInfo();
+  }
+}
+
+function hideInfo() {
+  document.getElementById('info-box')!.style.display = 'none';
+}
+
 export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
   const renderBtn = document.getElementById('render-btn')! as HTMLButtonElement;
-  // Only refresh meshes — keep camera where user put it
   ctx.rerender = () => rebuildDisplay(ctx);
+
+  document.getElementById('info-dismiss')!.addEventListener('click', hideInfo);
 
   renderBtn.onclick = async () => {
     const applet = window.jsmeApplet;
@@ -81,12 +118,14 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
       let molecule = parseMolBlock(molBlock);
       if (molecule.atoms.length === 0) return;
 
-      const sdf = await fetch3D(smiles);
-      if (sdf) {
-        const fetched = parseMolBlock(sdf);
+      hideInfo();
+      const result = await fetch3D(smiles);
+      if (result) {
+        const fetched = parseMolBlock(result.sdf);
         if (fetched.atoms.length > 0) {
           molecule = fetched;
         }
+        showInfo(result.info);
       } else {
         molecule = fillMissingHydrogens(molecule);
         const placed = place3D(molecule);
