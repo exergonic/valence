@@ -1,12 +1,13 @@
 import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
 
 export interface SceneContext {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   renderer: THREE.WebGLRenderer;
-  controls: OrbitControls;
+  controls: TrackballControls;
   moleculeGroup: THREE.Group;
+  orbitalGroup: THREE.Group;
 }
 
 export function initScene(container: HTMLElement): SceneContext {
@@ -18,7 +19,10 @@ export function initScene(container: HTMLElement): SceneContext {
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
 
-  const controls = new OrbitControls(camera, renderer.domElement);
+  const controls = new TrackballControls(camera, renderer.domElement);
+  controls.rotateSpeed = 1.0;
+  controls.zoomSpeed = 1.2;
+  controls.panSpeed = 0.8;
 
   const light = new THREE.AmbientLight(0xffffff, 0.5);
   scene.add(light);
@@ -28,6 +32,9 @@ export function initScene(container: HTMLElement): SceneContext {
 
   const moleculeGroup = new THREE.Group();
   scene.add(moleculeGroup);
+  const orbitalGroup = new THREE.Group();
+  orbitalGroup.visible = false;
+  scene.add(orbitalGroup);
 
   function animate() {
     requestAnimationFrame(animate);
@@ -45,5 +52,5 @@ export function initScene(container: HTMLElement): SceneContext {
   };
   window.addEventListener('resize', handleResize);
 
-  return { scene, camera, renderer, controls, moleculeGroup };
+  return { scene, camera, renderer, controls, moleculeGroup, orbitalGroup };
 }

@@ -9,16 +9,26 @@
 
 ## Architecture pipeline
 ```
-JSME (MOL block) → parse atoms/bonds → hybridization engine → 3D embedder → Three.js renderer
+JSME (MOL block) → parse atoms/bonds → hybridization engine → 3D embedder → torsion optimizer → Three.js renderer
 ```
 
 ## Key modules
 - `src/mol-parser/` — fixed-width MOL block parser (~40 lines, no cheminformatics lib)
+- `src/hydrogens/` — adds implicit hydrogens to carbons (4 - bondOrderSum)
 - `src/hybridization/` — assigns local geometry per atom from coordination number
-- `src/embedder/` — graph-walk 3D coordinate placement using hybridization vectors
+- `src/embedder/` — graph-walk 3D coordinate placement using hybridization vectors (fallback)
+- `src/embedder/torsions.ts` — torsion optimizer for staggered alkane conformations
+- `src/services/resolve3d.ts` — fetches MMFF94-optimized 3D coords from PubChem PUG REST API
 - `src/scene/` — Three.js scene, atom/bond/orbital rendering
 - `src/orbitals/` — LatheGeometry for p, sp, sp², sp³ lobes
 - `src/ui/` — lil-gui controls, JSME panel wiring
+
+## Pipeline
+1. JSME → get SMILES + MOL block
+2. Try PubChem PUG REST for 3D SDF (MMFF94-optimized)
+3. If PubChem fails, fall back to graph-walk embedder + torsion optimizer
+4. Add implicit hydrogens
+5. Render in Three.js
 
 ## JSME integration
 - **Package:** `jsme-editor` (npm) — no manual file management

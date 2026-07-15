@@ -1,2 +1,3 @@
-export { createOrbitalProfile } from './lathe';
-export type { OrbitalProfile } from './lathe';
+export { sigmaLobe, piLobe, lonePairLobe } from './lathe';
+export { createLobeMesh, orientLobe } from './orbital';
+export type { LobeProfile, OrbitalType } from './types';
