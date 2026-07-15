@@ -330,7 +330,14 @@ function getLonePairDirections(
   // sp² with 1 σ bond (carbonyl O): 2 lone pairs at ±120° in σ plane
   if (missing === 2 && sigmaDirs.length === 1 && sigmaPlaneNormal) {
     const a = vecNormalize(sigmaDirs[0]);
-    const axis = sigmaPlaneNormal;
+    let axis: [number, number, number] = sigmaPlaneNormal;
+    // Ensure axis is perpendicular to a (project out any parallel component)
+    const dotAV = vecDot(a, axis);
+    axis = [axis[0] - dotAV * a[0], axis[1] - dotAV * a[1], axis[2] - dotAV * a[2]];
+    axis = vecNormalize(axis);
+    if (axis[0] === 0 && axis[1] === 0 && axis[2] === 0) {
+      axis = findPerpendicular(a);
+    }
     const cos120 = -0.5;
     const sin120 = Math.sqrt(3) / 2;
     const lp1 = rotateRodrigues(a, axis, cos120, sin120);
