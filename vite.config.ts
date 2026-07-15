@@ -22,10 +22,5 @@ export default defineConfig({
       buildStart() { copyDir('node_modules/jsme-editor', 'public/jsme'); },
       writeBundle() { copyDir('public/jsme', 'dist/jsme'); },
     },
-    {
-      name: 'copy-rdkit',
-      buildStart() { copyDir('node_modules/@rdkit/rdkit/dist', 'public/rdkit'); },
-      writeBundle() { copyDir('public/rdkit', 'dist/rdkit'); },
-    },
   ],
 });
