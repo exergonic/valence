@@ -4,6 +4,8 @@ Bridging molecular geometry with qualitative chemical intuition. **web-vbvis** i
 
 Draw a molecule in JSME, click **Render Molecule**, and toggle between a ball-and-stick view and an orbital view showing hybrid σ lobes, π lobes, and 1s hydrogen orbitals.
 
+![Web VBVis displaying furane](C:\Users\mccan\Code\web-vbvis\demo.png)
+
 ## 🎯 Scope & Intent
 
 This webapp is designed for **educational and qualitative visualization** using VSEPR rules and geometric algorithms to render textbook-style hybrid (sp, sp2, sp3) and unhybridized (p) orbitals.
