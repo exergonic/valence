@@ -226,3 +226,28 @@ html, body {
   font-size: 10px;
   color: #666;
 }
+
+/* ── Status Bar ── */
+
+#status-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: #999;
+  background: rgba(0,0,0,0.5);
+  pointer-events: none;
+  z-index: 5;
+}
+
+#status-bar .source { font-weight: 600; }
+#status-bar .source.pubchem { color: #4488ff; }
+#status-bar .source.fallback { color: #ff8844; }
+#status-bar .name { color: #ccc; }
+#status-bar .formula { color: #888; }

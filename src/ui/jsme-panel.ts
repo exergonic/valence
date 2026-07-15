@@ -63,9 +63,19 @@ function buildScene(ctx: SceneContext) {
   ctx.controls.update();
 }
 
+function setStatus(info: { source: string; name?: string; formula?: string }) {
+  const bar = document.getElementById('status-bar')!;
+  if (info.source === 'pubchem') {
+    bar.innerHTML = `<span class="source pubchem">PubChem 3D</span>${info.name ? `<span class="name">${info.name}</span>` : ''}${info.formula ? `<span class="formula">${info.formula}</span>` : ''}`;
+  } else if (info.source === 'cir') {
+    bar.innerHTML = `<span class="source fallback">CIR fallback</span>`;
+  } else {
+    bar.innerHTML = `<span class="source fallback">Embedder fallback</span>`;
+  }
+}
+
 export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
   const renderBtn = document.getElementById('render-btn')! as HTMLButtonElement;
-  // Only refresh meshes — keep camera where user put it
   ctx.rerender = () => rebuildDisplay(ctx);
 
   renderBtn.onclick = async () => {
@@ -81,12 +91,11 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
       let molecule = parseMolBlock(molBlock);
       if (molecule.atoms.length === 0) return;
 
-      const sdf = await fetch3D(smiles);
-      if (sdf) {
-        const fetched = parseMolBlock(sdf);
-        if (fetched.atoms.length > 0) {
-          molecule = fetched;
-        }
+      const result = await fetch3D(smiles);
+      if (result) {
+        const fetched = parseMolBlock(result.sdf);
+        if (fetched.atoms.length > 0) molecule = fetched;
+        setStatus(result.info);
       } else {
         molecule = fillMissingHydrogens(molecule);
         const placed = place3D(molecule);
@@ -97,6 +106,7 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
           }),
           bonds: molecule.bonds,
         };
+        setStatus({ source: 'fallback' });
       }
 
       ctx.currentMolecule = molecule;
