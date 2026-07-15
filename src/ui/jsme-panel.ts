@@ -5,7 +5,7 @@ import { fillMissingHydrogens } from '../hydrogens';
 import { place3D } from '../embedder';
 import { fetch3D, computeFormula } from '../services/resolve3d';
 import type { PubChemInfo } from '../services/resolve3d';
-import { generate3DFromSMILES } from '../services/rdkit';
+import { generate2D } from '../services/rdkit';
 import { renderAtoms, renderBonds, renderOrbitals, renderLabels } from '../scene';
 
 declare global {
@@ -141,11 +141,19 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         setStatus({ ...result.info, formula, weight: `${weight}` });
       } else {
-        // Fallback 1: RDKit.js ETKDG + MMFF94 (client-side, quality comparable to PubChem)
-        const rdkitSdf = await generate3DFromSMILES(smiles);
-        if (rdkitSdf) {
-          const fetched = parseMolBlock(rdkitSdf);
-          if (fetched.atoms.length > 0) molecule = fetched;
+        // Fallback 1: RDKit.js — sanitized mol + explicit H's + 2D coords, then 3D embedder
+        const rdkitMol = await generate2D(smiles);
+        if (rdkitMol) {
+          molecule = parseMolBlock(rdkitMol);
+          // Run through 3D embedder + torsion optimizer
+          const placed = place3D(molecule);
+          molecule = {
+            atoms: molecule.atoms.map((a, i) => {
+              const p = placed[i].position;
+              return { ...a, x: p[0], y: p[1], z: p[2] };
+            }),
+            bonds: molecule.bonds,
+          };
           const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
           setStatus({ source: 'rdkit', formula, weight: `${weight}` });
         } else {

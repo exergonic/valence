@@ -11,10 +11,7 @@ async function loadRDKit(): Promise<void> {
     script.async = true;
     script.onload = () => {
       (window as any).initRDKitModule({ locateFile: () => '/rdkit/RDKit_minimal.wasm' })
-        .then((mod: any) => {
-          RDKit = mod;
-          resolve();
-        })
+        .then((mod: any) => { RDKit = mod; resolve(); })
         .catch(reject);
     };
     script.onerror = reject;
@@ -24,32 +21,32 @@ async function loadRDKit(): Promise<void> {
   return loading;
 }
 
-export async function generate3DFromSMILES(smiles: string): Promise<string | null> {
+/**
+ * Generate a sanitized MOL block with explicit hydrogens and 2D coordinates via RDKit.
+ * Then pass through the graph-walk embedder + torsion optimizer for 3D.
+ * Returns the MOL block with 2D coords and explicit H's (embedder converts to 3D).
+ */
+export async function generate2D(smiles: string): Promise<string | null> {
   try {
     await loadRDKit();
 
-    // Step 1: create molecule from SMILES, add hydrogens
     const mol = RDKit.get_mol(smiles);
     if (!mol) return null;
-    const molWithHsBlock: string = mol.add_hs();
-    mol.delete();
-
-    // Step 2: create molecule from the H-added Mol block
-    const molWithHs = RDKit.get_mol(molWithHsBlock);
-    if (!molWithHs) return null;
 
     try {
-      // Step 3: generate 3D conformers via ETKDG
-      molWithHs.generate_conformers();
+      const withHsBlock: string = mol.add_hs();
+      // create new mol from the H-added block, generate coords
+      const molWithHs = RDKit.get_mol(withHsBlock);
+      if (!molWithHs) return null;
 
-      // Step 4: get SDF with 3D coordinates
-      const sdf: string = molWithHs.get_sdf();
-      if (sdf && (sdf.includes('V2000') || sdf.includes('V3000'))) {
-        return sdf;
+      try {
+        molWithHs.get_new_coords();
+        return molWithHs.get_molblock();
+      } finally {
+        molWithHs.delete();
       }
-      return null;
     } finally {
-      molWithHs.delete();
+      mol.delete();
     }
   } catch {
     return null;
