@@ -9,6 +9,30 @@ export interface PubChemInfo {
 const PUBCHEM_BASE = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles';
 const CIR_URL = 'https://cactus.nci.nih.gov/chemical/structure';
 
+async function fetchProps(smiles: string): Promise<Partial<PubChemInfo>> {
+  const encoded = encodeURIComponent(smiles);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    const resp = await fetch(
+      `${PUBCHEM_BASE}/${encoded}/property/IUPACName,MolecularFormula,MolecularWeight/JSON`,
+      { signal: controller.signal },
+    );
+    clearTimeout(timer);
+    if (!resp.ok) return {};
+    const data = await resp.json();
+    const p = data?.PropertyTable?.Properties?.[0];
+    return {
+      cid: p?.CID,
+      name: p?.IUPACName,
+      formula: p?.MolecularFormula,
+      weight: p?.MolecularWeight,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export async function fetch3D(smiles: string): Promise<{ sdf: string; info: PubChemInfo } | null> {
   const encoded = encodeURIComponent(smiles);
 
@@ -18,21 +42,8 @@ export async function fetch3D(smiles: string): Promise<{ sdf: string; info: PubC
     if (resp.ok) {
       const text = await resp.text();
       if (text.includes('V2000') || text.includes('V3000')) {
-        // Fetch properties in parallel
-        const propPromise = fetch(`${PUBCHEM_BASE}/${encoded}/property/IUPACName,MolecularFormula,MolecularWeight,Title/JSON`)
-          .then(r => r.ok ? r.json() : null)
-          .catch(() => null);
-
-        const props = await propPromise;
-        const p = props?.PropertyTable?.Properties?.[0];
-        const info: PubChemInfo = {
-          source: 'pubchem',
-          cid: p?.CID,
-          name: p?.Title || p?.IUPACName,
-          formula: p?.MolecularFormula,
-          weight: p?.MolecularWeight,
-        };
-        return { sdf: text, info };
+        const props = await fetchProps(smiles);
+        return { sdf: text, info: { source: 'pubchem', ...props } };
       }
     }
   } catch { }
