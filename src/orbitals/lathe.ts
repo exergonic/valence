@@ -19,8 +19,8 @@ const SIGMA_LENGTH = 1.0;
 const SIGMA_RADIUS = 0.3;
 const PI_LENGTH = 1.1;
 const PI_RADIUS = 0.35;
-const LONE_PAIR_LENGTH = 0.55;
-const LONE_PAIR_RADIUS = 0.18;
+const LONE_PAIR_LENGTH = 1.2;
+const LONE_PAIR_RADIUS = 0.4;
 
 export function sigmaLobe(): LobeProfile {
   return { points: lobePoints(SIGMA_LENGTH, SIGMA_RADIUS), segments: SEGMENTS };

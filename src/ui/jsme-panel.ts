@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { SceneContext } from '../scene';
 import { parseMolBlock } from '../mol-parser';
-import { addImplicitHydrogens } from '../hydrogens';
+import { fillMissingHydrogens } from '../hydrogens';
 import { place3D } from '../embedder';
 import { fetch3D } from '../services/resolve3d';
 import { renderAtoms, renderBonds, renderOrbitals } from '../scene';
@@ -24,17 +24,17 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
     try {
       const smiles = applet.smiles();
       const molBlock = applet.molFile();
-
-      let molecule = addImplicitHydrogens(parseMolBlock(molBlock));
+      let molecule = parseMolBlock(molBlock);
       if (molecule.atoms.length === 0) return;
 
       const sdf = await fetch3D(smiles);
       if (sdf) {
-        const fetched = addImplicitHydrogens(parseMolBlock(sdf));
+        const fetched = parseMolBlock(sdf);
         if (fetched.atoms.length > 0) {
           molecule = fetched;
         }
       } else {
+        molecule = fillMissingHydrogens(molecule);
         const placed = place3D(molecule);
         molecule = {
           atoms: molecule.atoms.map((a, i) => {

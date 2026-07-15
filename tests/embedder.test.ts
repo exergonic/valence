@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { place3D } from '../src/embedder';
-import { addImplicitHydrogens } from '../src/hydrogens';
+import { fillMissingHydrogens } from '../src/hydrogens';
 import { parseMolBlock } from '../src/mol-parser';
 
 describe('place3D', () => {
@@ -55,7 +55,7 @@ describe('place3D', () => {
   2  3  1  0  0  0  0
 M  END
 `;
-    const molecule = addImplicitHydrogens(parseMolBlock(molBlock));
+    const molecule = fillMissingHydrogens(parseMolBlock(molBlock));
     const placed = place3D(molecule);
 
     // Check that not all coords are planar

@@ -1,17 +1,21 @@
 import type { Molecule } from '../mol-parser';
 
 const VALENCES: Record<string, number> = {
-  C: 4,
-  Si: 4,
-  N: 3,
-  P: 3,
-  O: 2,
-  S: 2,
+  H: 1,
+  He: 0,
+  Li: 1, Be: 2, B: 3,
+  C: 4, N: 3, O: 2, F: 1,
+  Na: 1, Mg: 2, Al: 3,
+  Si: 4, P: 3, S: 2, Cl: 1,
+  K: 1, Ca: 2, Ga: 3,
+  Ge: 4, As: 3, Se: 2, Br: 1,
+  Rb: 1, Sr: 2, In: 3,
+  Sn: 4, Sb: 3, Te: 2, I: 1,
 };
 
 const BOND_LENGTH = 1.0;
 
-export function addImplicitHydrogens(molecule: Molecule): Molecule {
+export function fillMissingHydrogens(molecule: Molecule): Molecule {
   const atoms = [...molecule.atoms];
   const bonds = [...molecule.bonds];
   let nextIndex = atoms.length;
