@@ -32,8 +32,11 @@ export function assignHybridization(
   const deg = avgAngle * (180 / Math.PI);
 
   if (n === 2) {
-    if (deg > 150) {
+    if (deg > 165) {
       return { hybridization: 'sp', geometry: 'linear', bondAngles: [deg] };
+    }
+    if (deg > 110) {
+      return { hybridization: 'sp2', geometry: 'trigonal_planar', bondAngles: [deg] };
     }
     return { hybridization: 'sp3', geometry: 'tetrahedral', bondAngles: [deg] };
   }

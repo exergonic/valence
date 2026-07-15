@@ -59,6 +59,13 @@ export function renderOrbitals(
         orientLobe(mesh, atomPos, lpDir);
         group.add(mesh);
       }
+    } else if (hyb.hybridization === 'sp2' && neighborVectors.length === 2) {
+      const lonePairDirs = getLonePairDirections(neighborVectors, 3);
+      for (const lpDir of lonePairDirs) {
+        const mesh = createLobeMesh(lonePairLobe(), 0xffaa44, 0.5);
+        orientLobe(mesh, atomPos, lpDir);
+        group.add(mesh);
+      }
     }
 
     // Pi orbitals based on hybridization

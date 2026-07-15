@@ -41,12 +41,19 @@ describe('assignHybridization', () => {
     expect(result.hybridization).toBe('sp3');
   });
 
-  it('should return sp2 for pyridine-like nitrogen', () => {
+  it('should return sp2 for pyridine-like nitrogen with 2 neighbors', () => {
     const result = assignHybridization('N', [
       [1, 0, 0],
       [-0.5, 0.866, 0],
-      [-0.5, -0.866, 0],
     ]);
     expect(result.hybridization).toBe('sp2');
+  });
+
+  it('should return sp3 for water-like oxygen', () => {
+    const result = assignHybridization('O', [
+      [1, 0, 0],
+      [-0.3, 0.95, 0],
+    ]);
+    expect(result.hybridization).toBe('sp3');
   });
 });
