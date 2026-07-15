@@ -47,9 +47,10 @@ export function initScene(container: HTMLElement): SceneContext {
   const moleculeGroup = new THREE.Group();
   scene.add(moleculeGroup);
   const orbitalGroup = new THREE.Group();
-  orbitalGroup.visible = false;
+  orbitalGroup.visible = true;
   scene.add(orbitalGroup);
   const labelGroup = new THREE.Group();
+  labelGroup.visible = true;
   scene.add(labelGroup);
 
   function animate() {
@@ -70,7 +71,7 @@ export function initScene(container: HTMLElement): SceneContext {
 
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup,
-    display: { atomScale: 1, bondScale: 1, showLabels: false, orbitalPreset: 'glass', bgColor: '#1a1a2e' },
+    display: { atomScale: 1, bondScale: 1, showLabels: true, orbitalPreset: 'glass', bgColor: '#1a1a2e' },
     rerender: () => {},
   };
 }

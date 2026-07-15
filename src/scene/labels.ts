@@ -23,7 +23,7 @@ function makeTextSprite(text: string): THREE.Sprite {
   tex.needsUpdate = true;
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false });
   const sprite = new THREE.Sprite(mat);
-  sprite.scale.set(0.25, 0.25, 1);
+  sprite.scale.set(0.375, 0.375, 1);
   return sprite;
 }
 

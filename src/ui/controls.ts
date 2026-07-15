@@ -14,7 +14,6 @@ export function setupControls(ctx: SceneContext) {
 
   // Show Orbitals
   const orbToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-orb')!;
-  orbToggle.checked = false;
   orbToggle.addEventListener('change', () => {
     ctx.orbitalGroup.visible = orbToggle.checked;
   });
