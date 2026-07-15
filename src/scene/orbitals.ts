@@ -53,17 +53,16 @@ export function renderOrbitals(
       return [n.x - atom.x, n.y - atom.y, n.z - atom.z];
     });
 
-    // Compute steric number from σ bonds + lone pairs
-    const sigmaBonds = neighbors.length;
-    const valence = VALENCE[atom.element] || 4;
-    const remaining = valence - sigmaBonds - piCount[i];
-    const lonePairs = Math.max(0, remaining / 2);
-    const stericNumber = sigmaBonds + lonePairs;
-
-    // Use angle-based hybridization when possible, fall back to steric number
+    // Determine hybridization from geometry first
     const hyb = neighborVectors.length >= 2
       ? assignHybridization(atom.element, neighborVectors)
-      : assignBySteric(stericNumber);
+      : assignBySteric(Math.min(4, Math.max(2, neighbors.length + Math.round(Math.max(0, (VALENCE[atom.element] || 4) - neighbors.length - piCount[i]) / 2))));
+
+    // Steric number from hybridization: sp→2, sp²→3, sp³→4
+    const stericNumber = hyb.hybridization === 'sp' ? 2
+      : hyb.hybridization === 'sp2' ? 3 : 4;
+    const sigmaBonds = neighbors.length;
+    const lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
     const color = getElementColor(atom.element);
 
