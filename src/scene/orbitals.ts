@@ -65,7 +65,13 @@ export function renderOrbitals(
     let lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
     // Conjugation: atoms adjacent to a π bond move one σ lone pair into the p orbital
-    const hasPiNeighbor = neighbors.some((ni) => piCount[ni] > 0);
+    // Exclude π bonds that our atom shares with the neighbor (e.g. C=O's own π)
+    const hasPiNeighbor = neighbors.some((ni) => {
+      const sharedPi = molecule.bonds
+        .filter((b) => (b.atom1Index === i && b.atom2Index === ni) || (b.atom1Index === ni && b.atom2Index === i))
+        .reduce((s, b) => s + Math.max(0, b.order - 1), 0);
+      return (piCount[ni] - sharedPi) > 0;
+    });
     const conjugated = lonePairs > 0 && hasPiNeighbor;
     if (conjugated) lonePairs -= 1;
 
@@ -83,7 +89,11 @@ export function renderOrbitals(
     if (conjugated) {
       piDirection = getPiDirectionFromNeighbor(i, adj, molecule, piCount, atomPos);
     }
-    // Fallback: sp² with enough own neighbors can compute π from own σ plane
+    // sp² with 1 neighbor and its own π bonds (e.g. carbonyl O): compute π from neighbor geometry
+    if (!piDirection && neighborVectors.length === 1 && piCount[i] > 0) {
+      piDirection = getPiDirectionFromNeighbor(i, adj, molecule, piCount, atomPos);
+    }
+    // sp² with enough own neighbors: compute π from own σ plane
     if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2) {
       const nrm = vecNormalize(crossProduct(neighborVectors[0], neighborVectors[1]));
       if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
