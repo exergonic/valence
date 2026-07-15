@@ -26,14 +26,14 @@ export const ELEMENT_COLORS: Record<string, number> = {
 };
 
 export const ELEMENT_RADII: Record<string, number> = {
-  H: 0.31, He: 0.28,
-  Li: 1.28, Be: 0.96, B: 0.85,
-  C: 0.76, N: 0.71, O: 0.66, F: 0.57, Ne: 0.58,
-  Na: 1.66, Mg: 1.41, Al: 1.21,
-  Si: 1.11, P: 1.07, S: 1.05, Cl: 1.02, Ar: 1.06,
-  K: 2.03, Ca: 1.76,
-  Fe: 1.32, Cu: 1.32, Zn: 1.22, Mn: 1.39,
-  Br: 1.20, I: 1.39,
+  H: 0.35, He: 0.30,
+  Li: 0.45, Be: 0.45, B: 0.50,
+  C: 0.55, N: 0.50, O: 0.50, F: 0.42, Ne: 0.40,
+  Na: 0.55, Mg: 0.50, Al: 0.55,
+  Si: 0.65, P: 0.60, S: 0.60, Cl: 0.55, Ar: 0.50,
+  K: 0.70, Ca: 0.60,
+  Fe: 0.55, Cu: 0.55, Zn: 0.50, Mn: 0.55,
+  Br: 0.60, I: 0.65,
 };
 
 export function getElementColor(element: string): number {
