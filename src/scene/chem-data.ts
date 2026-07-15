@@ -25,7 +25,20 @@ export const ELEMENT_COLORS: Record<string, number> = {
   Ar: 0x80d1e3,
 };
 
+// Covalent radii (used for orbital lobes so lobes properly overlap bonds)
 export const ELEMENT_RADII: Record<string, number> = {
+  H: 0.31, He: 0.28,
+  Li: 1.28, Be: 0.96, B: 0.85,
+  C: 0.76, N: 0.71, O: 0.66, F: 0.57, Ne: 0.58,
+  Na: 1.66, Mg: 1.41, Al: 1.21,
+  Si: 1.11, P: 1.07, S: 1.05, Cl: 1.02, Ar: 1.06,
+  K: 2.03, Ca: 1.76,
+  Fe: 1.32, Cu: 1.32, Zn: 1.22, Mn: 1.39,
+  Br: 1.20, I: 1.39,
+};
+
+// Visual radii (used only for atom spheres in ball-and-stick display)
+const VISUAL_RADII: Record<string, number> = {
   H: 0.35, He: 0.30,
   Li: 0.45, Be: 0.45, B: 0.50,
   C: 0.55, N: 0.50, O: 0.50, F: 0.42, Ne: 0.40,
@@ -40,6 +53,12 @@ export function getElementColor(element: string): number {
   return ELEMENT_COLORS[element] ?? 0xcc88ff;
 }
 
+/** Covalent radius — used for orbital lobe sizing */
 export function getElementRadius(element: string): number {
   return ELEMENT_RADII[element] ?? 0.7;
+}
+
+/** Visual radius — used for atom sphere display */
+export function getVisualRadius(element: string): number {
+  return VISUAL_RADII[element] ?? 0.50;
 }
