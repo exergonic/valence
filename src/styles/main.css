@@ -32,12 +32,17 @@ html, body {
 #brand-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding-bottom: 10px;
-  font-size: 15px;
+  gap: 10px;
+  padding-bottom: 12px;
+  font-size: 18px;
   font-weight: 700;
-  color: #ddd;
+  color: #222;
   flex-shrink: 0;
+}
+
+#brand-bar svg {
+  width: 28px;
+  height: 28px;
 }
 
 #jsme_container {
