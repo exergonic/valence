@@ -59,7 +59,7 @@ export function renderOrbitals(
 
     // Determine hybridization from geometry first
     const hyb = neighborVectors.length >= 2
-      ? assignHybridization(atom.element, neighborVectors)
+      ? assignHybridization(atom.element, neighborVectors, piCount[i])
       : assignBySteric(Math.min(4, Math.max(2, neighbors.length + Math.round(Math.max(0, (VALENCE[atom.element] || 4) - neighbors.length - piCount[i]) / 2))));
 
     // Label for userData: map 'sp2' → 'sp²', 'sp3' → 'sp³'
@@ -97,23 +97,13 @@ export function renderOrbitals(
     const conjugated = lonePairs > 0 && piNeighborCount > 0 && piCount[i] === 0;
     if (conjugated) lonePairs -= 1;
 
-    // sp³ with 2 neighbors and its own π bond is misclassified (should be sp²).
-    // Reduce lone pairs and render a π orbital (e.g. imidazole pyridine-like N).
-    const sp3PiOverride = hyb.hybridization === 'sp3' && sigmaBonds === 2 && piCount[i] > 0 && piNeighborCount > 0;
-    if (sp3PiOverride) {
-      lonePairs = Math.min(lonePairs, 1);
-    }
-
-    // Override label for atoms where the hybridization was corrected
-    const effectiveLabel = sp3PiOverride ? 'sp²' : hybLabel;
-
     const color = colorScheme.scheme === 'element' ? getElementColor(atom.element) : colorScheme.sigma;
     const atomScale = getElementRadius(atom.element) + 0.2;
 
     // Sigma bonds: lobes pointing toward each neighbor
     for (const vec of neighborVectors) {
       const mesh = createLobeMesh(sigmaLobe(), color, 0.6, preset, atomScale);
-      mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'sigma', label: effectiveLabel };
+      mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'sigma', label: hybLabel };
       orientLobe(mesh, atomPos, vec);
       group.add(mesh);
     }
@@ -131,11 +121,6 @@ export function renderOrbitals(
     // Include sp² atoms with piCount===0 (their p orbital holds remaining valence electrons),
     // unless overridden (OH-type oxygen in H₂SO₄).
     if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2 && !ohOverride && (piCount[i] > 0 || conjugated || piCount[i] === 0)) {
-      const nrm = vecNormalize(crossProduct(neighborVectors[0], neighborVectors[1]));
-      if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
-    }
-    // sp³ misclassified as sp² (imidazole-like): compute π from own σ plane
-    if (!piDirection && sp3PiOverride) {
       const nrm = vecNormalize(crossProduct(neighborVectors[0], neighborVectors[1]));
       if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
     }
@@ -157,7 +142,7 @@ export function renderOrbitals(
       const lpDirs = getLonePairDirections(neighborVectors, totalHybrids, piDirection);
       for (const lpDir of lpDirs) {
         const mesh = createLobeMesh(lonePairLobe(), colorScheme.lonePair, 0.5, preset, atomScale);
-        mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'lone_pair', label: effectiveLabel };
+        mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'lone_pair', label: hybLabel };
         orientLobe(mesh, atomPos, lpDir);
         group.add(mesh);
       }

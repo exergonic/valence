@@ -14,6 +14,7 @@ function vecAngle(
 export function assignHybridization(
   _element: string,
   neighborVectors: [number, number, number][],
+  piCount: number = 0,
 ): HybridizationResult {
   const n = neighborVectors.length;
 
@@ -32,10 +33,11 @@ export function assignHybridization(
   const deg = avgAngle * (180 / Math.PI);
 
   if (n === 2) {
+    // An atom with its own π bond is sp² (rings can distort the angle below 110°)
     if (deg > 165) {
       return { hybridization: 'sp', geometry: 'linear', bondAngles: [deg] };
     }
-    if (deg > 110) {
+    if (deg > 110 || piCount > 0) {
       return { hybridization: 'sp2', geometry: 'trigonal_planar', bondAngles: [deg] };
     }
     return { hybridization: 'sp3', geometry: 'tetrahedral', bondAngles: [deg] };
