@@ -184,11 +184,11 @@ export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
   { name: 'Ethyne (C₂H₂)', mol: ETHYNE },
-  { name: 'Nitrogen (N₂)', mol: N2 },
-  { name: 'Oxygen (O₂)', mol: O2 },
   { name: 'Benzene (C₆H₆)', mol: BENZENE },
   { name: 'Pyridine (C₅H₅N)', mol: PYRIDINE },
   { name: 'Pyrrole (C₄H₅N)', mol: PYRROLE },
   { name: 'Phenol (C₆H₅OH)', mol: PHENOL },
+  { name: 'Nitrogen (N₂)', mol: N2 },
+  { name: 'Oxygen (O₂)', mol: O2 },
   { name: 'Water (H₂O)', mol: WATER },
 ];
