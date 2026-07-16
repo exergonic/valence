@@ -8,7 +8,7 @@ export function setupControls(ctx: SceneContext) {
 
   // Show Atoms & Bonds
   const molToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-mol')!;
-  molToggle.checked = true;
+  ctx.moleculeGroup.visible = molToggle.checked;
   molToggle.addEventListener('change', () => {
     ctx.moleculeGroup.visible = molToggle.checked;
   });

@@ -55,6 +55,7 @@ export function initScene(container: HTMLElement): SceneContext {
   scene.add(directionalLight);
 
   const moleculeGroup = new THREE.Group();
+  moleculeGroup.visible = false;
   scene.add(moleculeGroup);
   const orbitalGroup = new THREE.Group();
   orbitalGroup.visible = true;
@@ -82,7 +83,7 @@ export function initScene(container: HTMLElement): SceneContext {
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup,
     display: {
-      atomScale: 1, bondScale: 1, showLabels: true, orbitalPreset: 'glass', bgColor: '#1a1a2e',
+      atomScale: 1, bondScale: 1, showLabels: true, orbitalPreset: 'metallic', bgColor: '#1a1a2e',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
     },
     rerender: () => {},
