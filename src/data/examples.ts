@@ -180,6 +180,29 @@ const O2 = HEADER + `  2  1  0  0  0  0  0  0  0  0999 V2000
 M  END
 `;
 
+// Imidazole — 5-membered aromatic ring with two nitrogens
+const IMIDAZOLE = HEADER + `  9  9  0  0  0  0  0  0  0  0999 V2000
+    0.0000    1.3000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.2364    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.7644   -1.0518    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7644   -1.0518    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2364    0.4019    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    2.3000    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.2717    0.7379    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4029   -1.9307    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    2.2717    0.7379    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  2  0  0  0  0
+  3  4  1  0  0  0  0
+  4  5  2  0  0  0  0
+  5  1  1  0  0  0  0
+  1  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  4  8  1  0  0  0  0
+  5  9  1  0  0  0  0
+M  END
+`;
+
 export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
@@ -187,6 +210,7 @@ export const EXAMPLES: Example[] = [
   { name: 'Benzene (C₆H₆)', mol: BENZENE },
   { name: 'Pyridine (C₅H₅N)', mol: PYRIDINE },
   { name: 'Pyrrole (C₄H₅N)', mol: PYRROLE },
+  { name: 'Imidazole (C₃H₄N₂)', mol: IMIDAZOLE },
   { name: 'Phenol (C₆H₅OH)', mol: PHENOL },
   { name: 'Nitrogen (N₂)', mol: N2 },
   { name: 'Oxygen (O₂)', mol: O2 },
