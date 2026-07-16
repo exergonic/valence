@@ -164,10 +164,28 @@ const PHENOL = HEADER + ` 13 13  0  0  0  0  0  0  0  0999 V2000
 M  END
 `;
 
+// Diatomic nitrogen — sp, triple bond, 2 orthogonal p orbital pairs
+const N2 = HEADER + `  2  1  0  0  0  0  0  0  0  0999 V2000
+   -0.5500    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+    0.5500    0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  3  0  0  0  0
+M  END
+`;
+
+// Diatomic oxygen — sp², double bond
+const O2 = HEADER + `  2  1  0  0  0  0  0  0  0  0999 V2000
+   -0.6050    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6050    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+M  END
+`;
+
 export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
   { name: 'Ethyne (C₂H₂)', mol: ETHYNE },
+  { name: 'Nitrogen (N₂)', mol: N2 },
+  { name: 'Oxygen (O₂)', mol: O2 },
   { name: 'Benzene (C₆H₆)', mol: BENZENE },
   { name: 'Pyridine (C₅H₅N)', mol: PYRIDINE },
   { name: 'Pyrrole (C₄H₅N)', mol: PYRROLE },
