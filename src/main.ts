@@ -17,13 +17,20 @@ function setupSplitter() {
     if (!dragging) return;
     const w = Math.max(280, Math.min(e.clientX, window.innerWidth - 200));
     jsmePanel.style.width = w + 'px';
-    // Trigger resize on the Three.js canvas indirectly
     window.dispatchEvent(new Event('resize'));
+    // Repaint JSME so it picks up the new container size
+    if ((window as any).jsmeApplet) {
+      (window as any).jsmeApplet.repaint();
+    }
   });
 
   splitter.addEventListener('pointerup', () => {
     dragging = false;
     splitter.classList.remove('active');
+    // Give JSME time to settle, then repaint at the new size
+    if ((window as any).jsmeApplet) {
+      setTimeout(() => (window as any).jsmeApplet.repaint(), 50);
+    }
   });
 }
 
