@@ -46,7 +46,7 @@ export function setupControls(ctx: SceneContext) {
     btn.addEventListener('click', () => {
       presetBtns.forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      ctx.display.orbitalPreset = btn.dataset.preset as 'glass' | 'glossy' | 'matte';
+      ctx.display.orbitalPreset = btn.dataset.preset as 'glass' | 'glossy' | 'matte' | 'metallic';
       rerender();
     });
   });

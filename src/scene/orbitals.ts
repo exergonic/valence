@@ -9,7 +9,7 @@ import { getElementColor, getElementRadius } from './chem-data';
 export function renderOrbitals(
   group: THREE.Group,
   molecule: Molecule,
-  preset: 'glass' | 'glossy' | 'matte' = 'glass',
+  preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
   colorScheme: { scheme: ColorScheme; sigma: number; pi: number; lonePair: number } = { scheme: 'element', sigma: 0xcccccc, pi: 0x4488ff, lonePair: 0xffaa44 },
 ): void {
   const n = molecule.atoms.length;
@@ -164,7 +164,7 @@ function addPiOrbital(
   origin: [number, number, number],
   directions: [number, number, number][],
   color: number,
-  preset: 'glass' | 'glossy' | 'matte' = 'glass',
+  preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
   atomScale: number = 1,
 ): void {
   for (const dir of directions) {

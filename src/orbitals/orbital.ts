@@ -5,7 +5,7 @@ export function createLobeMesh(
   profile: LobeProfile,
   color: number,
   opacity: number = 0.7,
-  preset: 'glass' | 'glossy' | 'matte' = 'glass',
+  preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
   scale: number = 1,
 ): THREE.Mesh {
   const points = profile.points.map((p) => new THREE.Vector2(p.x * scale, p.y * scale));
@@ -25,6 +25,13 @@ export function createLobeMesh(
         color, transparent: true, opacity: Math.min(1, opacity + 0.2),
         side: THREE.DoubleSide, depthWrite: false,
         shininess: 3, specular: 0x000000,
+      });
+      break;
+    case 'metallic':
+      mat = new THREE.MeshPhongMaterial({
+        color, opacity: 1,
+        side: THREE.DoubleSide, depthWrite: true,
+        shininess: 1000, specular: 0xffffff,
       });
       break;
     default: // glass — bright, shiny, almost metallic

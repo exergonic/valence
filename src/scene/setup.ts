@@ -15,7 +15,7 @@ export interface DisplaySettings {
   atomScale: number;
   bondScale: number;
   showLabels: boolean;
-  orbitalPreset: 'glass' | 'glossy' | 'matte';
+  orbitalPreset: 'glass' | 'glossy' | 'matte' | 'metallic';
   bgColor: string;
   colors: ColorSettings;
 }
