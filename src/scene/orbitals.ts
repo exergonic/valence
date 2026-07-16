@@ -69,7 +69,8 @@ export function renderOrbitals(
 
     // sp² with 2 neighbors and no π bonds is likely an OH-type oxygen misclassified
     // by angle measurement (S-O-H in H₂SO₄ gl ~120°); force sp³ with 2 σ lone pairs.
-    if (hyb.hybridization === 'sp2' && sigmaBonds === 2 && piCount[i] === 0) {
+    const ohOverride = hyb.hybridization === 'sp2' && sigmaBonds === 2 && piCount[i] === 0;
+    if (ohOverride) {
       lonePairs = 2;
     }
 
@@ -109,8 +110,9 @@ export function renderOrbitals(
       piDirection = getPiDirectionFromNeighbor(i, adj, molecule, piCount, atomPos);
     }
     // sp² with enough own neighbors: compute π from own σ plane
-    // Only if atom has its own π bonds or was conjugated (avoids spurious π on e.g. OH in H₂SO₄)
-    if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2 && (piCount[i] > 0 || conjugated)) {
+    // Include sp² atoms with piCount===0 (their p orbital holds remaining valence electrons),
+    // unless overridden (OH-type oxygen in H₂SO₄).
+    if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2 && !ohOverride && (piCount[i] > 0 || conjugated || piCount[i] === 0)) {
       const nrm = vecNormalize(crossProduct(neighborVectors[0], neighborVectors[1]));
       if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
     }
