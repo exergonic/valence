@@ -19,14 +19,15 @@ html, body {
 }
 
 #jsme-panel {
-  width: 33.33%;
-  min-width: 380px;
+  width: 380px;
+  min-width: 280px;
   border-right: 1px solid #ddd;
   padding: 10px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: #fafafa;
+  flex-shrink: 0;
 }
 
 #brand-bar {
@@ -181,8 +182,22 @@ html, body {
 #render-btn:active { background: #1e40af; }
 #render-btn:disabled { background: #93c5fd; cursor: default; }
 
+#splitter {
+  width: 5px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  z-index: 5;
+  position: relative;
+}
+#splitter:hover,
+#splitter.active {
+  background: #4488ff;
+}
+
 #canvas-container {
   flex: 1;
+  min-width: 200px;
   overflow: hidden;
   position: relative;
 }
