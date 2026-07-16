@@ -116,8 +116,8 @@ html, body {
 .cs-channel {
   display: flex;
   align-items: center;
-  gap: 3px;
-  height: 18px;
+  gap: 6px;
+  height: 24px;
 }
 
 .cs-label {
@@ -129,20 +129,20 @@ html, body {
   flex-shrink: 0;
 }
 
-.cs-channel input[type="range"] {
+.cs-channel input[type="color"] {
   flex: 1;
+  height: 22px;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+  background: none;
   min-width: 0;
-  height: 3px;
-  accent-color: #4488ff;
 }
 
-.cs-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 2px;
-  border: 1px solid rgba(255,255,255,0.15);
-  flex-shrink: 0;
-}
+.cs-channel input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+.cs-channel input[type="color"]::-webkit-color-swatch { border: 1px solid rgba(255,255,255,0.15); border-radius: 3px; }
+.cs-channel input[type="color"]::-moz-color-swatch { border: 1px solid rgba(255,255,255,0.15); border-radius: 3px; }
 
 .brand-link {
   display: flex;

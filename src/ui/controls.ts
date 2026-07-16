@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { SceneContext, ColorScheme } from '../scene';
-import { hsvToHex, COLOR_PRESETS } from '../scene/color-schemes';
+import { hexToHsv, COLOR_PRESETS } from '../scene/color-schemes';
 
 export function setupControls(ctx: SceneContext) {
   const panel = document.getElementById('controls-panel')!;
@@ -121,26 +121,20 @@ export function setupControls(ctx: SceneContext) {
     btn.addEventListener('click', () => applyScheme(btn.dataset.cs as ColorScheme));
   });
 
-  // ── Custom HSV sliders ──
+  // ── Custom color pickers ──
 
-  function updateSwatch(cIdx: number) {
+  function updateColor(cIdx: number) {
     const channel = csCustom.querySelectorAll('.cs-channel')[cIdx] as HTMLElement;
-    const h = +(channel.querySelector('.cs-hue') as HTMLInputElement).value / 360;
-    const s = +(channel.querySelector('.cs-sat') as HTMLInputElement).value / 100;
-    const v = +(channel.querySelector('.cs-val') as HTMLInputElement).value / 100;
-    const hex = hsvToHex(h, s, v);
-    (channel.querySelector('.cs-swatch') as HTMLElement).style.background = '#' + hex.toString(16).padStart(6, '0');
+    const picker = channel.querySelector<HTMLInputElement>('.cs-color')!;
+    const hex = parseInt(picker.value.slice(1), 16);
+    const [h, s, v] = hexToHsv(hex);
 
-    // Store in display settings
     const key = ['sigma', 'pi', 'lonePair'][cIdx] as 'sigma' | 'pi' | 'lonePair';
     ctx.display.colors[key] = [h, s, v];
     rerender();
   }
 
-  const allSliders = csCustom.querySelectorAll<HTMLInputElement>('input[type="range"]');
-  allSliders.forEach((slider) => {
-    const channelEl = slider.closest('.cs-channel')!;
-    const idx = Array.from(csCustom.querySelectorAll('.cs-channel')).indexOf(channelEl);
-    slider.addEventListener('input', () => updateSwatch(idx));
+  csCustom.querySelectorAll<HTMLInputElement>('.cs-color').forEach((picker, idx) => {
+    picker.addEventListener('input', () => updateColor(idx));
   });
 }

@@ -24,6 +24,22 @@ export function hsvToHex(h: number, s: number, v: number): number {
   return (Math.round(r * 255) << 16) | (Math.round(g * 255) << 8) | Math.round(b * 255);
 }
 
+export function hexToHsv(hex: number): [number, number, number] {
+  const r = ((hex >> 16) & 0xff) / 255;
+  const g = ((hex >> 8) & 0xff) / 255;
+  const b = (hex & 0xff) / 255;
+  const mx = Math.max(r, g, b);
+  const mn = Math.min(r, g, b);
+  const d = mx - mn;
+  let h = 0;
+  if (d !== 0) {
+    if (mx === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (mx === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  return [h, mx === 0 ? 0 : d / mx, mx];
+}
+
 // Preset color schemes — each defines sigma, pi, and lone pair as HSV values [h, s, v]
 export const COLOR_PRESETS: Record<string, { sigma: [number,number,number]; pi: [number,number,number]; lonePair: [number,number,number] }> = {
   element:         { sigma: [0, 0, 1], pi: [0.58, 0.7, 1],   lonePair: [0.1, 0.7, 1] },
