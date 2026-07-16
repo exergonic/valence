@@ -111,7 +111,7 @@ export function renderOrbitals(
       piDirection = getPiDirectionFromNeighbor(i, adj, molecule, piCount, atomPos);
     }
     // sp² with 1 neighbor and its own π bonds (e.g. carbonyl O): compute π from neighbor geometry
-    if (!piDirection && neighborVectors.length === 1 && piCount[i] > 0) {
+    if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length === 1 && piCount[i] > 0) {
       piDirection = getPiDirectionFromNeighbor(i, adj, molecule, piCount, atomPos);
     }
     // sp² with enough own neighbors: compute π from own σ plane
