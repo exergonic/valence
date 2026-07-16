@@ -199,7 +199,6 @@ function computePiDirection(
   atomPos: [number, number, number],
   neighborVectors: [number, number, number][],
   hyb: { hybridization: string },
-  ohOverride: boolean,
   conjugated: boolean,
 ): [number, number, number] | null {
   let piDirection: [number, number, number] | null = null;
@@ -212,7 +211,7 @@ function computePiDirection(
     piDirection = getPiDirectionFromNeighbor(atomIdx, adj, molecule, piCount, atomPos);
   }
 
-  if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2 && !ohOverride) {
+  if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2) {
     const nrm = vecNormalize(crossProduct(neighborVectors[0], neighborVectors[1]));
     if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
   }
@@ -291,20 +290,16 @@ function classifyAtoms(mol: string): Array<{
       return (piCount[ni] - sharedPi) > 0;
     }).length;
 
-    const ohOverride = hyb.hybridization === 'sp2' && sigmaBonds === 2 && piCount[i] === 0 && atom.element === 'O' && piNeighborCount === 0;
-    if (ohOverride) lonePairs = 2;
-
     const conjugated = lonePairs > 0 && piNeighborCount > 0 && piCount[i] === 0;
     if (conjugated && hyb.hybridization === 'sp3') lonePairs -= 1;
 
-    const hasPi = piCount[i] > 0 || conjugated || (hyb.hybridization === 'sp2' && !ohOverride && piCount[i] === 0)
+    const hasPi = piCount[i] > 0 || conjugated || (hyb.hybridization === 'sp2' && piCount[i] === 0)
       || (hyb.hybridization === 'sp' && neighborVectors.length >= 1);
 
     const atomPos: [number, number, number] = [atom.x, atom.y, atom.z];
-    const piDirection = computePiDirection(i, molecule, adj, piCount, atomPos, neighborVectors, hyb, ohOverride, conjugated);
+    const piDirection = computePiDirection(i, molecule, adj, piCount, atomPos, neighborVectors, hyb, conjugated);
 
     const effectiveHyb = conjugated && hyb.hybridization === 'sp3' ? 'sp²'
-      : ohOverride ? 'sp³'
       : hyb.hybridization === 'sp2' ? 'sp²'
       : hyb.hybridization === 'sp3' ? 'sp³'
       : hyb.hybridization === 'sp' ? 'sp'

@@ -83,16 +83,6 @@ export function renderOrbitals(
       return (piCount[ni] - sharedPi) > 0;
     }).length;
 
-    // sp² with 2 σ bonds and no own π bonds: could be an OH-type oxygen whose
-    // bond angle happened to measure ~120° (H₂O, alcohols). If the neighbor has
-    // no π system (piNeighborCount === 0), force sp³ with 2 σ lone pairs.
-    // If the neighbor does have π bonds (e.g. S=O in H₂SO₄), one lone pair
-    // conjugates into the π system instead.
-    const ohOverride = hyb.hybridization === 'sp2' && sigmaBonds === 2 && piCount[i] === 0 && atom.element === 'O' && piNeighborCount === 0;
-    if (ohOverride) {
-      lonePairs = 2;
-    }
-
     // Conjugation: a σ lone pair can delocalize into a neighbor's π system.
     // Skip if the atom already has its own π bond (piCount > 0) — the σ lone pair
     // is orthogonal to that π system and can't overlap.
@@ -102,9 +92,8 @@ export function renderOrbitals(
     if (conjugated && hyb.hybridization === 'sp3') lonePairs -= 1;
 
     // Effective hybridization label: conjugation promotes a σ lone pair to a p orbital,
-    // reducing the remaining σ count by one (sp³→sp²). ohOverride does the opposite
-    // (sp²-measured O with no conjugating neighbor → sp³).
-    const effectiveHyb = conjugated && hyb.hybridization === 'sp3' ? 'sp²' : ohOverride ? 'sp³' : hybLabel;
+    // reducing the remaining σ count by one (sp³→sp²).
+    const effectiveHyb = conjugated && hyb.hybridization === 'sp3' ? 'sp²' : hybLabel;
 
     const color = colorScheme.scheme === 'element' ? getElementColor(atom.element) : colorScheme.sigma;
     const atomScale = getElementRadius(atom.element) + 0.2;
@@ -127,9 +116,7 @@ export function renderOrbitals(
       piDirection = getPiDirectionFromNeighbor(i, adj, molecule, piCount, atomPos);
     }
     // sp² with enough own neighbors: compute π from own σ plane
-    // Include sp² atoms with piCount===0 (their p orbital holds remaining valence electrons),
-    // unless overridden (OH-type oxygen in H₂SO₄).
-    if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2 && !ohOverride && (piCount[i] > 0 || conjugated || piCount[i] === 0)) {
+    if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2 && (piCount[i] > 0 || conjugated || piCount[i] === 0)) {
       const nrm = vecNormalize(crossProduct(neighborVectors[0], neighborVectors[1]));
       if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
     }
