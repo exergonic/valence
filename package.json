@@ -12,7 +12,9 @@
     "build:tauri": "vite build --base=/",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "version": "node scripts/sync-version.mjs",
+    "sync-version": "node scripts/sync-version.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
