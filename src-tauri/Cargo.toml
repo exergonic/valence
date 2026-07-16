@@ -1,6 +1,6 @@
 [package]
 name = "web-vbvis"
-version = "0.4.0"
+version = "0.5.0"
 description = "Valence Bond Visualization — interactive 3D molecular orbital viewer"
 authors = ["Billy Wayne McCann"]
 license = "BSD-3-Clause"
