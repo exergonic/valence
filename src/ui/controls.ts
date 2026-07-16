@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { SceneContext, ColorScheme } from '../scene';
-import { hsvToHex } from '../scene/color-schemes';
+import { hsvToHex, COLOR_PRESETS } from '../scene/color-schemes';
 
 export function setupControls(ctx: SceneContext) {
   const panel = document.getElementById('controls-panel')!;
@@ -106,6 +106,12 @@ export function setupControls(ctx: SceneContext) {
   const csCustom = document.getElementById('cs-custom')!;
   const applyScheme = (scheme: ColorScheme) => {
     ctx.display.colors.scheme = scheme;
+    if (scheme !== 'custom') {
+      const p = COLOR_PRESETS[scheme];
+      ctx.display.colors.sigma = p.sigma.slice() as [number,number,number];
+      ctx.display.colors.pi = p.pi.slice() as [number,number,number];
+      ctx.display.colors.lonePair = p.lonePair.slice() as [number,number,number];
+    }
     csBtns.forEach((b) => b.classList.toggle('active', b.dataset.cs === scheme));
     csCustom.classList.toggle('hidden', scheme !== 'custom');
     rerender();

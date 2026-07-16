@@ -25,7 +25,7 @@ export function hsvToHex(h: number, s: number, v: number): number {
 }
 
 // Preset color schemes — each defines sigma, pi, and lone pair as HSV values [h, s, v]
-const PRESETS: Record<ColorScheme, { sigma: [number,number,number]; pi: [number,number,number]; lonePair: [number,number,number] }> = {
+export const COLOR_PRESETS: Record<string, { sigma: [number,number,number]; pi: [number,number,number]; lonePair: [number,number,number] }> = {
   element:         { sigma: [0, 0, 1], pi: [0.58, 0.7, 1],   lonePair: [0.1, 0.7, 1] },
   monochrome:      { sigma: [0.58, 0.7, 1], pi: [0.58, 0.7, 1], lonePair: [0.58, 0.7, 1] },
   pedagogical:     { sigma: [0.05, 0.7, 0.85], pi: [0.58, 0.7, 1], lonePair: [0.45, 0.55, 0.8] },
@@ -37,7 +37,7 @@ const PRESETS: Record<ColorScheme, { sigma: [number,number,number]; pi: [number,
 };
 
 export function getSchemeColors(scheme: ColorScheme): SchemeColors {
-  const p = PRESETS[scheme];
+  const p = COLOR_PRESETS[scheme];
   return {
     sigma: hsvToHex(p.sigma[0], p.sigma[1], p.sigma[2]),
     pi: hsvToHex(p.pi[0], p.pi[1], p.pi[2]),
