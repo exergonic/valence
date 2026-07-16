@@ -19,7 +19,7 @@ html, body {
 }
 
 #jsme-panel {
-  width: 380px;
+  width: 33.33%;
   min-width: 280px;
   border-right: 1px solid #ddd;
   padding: 10px;
