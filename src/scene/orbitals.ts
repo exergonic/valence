@@ -91,7 +91,8 @@ export function renderOrbitals(
         .reduce((s, b) => s + Math.max(0, b.order - 1), 0);
       return (piCount[ni] - sharedPi) > 0;
     }).length;
-    // Only conjugate if some (not all) neighbors have π bonds — prevents ring delocalization
+    // Conjugation requires at least one π-rich neighbor. Skip when all neighbors are
+    // π-rich (ring atoms, e.g. pyridine N) — the σ lone pair is orthogonal to the π system.
     const conjugated = lonePairs > 0 && piNeighborCount > 0 && piNeighborCount < neighbors.length && piCount[i] === 0;
     if (conjugated) lonePairs -= 1;
 
