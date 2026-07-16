@@ -32,9 +32,9 @@ jobs:
         with:
           files: src-tauri/target/release/bundle/msi/*.msi
           body: |
-            ## Web VBVis ${{ github.ref_name }}
+            ## Valence ${{ github.ref_name }}
 
             Download the MSI installer for Windows below.
 
             ### Changes
-            See the [commit log](https://github.com/exergonic/web_vbvis/commits/${{ github.ref_name }}) for details.
+            See the [commit log](https://github.com/exergonic/valence/commits/${{ github.ref_name }}) for details.

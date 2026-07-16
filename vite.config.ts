@@ -14,7 +14,7 @@ function copyDir(src: string, dest: string) {
 }
 
 export default defineConfig({
-  base: process.env.TAURI_ENV_PLATFORM ? '/' : '/web_vbvis/',
+  base: process.env.TAURI_ENV_PLATFORM ? '/' : '/valence/',
   build: { target: 'esnext' },
   plugins: [
     {

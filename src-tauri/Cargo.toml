@@ -1,10 +1,10 @@
 [package]
-name = "web-vbvis"
+name = "valence"
 version = "0.5.0"
 description = "Valence Bond Visualization — interactive 3D molecular orbital viewer"
 authors = ["Billy Wayne McCann"]
 license = "BSD-3-Clause"
-repository = "https://github.com/exergonic/web_vbvis"
+repository = "https://github.com/exergonic/valence"
 edition = "2021"
 rust-version = "1.77.2"
 

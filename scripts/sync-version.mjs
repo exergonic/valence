@@ -20,8 +20,8 @@ html = html.replace(
   /(<span class="brand-version">)v\d+\.\d+\.\d+(<\/span>)/,
   `$1v${version}$2`,
 );
-html = html.replace(
-  /(Web VBVis )v\d+\.\d+\.\d+( —)/,
+  html = html.replace(
+  /(Valence )v\d+\.\d+\.\d+( —)/,
   `$1v${version}$2`,
 );
 if (html !== htmlBefore) {
@@ -62,7 +62,7 @@ const lockPath = join(root, 'src-tauri', 'Cargo.lock');
 let lock = readFileSync(lockPath, 'utf8');
 const lockBefore = lock;
 lock = lock.replace(
-  /(name = "web-vbvis"\n)version = "\d+\.\d+\.\d+"/,
+  /(name = "valence"\n)version = "\d+\.\d+\.\d+"/,
   `$1version = "${version}"`,
 );
 if (lock !== lockBefore) {
