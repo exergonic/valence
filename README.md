@@ -8,7 +8,7 @@
 
 ## Capabilities
 
-- **Hybridization engine** assigns sp/sp²/sp³ from measured bond angles, with geometry-derived conjugation detection (furan O, aniline N, amide N) and OH-override for oxygen lone pairs
+- **Hybridization engine** assigns sp/sp²/sp³ from measured bond angles, with geometry-derived conjugation detection (furan O, aniline N, amide N) and lone-pair correction for sp²-measured oxygen that is truly sp³ (e.g., H₂SO₄)
 - **3D embedding** via PubChem PUG REST (MMFF94-optimized), RDKit.js ETKDG fallback (client-side WASM), or graph-walk embedder + torsion optimizer
 - **Orbital rendering** with THREE.js — LatheGeometry lobes for σ, π, p, and lone pair orbitals
 - **p-AO directionality** — all π system p orbitals are oriented perpendicular to the σ plane, with automated parallel alignment across conjugated networks
