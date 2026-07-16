@@ -8,14 +8,19 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "echo 'No linter configured yet'"
+    "lint": "echo 'No linter configured yet'",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
     "jsme-editor": "^2024.4.29",
     "lil-gui": "^0.19.0",
     "three": "^0.160.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
     "@types/three": "^0.160.0",
     "typescript": "^5.3.0",
     "vite": "^5.0.0",

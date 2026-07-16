@@ -1,0 +1,23 @@
+[package]
+name = "web-vbvis"
+version = "0.4.0"
+description = "Valence Bond Visualization — interactive 3D molecular orbital viewer"
+authors = ["Billy Wayne McCann"]
+license = "BSD-3-Clause"
+repository = "https://github.com/exergonic/web_vbvis"
+edition = "2021"
+rust-version = "1.77.2"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
