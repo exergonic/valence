@@ -104,13 +104,16 @@ export function renderOrbitals(
       lonePairs = Math.min(lonePairs, 1);
     }
 
+    // Override label for atoms where the hybridization was corrected
+    const effectiveLabel = sp3PiOverride ? 'sp²' : hybLabel;
+
     const color = colorScheme.scheme === 'element' ? getElementColor(atom.element) : colorScheme.sigma;
     const atomScale = getElementRadius(atom.element) + 0.2;
 
     // Sigma bonds: lobes pointing toward each neighbor
     for (const vec of neighborVectors) {
       const mesh = createLobeMesh(sigmaLobe(), color, 0.6, preset, atomScale);
-      mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'sigma', label: hybLabel };
+      mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'sigma', label: effectiveLabel };
       orientLobe(mesh, atomPos, vec);
       group.add(mesh);
     }
@@ -154,7 +157,7 @@ export function renderOrbitals(
       const lpDirs = getLonePairDirections(neighborVectors, totalHybrids, piDirection);
       for (const lpDir of lpDirs) {
         const mesh = createLobeMesh(lonePairLobe(), colorScheme.lonePair, 0.5, preset, atomScale);
-        mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'lone_pair', label: hybLabel };
+        mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'lone_pair', label: effectiveLabel };
         orientLobe(mesh, atomPos, lpDir);
         group.add(mesh);
       }
