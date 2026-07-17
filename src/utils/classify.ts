@@ -2,6 +2,7 @@ import type { Molecule } from '../mol-parser';
 import { assignHybridization, assignBySteric } from '../hybridization';
 import { VALENCE } from '../data/valence';
 import { computePiDirection } from './pi';
+import { vecDot } from './vec3';
 
 // Result for one atom after running the full VSEPR + conjugation pipeline.
 // The renderer uses this to decide which lobes to draw and where.
@@ -108,6 +109,22 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
       hasPi,
       piDirection,
     });
+  }
+
+  // Post-processing: synchronize piDirections across triple-bond sp pairs.
+  // Both sp atoms in a triple bond must use the same p-orbital orientation
+  // so their two π systems overlap correctly (one p from each atom forms
+  // a π bond; the second pair of perpendicular p's forms the other π bond).
+  // Independent computation can give different results (one used neighbor
+  // conjugation, the other fell back to findPerpendicular on the bond axis).
+  for (const bond of molecule.bonds) {
+    if (bond.order !== 3) continue;
+    const a = result[bond.atom1Index];
+    const b = result[bond.atom2Index];
+    if (!a.piDirection || !b.piDirection) continue;
+    if (Math.abs(vecDot(a.piDirection, b.piDirection)) >= 0.99) continue;
+    // Unify: use the first atom's direction for both.
+    b.piDirection = a.piDirection;
   }
 
   return result;
