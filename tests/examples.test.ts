@@ -110,6 +110,15 @@ const EXPECTATIONS: ExampleExpectations[] = [
       { element: 'C', hybridization: 'sp²', lonePairs: 0, hasPi: true },
     ],
   },
+  {
+    name: 'But-1-en-3-yne (H₂C=CH-C≡CH)',
+    atoms: [
+      { element: 'C', hybridization: 'sp²', lonePairs: 0, hasPi: true },
+      { element: 'C', hybridization: 'sp²', lonePairs: 0, hasPi: true },
+      { element: 'C', hybridization: 'sp', lonePairs: 0, hasPi: true },
+      { element: 'C', hybridization: 'sp', lonePairs: 0, hasPi: true },
+    ],
+  },
 ];
 
 function getPlaneNormal(atoms: Array<{ x: number; y: number; z: number }>): [number, number, number] {
@@ -254,6 +263,27 @@ describe('p-AO directionality', () => {
       expect(result[i].piDirection).not.toBeNull();
       expectPerpendicular(result[i].piDirection!, bondAxis, 1e-4);
     }
+  });
+
+  it('But-1-en-3-yne (H₂C=CH-C≡CH) — sp π direction parallel to adjacent sp² π', () => {
+    const example = EXAMPLES.find((e) => e.name === 'But-1-en-3-yne (H₂C=CH-C≡CH)');
+    if (!example) { expect.fail('Example not found'); return; }
+
+    const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
+    // C1: sp² (CH₂), C2: sp² (CH), C3: sp (middle alkyne), C4: sp (terminal alkyne)
+    expect(result).toHaveLength(4);
+
+    // C1 and C2 (sp²) have piDirection from cross product of their σ bonds → z-axis
+    expect(result[0].piDirection).not.toBeNull();
+    expect(result[1].piDirection).not.toBeNull();
+    expectParallel(result[0].piDirection!, result[1].piDirection!, 1e-4);
+
+    // C3 (sp, middle alkyne) aligns one p orbital parallel to C2's π direction
+    expect(result[2].piDirection).not.toBeNull();
+    expectParallel(result[2].piDirection!, result[1].piDirection!, 1e-4);
+
+    // C4 (sp, terminal alkyne) has no conjugating side neighbor → null piDirection
+    expect(result[3].piDirection).toBeNull();
   });
 
   it('Methane (CH₄) — no π direction', () => {

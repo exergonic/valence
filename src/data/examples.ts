@@ -205,6 +205,26 @@ const IMIDAZOLE = HEADER + `  9  9  0  0  0  0  0  0  0  0999 V2000
 M  END
 `;
 
+// But-1-en-3-yne (H₂C=CH-C≡CH) — enyne with sp adjacent to sp² π system
+const BUTENYNE = HEADER + `  8  7  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3400    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.7700    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.9700    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5500    0.9500    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5500   -0.9500    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3400    1.0900    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+    4.7200    0.0000    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  7  1  0  0  0  0
+  3  4  3  0  0  0  0
+  4  8  1  0  0  0  0
+M  END
+`;
+
 export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
@@ -214,6 +234,7 @@ export const EXAMPLES: Example[] = [
   { name: 'Pyrrole (C₄H₅N)', mol: PYRROLE },
   { name: 'Imidazole (C₃H₄N₂)', mol: IMIDAZOLE },
   { name: 'Phenol (C₆H₅OH)', mol: PHENOL },
+  { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
   { name: 'Nitrogen (N₂)', mol: N2 },
   { name: 'Oxygen (O₂)', mol: O2 },
   { name: 'Water (H₂O)', mol: WATER },

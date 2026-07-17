@@ -75,8 +75,15 @@ export function computePiDirection(
   }
 
   if (!piDirection && hyb.hybridization === 'sp2' && neighborVectors.length >= 2) {
-    const nrm = vecNormalize(crossProduct(neighborVectors[0], neighborVectors[1]));
-    if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
+    // Try pairs of σ-bond vectors until a non-collinear pair gives a proper
+    // plane normal.  Linear arrangements (e.g. C-C≡C where C1 and C3 are
+    // collinear with the sp² C) produce zero cross products.
+    for (let a = 0; a < neighborVectors.length && !piDirection; a++) {
+      for (let b = a + 1; b < neighborVectors.length && !piDirection; b++) {
+        const nrm = vecNormalize(crossProduct(neighborVectors[a], neighborVectors[b]));
+        if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) piDirection = nrm;
+      }
+    }
   }
 
   // sp with ≥2 neighbors: one is the triple-bond partner, another may carry
