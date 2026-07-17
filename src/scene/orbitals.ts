@@ -1,10 +1,12 @@
 import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
-import { assignHybridization } from '../hybridization';
+import { assignHybridization, assignBySteric } from '../hybridization';
 import { createLobeMesh, orientLobe } from '../orbitals';
 import { sigmaLobe, piLobe, lonePairLobe } from '../orbitals/lathe';
 import { getElementColor, getElementRadius } from './chem-data';
+import { VALENCE } from '../data/valence';
+import { vecNormalize, vecDot, crossProduct, findPerpendicular, rotateRodrigues, rotateToward } from '../utils/vec3';
 
 export function renderOrbitals(
   group: THREE.Group,
@@ -22,14 +24,6 @@ export function renderOrbitals(
     piCount[bond.atom1Index] += pi;
     piCount[bond.atom2Index] += pi;
   }
-
-  const VALENCE: Record<string, number> = {
-    H: 1, He: 0, Li: 1, Be: 2, B: 3,
-    C: 4, N: 5, O: 6, F: 7,
-    Na: 1, Mg: 2, Al: 3, Si: 4, P: 5, S: 6, Cl: 7,
-    K: 1, Ca: 2, Ga: 3, Ge: 4, As: 5, Se: 6, Br: 7,
-    Rb: 1, Sr: 2, In: 3, Sn: 4, Sb: 5, Te: 6, I: 7,
-  };
 
   for (let i = 0; i < molecule.atoms.length; i++) {
     const atom = molecule.atoms[i];
@@ -57,7 +51,7 @@ export function renderOrbitals(
       return [n.x - atom.x, n.y - atom.y, n.z - atom.z];
     });
 
-    // Determine hybridization from geometry first
+    // Determine hybridization from geometry or steric fallback
     const hyb = neighborVectors.length >= 2
       ? assignHybridization(atom.element, neighborVectors, piCount[i])
       : assignBySteric(Math.min(4, Math.max(2, neighbors.length + Math.round(Math.max(0, (VALENCE[atom.element] || 4) - neighbors.length - piCount[i]) / 2))));
@@ -73,7 +67,6 @@ export function renderOrbitals(
 
     // Conjugation: if any neighbor has external π bonds and atom itself has none,
     // promote one σ lone pair into the p orbital (furan O, aniline N, amide N, H₂SO₄ O).
-    // Skip if atom already has π bonds (pyridine N with N=C).
     const PI_CONJ_SOURCES = new Set(['C', 'N', 'O', 'S']);
     const piNeighborCount = neighbors.filter((ni) => {
       if (!PI_CONJ_SOURCES.has(molecule.atoms[ni].element)) return false;
@@ -83,16 +76,10 @@ export function renderOrbitals(
       return (piCount[ni] - sharedPi) > 0;
     }).length;
 
-    // Conjugation: a σ lone pair can delocalize into a neighbor's π system.
-    // Skip if the atom already has its own π bond (piCount > 0) — the σ lone pair
-    // is orthogonal to that π system and can't overlap.
-    // Only sp³ atoms lose a σ lone pair here — sp² already has an unhybridized p
-    // orbital, so no promotion is needed.
     const conjugated = lonePairs > 0 && piNeighborCount > 0 && piCount[i] === 0;
     if (conjugated && hyb.hybridization === 'sp3') lonePairs -= 1;
 
-    // Effective hybridization label: conjugation promotes a σ lone pair to a p orbital,
-    // reducing the remaining σ count by one (sp³→sp²).
+    // Effective hybridization label
     const effectiveHyb = conjugated && hyb.hybridization === 'sp3' ? 'sp²' : hybLabel;
 
     const color = colorScheme.scheme === 'element' ? getElementColor(atom.element) : colorScheme.sigma;
@@ -106,7 +93,7 @@ export function renderOrbitals(
       group.add(mesh);
     }
 
-    // Compute π direction for conjugated atoms
+    // Compute π direction
     let piDirection: [number, number, number] | null = null;
     if (conjugated) {
       piDirection = getPiDirectionFromNeighbor(i, adj, molecule, piCount, atomPos);
@@ -156,14 +143,6 @@ export function renderOrbitals(
   }
 }
 
-function assignBySteric(steric: number): { hybridization: string; geometry: string } {
-  switch (steric) {
-    case 2: return { hybridization: 'sp', geometry: 'linear' };
-    case 3: return { hybridization: 'sp2', geometry: 'trigonal_planar' };
-    default: return { hybridization: 'sp3', geometry: 'tetrahedral' };
-  }
-}
-
 function addPiOrbital(
   group: THREE.Group,
   origin: [number, number, number],
@@ -200,30 +179,6 @@ function addPiOrbital(
   }
 }
 
-function findPerpendicular(v: [number, number, number]): [number, number, number] {
-  const absX = Math.abs(v[0]);
-  const absY = Math.abs(v[1]);
-  const absZ = Math.abs(v[2]);
-
-  if (absX <= absY && absX <= absZ) {
-    return crossProduct(v, [1, 0, 0]);
-  } else if (absY <= absX && absY <= absZ) {
-    return crossProduct(v, [0, 1, 0]);
-  }
-  return crossProduct(v, [0, 0, 1]);
-}
-
-function crossProduct(
-  a: [number, number, number],
-  b: [number, number, number],
-): [number, number, number] {
-  return [
-    a[1] * b[2] - a[2] * b[1],
-    a[2] * b[0] - a[0] * b[2],
-    a[0] * b[1] - a[1] * b[0],
-  ];
-}
-
 function getPiDirectionFromNeighbor(
   atomIdx: number,
   adj: number[][],
@@ -258,53 +213,6 @@ function getPiDirectionFromNeighbor(
   return vecNormalize(findPerpendicular(bd));
 }
 
-function vecNormalize(v: [number, number, number]): [number, number, number] {
-  const len = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
-  if (len < 1e-8) return [0, 0, 0];
-  return [v[0] / len, v[1] / len, v[2] / len];
-}
-
-function vecDot(a: [number, number, number], b: [number, number, number]): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function rotateRodrigues(
-  v: [number, number, number],
-  axis: [number, number, number],
-  cosA: number,
-  sinA: number,
-): [number, number, number] {
-  const dot = vecDot(v, axis);
-  const cross: [number, number, number] = [
-    axis[1] * v[2] - axis[2] * v[1],
-    axis[2] * v[0] - axis[0] * v[2],
-    axis[0] * v[1] - axis[1] * v[0],
-  ];
-  return [
-    v[0] * cosA + cross[0] * sinA + axis[0] * dot * (1 - cosA),
-    v[1] * cosA + cross[1] * sinA + axis[1] * dot * (1 - cosA),
-    v[2] * cosA + cross[2] * sinA + axis[2] * dot * (1 - cosA),
-  ];
-}
-
-// Translate: find rotation that maps 'from' to 'to', return rotated 'v'
-function rotateToward(
-  v: [number, number, number],
-  from: [number, number, number],
-  to: [number, number, number],
-): [number, number, number] {
-  const dot = vecDot(from, to);
-  if (Math.abs(dot - 1) < 1e-6) return v;
-  if (Math.abs(dot + 1) < 1e-6) return [-v[0], -v[1], -v[2]];
-
-  const axis = vecNormalize([
-    from[1] * to[2] - from[2] * to[1],
-    from[2] * to[0] - from[0] * to[2],
-    from[0] * to[1] - from[1] * to[0],
-  ]);
-  return rotateRodrigues(v, axis, dot, Math.sqrt(1 - dot * dot));
-}
-
 function getLonePairDirections(
   sigmaDirs: [number, number, number][],
   total: number,
@@ -313,7 +221,6 @@ function getLonePairDirections(
   const missing = total - sigmaDirs.length;
   if (missing <= 0) return [];
 
-  // 1 lone pair: opposite the centroid of the sigma vectors
   if (missing === 1) {
     const sum: [number, number, number] = [0, 0, 0];
     for (const d of sigmaDirs) { sum[0] += d[0]; sum[1] += d[1]; sum[2] += d[2]; }
@@ -322,7 +229,6 @@ function getLonePairDirections(
     return [lp];
   }
 
-  // 2 lone pairs: exact tetrahedral (sp³) or trigonal planar (sp²) positions
   if (missing === 2 && sigmaDirs.length >= 2) {
     const a = vecNormalize(sigmaDirs[0]);
     const b = vecNormalize(sigmaDirs[1]);
@@ -351,11 +257,9 @@ function getLonePairDirections(
     return [vecNormalize(lp1), vecNormalize(lp2)];
   }
 
-  // sp² with 1 σ bond (carbonyl O): 2 lone pairs at ±120° in σ plane
   if (missing === 2 && sigmaDirs.length === 1 && sigmaPlaneNormal) {
     const a = vecNormalize(sigmaDirs[0]);
     let axis: [number, number, number] = sigmaPlaneNormal;
-    // Ensure axis is perpendicular to a (project out any parallel component)
     const dotAV = vecDot(a, axis);
     axis = [axis[0] - dotAV * a[0], axis[1] - dotAV * a[1], axis[2] - dotAV * a[2]];
     axis = vecNormalize(axis);
@@ -369,7 +273,6 @@ function getLonePairDirections(
     return [vecNormalize(lp1), vecNormalize(lp2)];
   }
 
-  // Fallback for missing=2 with only 1 sigma dir and no plane normal
   if (missing === 2 && sigmaDirs.length >= 1) {
     const a = vecNormalize(sigmaDirs[0]);
     const perp = findPerpendicular(a);
@@ -388,7 +291,6 @@ function getLonePairDirections(
     return [vecNormalize(lp1), vecNormalize(lp2)];
   }
 
-  // 3 lone pairs: canonical tetrahedron aligned to sigma bond
   if (missing === 3 && sigmaDirs.length >= 1) {
     const a = vecNormalize(sigmaDirs[0]);
     const invSqrt3 = 1 / Math.sqrt(3);

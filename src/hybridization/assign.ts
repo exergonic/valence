@@ -1,6 +1,7 @@
 import type { HybridizationResult } from './types';
+import { VALENCE } from '../data/valence';
 
-function vecAngle(
+export function vecAngle(
   a: [number, number, number],
   b: [number, number, number],
 ): number {
@@ -11,15 +12,24 @@ function vecAngle(
   return Math.acos(Math.max(-1, Math.min(1, dot / (la * lb))));
 }
 
+export function assignBySteric(steric: number): HybridizationResult {
+  switch (steric) {
+    case 2: return { hybridization: 'sp', geometry: 'linear', bondAngles: [] };
+    case 3: return { hybridization: 'sp2', geometry: 'trigonal_planar', bondAngles: [] };
+    default: return { hybridization: 'sp3', geometry: 'tetrahedral', bondAngles: [] };
+  }
+}
+
 export function assignHybridization(
-  _element: string,
+  element: string,
   neighborVectors: [number, number, number][],
   piCount: number = 0,
 ): HybridizationResult {
   const n = neighborVectors.length;
 
   if (n < 2) {
-    return { hybridization: 'sp3', geometry: 'tetrahedral', bondAngles: [] };
+    const steric = Math.min(4, Math.max(2, n + Math.round(Math.max(0, (VALENCE[element] || 4) - n - piCount) / 2)));
+    return assignBySteric(steric);
   }
 
   const angles: number[] = [];
@@ -33,7 +43,6 @@ export function assignHybridization(
   const deg = avgAngle * (180 / Math.PI);
 
   if (n === 2) {
-    // An atom with its own π bond is sp² (rings can distort the angle below 110°)
     if (deg > 165) {
       return { hybridization: 'sp', geometry: 'linear', bondAngles: [deg] };
     }

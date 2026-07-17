@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { assignHybridization } from '../src/hybridization';
+import { assignHybridization, assignBySteric, vecAngle } from '../src/hybridization';
 import { parseMolBlock } from '../src/mol-parser';
 import { EXAMPLES } from '../src/data/examples';
+import { VALENCE } from '../src/data/valence';
+import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
 
 interface AtomExpectation {
   element: string;
@@ -110,53 +112,6 @@ const EXPECTATIONS: ExampleExpectations[] = [
     ],
   },
 ];
-
-const VALENCE: Record<string, number> = {
-  H: 1, He: 0, Li: 1, Be: 2, B: 3,
-  C: 4, N: 5, O: 6, F: 7,
-  Na: 1, Mg: 2, Al: 3, Si: 4, P: 5, S: 6, Cl: 7,
-  K: 1, Ca: 2, Ga: 3, Ge: 4, As: 5, Se: 6, Br: 7,
-  Rb: 1, Sr: 2, In: 3, Sn: 4, Sb: 5, Te: 6, I: 7,
-};
-
-function vecAngle(a: [number, number, number], b: [number, number, number]): number {
-  const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const la = Math.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2);
-  const lb = Math.sqrt(b[0] ** 2 + b[1] ** 2 + b[2] ** 2);
-  if (la < 1e-8 || lb < 1e-8) return 0;
-  return Math.acos(Math.max(-1, Math.min(1, dot / (la * lb))));
-}
-
-function vecDot(a: [number, number, number], b: [number, number, number]): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function crossProduct(a: [number, number, number], b: [number, number, number]): [number, number, number] {
-  return [
-    a[1] * b[2] - a[2] * b[1],
-    a[2] * b[0] - a[0] * b[2],
-    a[0] * b[1] - a[1] * b[0],
-  ];
-}
-
-function vecNormalize(v: [number, number, number]): [number, number, number] {
-  const len = Math.sqrt(v[0] ** 2 + v[1] ** 2 + v[2] ** 2);
-  if (len < 1e-8) return [0, 0, 0];
-  return [v[0] / len, v[1] / len, v[2] / len];
-}
-
-function findPerpendicular(v: [number, number, number]): [number, number, number] {
-  const absX = Math.abs(v[0]);
-  const absY = Math.abs(v[1]);
-  const absZ = Math.abs(v[2]);
-
-  if (absX <= absY && absX <= absZ) {
-    return crossProduct(v, [1, 0, 0]);
-  } else if (absY <= absX && absY <= absZ) {
-    return crossProduct(v, [0, 1, 0]);
-  }
-  return crossProduct(v, [0, 0, 1]);
-}
 
 function getPiDirectionFromNeighbor(
   atomIdx: number,
@@ -271,10 +226,7 @@ function classifyAtoms(mol: string): Array<{
 
     const hyb = neighborVectors.length >= 2
       ? assignHybridization(atom.element, neighborVectors, piCount[i])
-      : (() => {
-        const steric = Math.min(4, Math.max(2, neighbors.length + Math.round(Math.max(0, (VALENCE[atom.element] || 4) - neighbors.length - piCount[i]) / 2)));
-        return { hybridization: steric === 2 ? 'sp' as const : steric === 3 ? 'sp2' as const : 'sp3' as const, geometry: 'tetrahedral' as const, bondAngles: [] as number[] };
-      })();
+      : assignBySteric(Math.min(4, Math.max(2, neighbors.length + Math.round(Math.max(0, (VALENCE[atom.element] || 4) - neighbors.length - piCount[i]) / 2))));
 
     const stericNumber = hyb.hybridization === 'sp' ? 2
       : hyb.hybridization === 'sp2' ? 3 : 4;
@@ -318,7 +270,6 @@ function getPlaneNormal(atoms: Array<{ x: number; y: number; z: number }>): [num
   const v2: [number, number, number] = [c.x - a.x, c.y - a.y, c.z - a.z];
   const nrm = vecNormalize(crossProduct(v1, v2));
   if (nrm[0] === 0 && nrm[1] === 0 && nrm[2] === 0) {
-    // collinear atoms — try different triple
     for (let i = 2; i < atoms.length; i++) {
       const v: [number, number, number] = [atoms[i].x - a.x, atoms[i].y - a.y, atoms[i].z - a.z];
       const n = vecNormalize(crossProduct(v1, v));
@@ -362,7 +313,6 @@ describe('p-AO directionality', () => {
     expect(dot).toBeLessThan(tolerance);
   }
 
-  // Planar conjugated ring systems: all π directions parallel to ring normal
   const RING_EXAMPLES = ['Benzene (C₆H₆)', 'Pyridine (C₅H₅N)', 'Pyrrole (C₄H₅N)', 'Imidazole (C₃H₄N₂)', 'Phenol (C₆H₅OH)'];
 
   for (const name of RING_EXAMPLES) {
@@ -392,7 +342,6 @@ describe('p-AO directionality', () => {
     });
   }
 
-  // Planar acyclic π system: ethene
   it('Ethene (C₂H₄) — both π orbitals parallel to each other', () => {
     const example = EXAMPLES.find((e) => e.name === 'Ethene (C₂H₄)');
     if (!example) { expect.fail('Example not found'); return; }
@@ -406,37 +355,6 @@ describe('p-AO directionality', () => {
     expectParallel(result[0].piDirection!, result[1].piDirection!, 1e-4);
   });
 
-  // sp systems: π direction perpendicular to bond axis
-  const SP_EXAMPLES = ['Ethyne (C₂H₂)', 'Nitrogen (N₂)'];
-  for (const name of SP_EXAMPLES) {
-    it(`${name} — π direction perpendicular to bond axis`, () => {
-      const example = EXAMPLES.find((e) => e.name === name);
-      if (!example) { expect.fail(`Example not found: ${name}`); return; }
-
-      const molecule = parseMolBlock(example.mol);
-      const result = classifyAtoms(example.mol).filter((a) => a.element !== 'H');
-
-      for (let i = 0; i < result.length; i++) {
-        const atom = result[i];
-        expect(atom.hasPi).toBe(true);
-        expect(atom.piDirection, `Atom ${i} (${atom.element}) should have a π direction`).not.toBeNull();
-
-        // The bond axis is the only neighbor direction for diatomic sp
-        const neighbors = (() => {
-          const adj: number[][] = Array.from({ length: molecule.atoms.length }, () => []);
-          for (const bond of molecule.bonds) {
-            adj[bond.atom1Index].push(bond.atom2Index);
-            adj[bond.atom2Index].push(bond.atom1Index);
-          }
-          return adj;
-        })();
-        const ni = neighbors[Object.keys(neighbors).find((k) => parseInt(k) === molecule.atoms.indexOf(molecule.atoms.find((a, idx) => idx === i)!))!];
-        // Actually, let's just compute the bond axis from coordinates
-      }
-    });
-  }
-
-  // Simpler approach: for diatomic molecules, the bond axis is the vector between the two atoms
   it('Ethyne (C₂H₂) — π direction perpendicular to C≡C axis', () => {
     const example = EXAMPLES.find((e) => e.name === 'Ethyne (C₂H₂)');
     if (!example) { expect.fail('Example not found'); return; }
@@ -486,7 +404,6 @@ describe('p-AO directionality', () => {
     }
   });
 
-  // Non-π systems: verify null piDirection
   it('Methane (CH₄) — no π direction', () => {
     const example = EXAMPLES.find((e) => e.name === 'Methane (CH₄)');
     if (!example) { expect.fail('Example not found'); return; }
