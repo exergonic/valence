@@ -1,93 +1,115 @@
-# Valence Bond Visualization
+# ⚛️ Valence: Interactive Valence Bond Visualization
 
-**Valence** is an interactive 3D molecular orbital viewer that algorithmically classifies hybridization, orients lone pairs, and renders valence bond orbitals (σ lobes, π lobes, p atomic orbitals) from drawn or example molecules.
+[![Web Application](https://img.shields.io/badge/Platform-Web-success?logo=googlechrome&logoColor=white)](https://exergonic.github.io/valence)
+[![Windows Release](https://img.shields.io/badge/Platform-Windows-blue?logo=windows&logoColor=white)](https://github.com/exergonic/valence/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-![Valence displaying furane](./doc/demo.png)
+**Valence** is a browser-based, interactive 3D molecular orbital viewer built for chemical education. It dynamically classifies hybridization, orients lone pairs, and renders valence bond orbitals (σ lobes, π lobes, p atomic orbitals) directly from sketched or imported molecules. 
 
-<img src="./doc/water.png" alt="water" style="zoom:25%;" /><img src="./doc/ethyne.png" alt="ethyne" style="zoom:30%;" />
+<div align="center">
+  <img src="./doc/demo.png" alt="Valence displaying furane" width="70%">
+  <br/>
+  <img src="./doc/water.png" alt="water" width="25%" />
+  <img src="./doc/ethyne.png" alt="ethyne" width="30%" />
+</div>
 
-## Capabilities
+---
+## 📥 Platforms & Distribution
 
-- **Hybridization engine** assigns sp/sp²/sp³ from measured bond angles, with geometry-derived conjugation detection (furan O, aniline N, amide N, H₂SO₄ O)
-- **3D embedding** via PubChem PUG REST (MMFF94-optimized), RDKit.js ETKDG fallback (client-side WASM), or graph-walk embedder + torsion optimizer
-- **Orbital rendering** with THREE.js — LatheGeometry lobes for σ, π, p, and lone pair orbitals
-- **p-AO directionality** — all π system p orbitals are oriented perpendicular to the σ plane, with automated parallel alignment across conjugated networks
-- **Export** 2× PNG snapshots of the current view
+| Platform | Access | Details |
+|----------|--------|---------|
+| 🌐 **Web** | [GitHub Pages](https://exergonic.github.io/valence) | Zero installation required. Runs entirely in modern browsers. |
+| 🪟 **Windows** | [Releases](https://github.com/exergonic/valence/releases) | MSI installer via Tauri v2. Self-contained webview wrapper with identical render pipeline, zero servers, and zero telemetry. |
 
-## Platforms
+---
+## 🎯 Pedagogical Scope
 
-| Platform | Distribution |
-|----------|-------------|
-| 🌐 **Web** | [GitHub Pages](https://exergonic.github.io/valence) — no install required |
-| 🪟 **Windows** | MSI installer via [Releases](https://github.com/exergonic/valence/releases) (Tauri v2) |
+Built specifically for the classroom, Valence embraces a purely geometric and algorithmic approach to illustrate VSEPR rules and local coordination, making it ideal for teaching undergraduate general and organic chemistry.
 
-The desktop build is a self-contained webview wrapper — same render pipeline, no server, no telemetry.
+| 📐 What It Is | 🧮 What It Is NOT |
+| :--- | :--- |
+| **Geometric & Algorithmic:** Infers orbital orientations from local coordination numbers and atomic positions based on VSEPR principles. | **Quantum Mechanical:** Does *not* perform *ab initio* VB wavefunction or resonance calculations. |
+| **Pedagogical:** Designed to bridge the gap in chemical education by illustrating bonding concepts and 3D geometry. | **Electronic Structure Tool:** Does *not* compute MOs, electron density matrices, or solve the Schrödinger equation. |
 
-## Pipeline
+---
 
-```
-JSME (MOL block) → parse atoms/bonds → hybridization engine → 3D embedder → torsion optimizer → Three.js renderer
-```
+## ✨ Core Capabilities
 
-1. Draw a molecule in the JSME panel (or pick an example)
-2. Try PubChem PUG REST for MMFF94-optimized 3D coordinates
-3. If that fails, try RDKit.js ETKDG + MMFF94 (client-side WASM, ~7 MB)
-4. If both fail, use the graph-walk embedder + torsion optimizer
-5. Add implicit hydrogens (fallback path only)
-6. Classify hybridization, orient orbitals, render in Three.js
+*   **🧠 Hybridization Engine:** Dynamically assigns sp / sp² / sp³ states from measured bond angles. Includes geometry-derived conjugation detection (e.g., furan O, aniline N, amide N, H₂SO₄ O).
+*   **🌐 Robust 3D Embedding:** Leverages PubChem PUG REST (MMFF94-optimized) as a primary engine, with RDKit.js ETKDG (client-side WASM) and a custom graph-walk embedder + torsion optimizer as seamless fallbacks.
+*   **🎨 Advanced Orbital Rendering:** Powered by THREE.js. Utilizes precise `LatheGeometry` lobes to visualize σ, π, p, and lone pair orbitals.
+*   **🧭 p-AO Directionality:** Automatically orientates all π-system p-orbitals perpendicular to the σ plane, forcing parallel alignment across conjugated networks.
+*   **📸 Quick Export:** Seamlessly capture and export 2× resolution PNG snapshots of the current viewport for lectures or assignments.
 
-## Quick Start
+---
+
+## 🚀 Quick Start
+
+To run the development server locally:
 
 ```bash
+# Install dependencies
 npm install
+
+# Start the dev server
 npm run dev
 ```
+Open `http://localhost:5173`, draw a molecule in the JSME panel, and click **Render Molecule**.
 
-Open `http://localhost:5173`, draw a molecule, and click **Render Molecule**.
-
-### Commands
+### Command Reference
 
 | Task | Command |
 |------|---------|
-| Dev server | `npm run dev` |
-| Build (web) | `npm run build` |
-| Preview build | `npm run preview` |
-| Tests | `npm test` |
-| Test watch | `npm run test:watch` |
-| Desktop dev | `npm run tauri:dev` |
-| Desktop build | `npm run tauri:build` |
-| Lint | `npm run lint` |
+| Start dev server | `npm run dev` |
+| Build for web | `npm run build` |
+| Preview web build | `npm run preview` |
+| Run test suite | `npm test` |
+| Test watch mode | `npm run test:watch` |
+| Desktop dev (Tauri) | `npm run tauri:dev` |
+| Desktop build (Tauri) | `npm run tauri:build` |
+| Run linter | `npm run lint` |
 | Typecheck | `npx tsc --noEmit` |
 
-## Architecture
+---
 
-- **Vite** + **TypeScript** — frontend build
-- **Three.js** — 3D scene graph (vanilla, no React)
-- **lil-gui** — debug/toggle controls
-- **JSME** — molecule sketcher (mounted in its own panel)
-- **Tauri v2** — desktop wrapper for Windows
+## ⚙️ Architecture & Pipeline
 
-### Key modules
+Valence features a modern, lightweight frontend stack built with **Vite** and **TypeScript**. The 3D scene graph is handled by vanilla **Three.js** (no React overhead), sketching is powered by **JSME**, and the desktop wrapper utilizes **Tauri v2** for a self-contained, telemetry-free Windows environment.
 
-| Module | Purpose |
-|--------|---------|
-| `src/mol-parser/` | Fixed-width MOL block parser (~40 lines, no cheminformatics lib) |
-| `src/hydrogens/` | Adds missing hydrogens when PubChem 3D unavailable (4 − bondOrderSum) |
-| `src/hybridization/` | Assigns hybridization from measured bond angles, not connectivity count |
-| `src/embedder/` | Graph-walk 3D coordinate placement using hybridization vectors |
-| `src/embedder/torsions.ts` | Torsion optimizer for staggered alkane conformations |
-| `src/services/resolve3d.ts` | Fetches MMFF94-optimized 3D coords from PubChem PUG REST API |
-| `src/scene/` | Three.js scene, atom/bond/orbital rendering |
-| `src/orbitals/` | LatheGeometry for sp, sp², sp³ lobes |
+### Data Pipeline
 
-## Scope
+```text
+[JSME MOL Block] ➔ Parse Atoms/Bonds ➔ Hybridization Engine ➔ 3D Embedder ➔ Torsion Optimizer ➔ [Three.js Render]
+```
 
-| What It Is | What It Is NOT |
-|---|---|
-| 📐 **Geometric & algorithmic:** Infers orbital orientations from local coordination numbers and atomic positions | 🧮 **Quantum mechanical:** Does *not* perform ab initio VB wavefunction or resonance calculations |
-| 📚 **Pedagogical:** Ideal for illustrating undergraduate general/organic chemistry bonding concepts | 🔬 **Electronic structure tool:** Does *not* compute MOs or electron density matrices |
+1. **Input:** Draw a molecule in the JSME panel (or select a pre-built example).
+2. **Primary 3D:** Attempt PubChem PUG REST for MMFF94-optimized coordinates.
+3. **WASM Fallback:** If PubChem is unreachable, utilize RDKit.js ETKDG + MMFF94 (~7 MB footprint).
+4. **Local Fallback:** If both fail, deploy the internal graph-walk embedder and torsion optimizer (adding implicit hydrogens as needed).
+5. **Render:** Classify hybridization, map orbital geometry, and push to the Three.js canvas.
 
-## Citation
+### Key Modules
 
-> Valence v0.5.0 — Valence Bond Visualization (2026).
-> McCann, B. W. https://github.com/exergonic/valence
+| Directory / File | Purpose |
+|------------------|---------|
+| `src/mol-parser/` | Custom fixed-width MOL block parser (~40 lines, zero external dependencies). |
+| `src/hydrogens/` | Algorithm to inject missing implicit hydrogens if PubChem 3D is unavailable. |
+| `src/hybridization/` | Analyzes measured bond angles (rather than basic connectivity) to assign true hybridization. |
+| `src/embedder/` | Places 3D coordinates via graph-walking and hybridization vectors. |
+| `src/embedder/torsions.ts`| Optimizes torsions to ensure staggered alkane conformations. |
+| `src/services/resolve3d.ts`| Interface for fetching MMFF94 coordinates from the PubChem PUG REST API. |
+| `src/scene/` | Core Three.js logic for rendering atoms, bonds, and lighting. |
+| `src/orbitals/` | Generates accurate `LatheGeometry` for individual sp, sp², and sp³ lobes. |
+
+---
+
+
+
+---
+
+## 📖 Citation
+
+If you use Valence in your curriculum or presentations, please cite:
+
+> **Valence v0.5.0 — Valence Bond Visualization (2026).**
+> McCann, B. W. *https://github.com/exergonic/valence*
