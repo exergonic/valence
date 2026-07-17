@@ -134,7 +134,6 @@ describe('Example orbital classifications', () => {
       const example = EXAMPLES.find((e) => e.name === ex.name);
       if (!example) { expect.fail(`Example not found: ${ex.name}`); return; }
 
-      const molecule = parseMolBlock(example.mol);
       const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
 
       for (let i = 0; i < ex.atoms.length; i++) {

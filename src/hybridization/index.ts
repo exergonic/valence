@@ -1,3 +1,2 @@
-export { assignHybridization, assignBySteric, vecAngle } from './assign';
-export { GEOMETRY_ANGLES } from './geometries';
+export { assignHybridization, assignBySteric } from './assign';
 export type { Hybridization, Geometry, HybridizationResult } from './types';
