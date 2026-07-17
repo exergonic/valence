@@ -83,6 +83,14 @@ function loadMolecule(ctx: SceneContext, molBlock: string) {
 function setupExamples(ctx: SceneContext) {
   const dropdown = document.getElementById('examples-dropdown') as HTMLSelectElement;
 
+  // Populate from EXAMPLES array — single source of truth
+  for (let i = 0; i < EXAMPLES.length; i++) {
+    const opt = document.createElement('option');
+    opt.value = String(i);
+    opt.textContent = EXAMPLES[i].name;
+    dropdown.appendChild(opt);
+  }
+
   dropdown.addEventListener('change', () => {
     const idx = parseInt(dropdown.value);
     if (isNaN(idx)) return;
@@ -90,6 +98,7 @@ function setupExamples(ctx: SceneContext) {
     if (!ex) return;
 
     loadMolecule(ctx, ex.mol);
+    // Reset dropdown to the placeholder label after selecting
     dropdown.selectedIndex = 0;
   });
 }

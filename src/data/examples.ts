@@ -235,8 +235,8 @@ export const EXAMPLES: Example[] = [
   { name: 'Pyrrole (C₄H₅N)', mol: PYRROLE },
   { name: 'Imidazole (C₃H₄N₂)', mol: IMIDAZOLE },
   { name: 'Phenol (C₆H₅OH)', mol: PHENOL },
-  { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
   { name: 'Nitrogen (N₂)', mol: N2 },
   { name: 'Oxygen (O₂)', mol: O2 },
   { name: 'Water (H₂O)', mol: WATER },
+  { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
 ];
