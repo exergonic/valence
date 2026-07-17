@@ -73,13 +73,22 @@ export function renderOrbitals(
     }
 
     // Pi orbitals based on hybridization
-    if (info.piDirection) {
-      addPiOrbital(group, atomPos, [info.piDirection], colorScheme.pi, preset, atomScale, i, atom.element);
-    } else if (info.hybridization === 'sp' && neighborVectors.length >= 1) {
+    if (info.hybridization === 'sp' && neighborVectors.length >= 1) {
+      // sp atoms have 2 perpendicular p orbitals.
       const axis = neighborVectors[0];
-      const perp = vecNormalize(findPerpendicular(axis));
-      const perp2 = vecNormalize(crossProduct(axis, perp));
-      addPiOrbital(group, atomPos, [perp, perp2], colorScheme.pi, undefined, undefined, i, atom.element);
+      if (info.piDirection) {
+        // One p aligns with the conjugating neighbor's π direction (e.g. enyne,
+        // ynone).  The second is perpendicular to both the bond axis and the first.
+        const perp2 = vecNormalize(crossProduct(axis, info.piDirection));
+        addPiOrbital(group, atomPos, [info.piDirection, perp2], colorScheme.pi, preset, atomScale, i, atom.element);
+      } else {
+        // No conjugating neighbor — pick arbitrary perpendiculars (e.g. ethyne).
+        const perp = vecNormalize(findPerpendicular(axis));
+        const perp2 = vecNormalize(crossProduct(axis, perp));
+        addPiOrbital(group, atomPos, [perp, perp2], colorScheme.pi, undefined, undefined, i, atom.element);
+      }
+    } else if (info.piDirection) {
+      addPiOrbital(group, atomPos, [info.piDirection], colorScheme.pi, preset, atomScale, i, atom.element);
     }
   }
 }
