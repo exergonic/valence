@@ -94,10 +94,10 @@ function setStatus(info: PubChemInfo) {
   } else if (info.source === 'cir') {
     const sourceEl = document.getElementById('info-source')!;
     sourceEl.className = 'fallback';
-    sourceEl.textContent = '⚠ CIR fallback';
-    document.getElementById('info-name')!.textContent = '';
-    document.getElementById('info-formula')!.textContent = '';
-    document.getElementById('info-weight')!.textContent = '';
+    sourceEl.textContent = '⚠ PubChem 3D unavailable';
+    document.getElementById('info-name')!.textContent = 'Using NIH CACTUS resolver (CIR)';
+    document.getElementById('info-formula')!.textContent = info.formula || '';
+    document.getElementById('info-weight')!.textContent = info.weight ? `MW ${info.weight}` : '';
     document.getElementById('info-cid')!.textContent = '';
     document.getElementById('info-link')!.style.display = 'none';
     popup.classList.remove('hidden');
