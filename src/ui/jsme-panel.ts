@@ -102,7 +102,15 @@ function setStatus(info: PubChemInfo) {
     document.getElementById('info-link')!.style.display = 'none';
     popup.classList.remove('hidden');
   } else {
-    popup.classList.add('hidden');
+    const sourceEl = document.getElementById('info-source')!;
+    sourceEl.className = 'warning';
+    sourceEl.textContent = '⚠ Approximate geometry';
+    document.getElementById('info-name')!.textContent = 'PubChem & CIR unavailable — in-house fallback';
+    document.getElementById('info-formula')!.textContent = info.formula || '';
+    document.getElementById('info-weight')!.textContent = info.weight ? `MW ${info.weight}` : '';
+    document.getElementById('info-cid')!.textContent = '';
+    document.getElementById('info-link')!.style.display = 'none';
+    popup.classList.remove('hidden');
   }
 }
 
@@ -144,7 +152,8 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
           }),
           bonds: molecule.bonds,
         };
-        setStatus({ source: 'fallback' });
+        const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
+        setStatus({ source: 'fallback', formula, weight: `${weight}` });
       }
 
       ctx.currentMolecule = molecule;

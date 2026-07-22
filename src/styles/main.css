@@ -472,6 +472,7 @@ html, body {
 }
 #info-source.pubchem { color: #4488ff; }
 #info-source.fallback { color: #ff8844; }
+#info-source.warning { color: #ff4444; }
 
 #info-name {
   font-weight: 600;
