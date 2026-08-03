@@ -1,6 +1,30 @@
 import type { Molecule } from '../mol-parser';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from './vec3';
 
+// Minimum |cos(angle)| between a promoted lone-pair p orbital and the
+// promoting atom's own σ-plane normal.  A real p orbital must be
+// perpendicular to the σ plane (its node plane contains the σ framework);
+// we allow up to 30° of twist before refusing to call the lone pair
+// conjugated — beyond that the π overlap is weak enough that drawing a
+// parallel p lobe would be misleading (e.g. thioanisole S, methyl ~60°
+// out of the ring plane).
+export const MIN_PROMOTION_ALIGNMENT = Math.cos(Math.PI / 6); // cos 30°
+
+// Normal of the plane spanned by an atom's σ-bond vectors, or null when
+// fewer than 2 bonds leave no plane to measure (e.g. enolate O⁻ with a
+// single σ bond — unverifiable, so promotion is allowed to proceed).
+export function sigmaPlaneNormal(
+  neighborVectors: [number, number, number][],
+): [number, number, number] | null {
+  for (let a = 0; a < neighborVectors.length; a++) {
+    for (let b = a + 1; b < neighborVectors.length; b++) {
+      const nrm = vecNormalize(crossProduct(neighborVectors[a], neighborVectors[b]));
+      if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) return nrm;
+    }
+  }
+  return null;
+}
+
 // Computes the p-orbital direction for an atom by looking at a specific
 // neighbor's σ-bond geometry.  The neighbor's π-plane normal is determined
 // from its σ-bond vectors (cross product of two of its own bonds).

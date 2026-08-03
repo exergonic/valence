@@ -1,7 +1,7 @@
 import type { Molecule } from '../mol-parser';
 import { assignHybridization, assignBySteric } from '../hybridization';
 import { VALENCE } from '../data/valence';
-import { computePiDirection } from './pi';
+import { computePiDirection, getPiDirectionFromNeighbor, sigmaPlaneNormal, MIN_PROMOTION_ALIGNMENT } from './pi';
 import { vecDot } from './vec3';
 
 // Result for one atom after running the full VSEPR + conjugation pipeline.
@@ -74,10 +74,27 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
       return (piBondsPerAtom[ni] - sharedPi) > 0;
     }).length;
 
+    const atomPos: [number, number, number] = [atom.x, atom.y, atom.z];
+
     // Conjugation: promote one σ lone pair to a p orbital.
     // Only needed for sp³ atoms (they have all 4 orbitals hybridized).
     // sp² already has an unused p orbital, so no promotion is needed.
-    const conjugated = lonePairs > 0 && conjugatingNeighbors > 0 && piBondsPerAtom[atomIdx] === 0;
+    let conjugated = lonePairs > 0 && conjugatingNeighbors > 0 && piBondsPerAtom[atomIdx] === 0;
+
+    // Geometric veto on the promotion: the promoted p must be perpendicular
+    // to this atom's own σ-bond plane (a p orbital's node plane contains
+    // the σ framework).  The neighbor's π direction is borrowed only when
+    // it satisfies that — planar phenol/furan O passes, but thioanisole S
+    // (methyl twisted ~60° out of the ring plane) fails and keeps its σ
+    // lone pairs instead of drawing a fake p lobe parallel to the ring.
+    if (conjugated) {
+      const borrowed = getPiDirectionFromNeighbor(atomIdx, neighborsOf, molecule, piBondsPerAtom, atomPos);
+      const sigmaNormal = sigmaPlaneNormal(bondVectors);
+      if (borrowed && sigmaNormal && Math.abs(vecDot(borrowed, sigmaNormal)) < MIN_PROMOTION_ALIGNMENT) {
+        conjugated = false;
+      }
+    }
+
     if (conjugated && hybrid.hybridization === 'sp3') lonePairs -= 1;
 
     // Step 4: decide whether a p orbital exists (the "π system").
@@ -88,7 +105,6 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
       || (hybrid.hybridization === 'sp' && bondVectors.length >= 1);
 
     // Step 5: compute which direction the p orbital points.
-    const atomPos: [number, number, number] = [atom.x, atom.y, atom.z];
     const piDirection = computePiDirection(
       atomIdx, molecule, neighborsOf, piBondsPerAtom,
       atomPos, bondVectors, hybrid, conjugated,

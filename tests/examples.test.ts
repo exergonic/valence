@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { parseMolBlock } from '../src/mol-parser';
+import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/data/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
 import { classifyMolecule } from '../src/utils/classify';
@@ -300,5 +301,66 @@ describe('p-AO directionality', () => {
     const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
     expect(result[0].hasPi).toBe(false);
     expect(result[0].piDirection).toBeNull();
+  });
+});
+
+describe('Lone-pair promotion geometry gate', () => {
+  // Real PubChem MMFF94 heavy-atom geometry of thioanisole: the C–S–C
+  // plane is twisted ~60° from the ring plane (methyl sticks out of it),
+  // so a p orbital parallel to the ring p's would not be perpendicular to
+  // the sulfur's own σ plane.
+  const TWISTED_THIOANISOLE: Molecule = {
+    atoms: [
+      { index: 0, element: 'S', x: 2.2144, y: -0.5267, z: -0.5730 },
+      { index: 1, element: 'C', x: 0.4849, y: -0.2243, z: -0.2671 }, // ipso
+      { index: 2, element: 'C', x: -0.0151, y: 1.0769, z: -0.3173 }, // ortho (double bond)
+      { index: 3, element: 'C', x: -0.3686, y: -1.2887, z: 0.0225 }, // ortho
+      { index: 4, element: 'C', x: 2.9980, y: 0.4520, z: 0.7390 },   // methyl
+    ],
+    bonds: [
+      { atom1Index: 0, atom2Index: 4, order: 1 }, // S–CH₃
+      { atom1Index: 0, atom2Index: 1, order: 1 }, // S–C(ipso)
+      { atom1Index: 1, atom2Index: 2, order: 2 }, // ring double bond
+      { atom1Index: 1, atom2Index: 3, order: 1 },
+    ],
+  };
+
+  // Same connectivity, methyl rotated into the ring plane (z = 0): the
+  // C–S–C plane now coincides with the ring plane, so the promotion is
+  // geometrically valid and must still happen.
+  const PLANAR_THIOANISOLE: Molecule = {
+    atoms: [
+      { index: 0, element: 'S', x: 0, y: 0, z: 0 },
+      { index: 1, element: 'C', x: 1.75, y: 0, z: 0 },
+      { index: 2, element: 'C', x: 2.40, y: 1.28, z: 0 },
+      { index: 3, element: 'C', x: 2.40, y: -1.28, z: 0 },
+      { index: 4, element: 'C', x: -0.4355, y: 1.7465, z: 0 },
+    ],
+    bonds: [
+      { atom1Index: 0, atom2Index: 4, order: 1 },
+      { atom1Index: 0, atom2Index: 1, order: 1 },
+      { atom1Index: 1, atom2Index: 2, order: 2 },
+      { atom1Index: 1, atom2Index: 3, order: 1 },
+    ],
+  };
+
+  it('twisted thioether (thioanisole) keeps its σ lone pairs — no fake p lobe', () => {
+    const s = classifyMolecule(TWISTED_THIOANISOLE)[0];
+    expect(s.element).toBe('S');
+    expect(s.hybridization).toBe('sp³');
+    expect(s.lonePairs).toBe(2);
+    expect(s.hasPi).toBe(false);
+    expect(s.piDirection).toBeNull();
+  });
+
+  it('planar thioether still promotes the lone pair to a p parallel to the ring', () => {
+    const s = classifyMolecule(PLANAR_THIOANISOLE)[0];
+    expect(s.element).toBe('S');
+    expect(s.hybridization).toBe('sp²');
+    expect(s.lonePairs).toBe(1);
+    expect(s.hasPi).toBe(true);
+    expect(s.piDirection).not.toBeNull();
+    // promoted p must be perpendicular to the (planar) σ framework → ±z here
+    expect(Math.abs(s.piDirection![2])).toBeGreaterThan(0.999);
   });
 });
