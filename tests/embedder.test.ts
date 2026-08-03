@@ -1,30 +1,30 @@
 import { describe, it, expect } from 'vitest';
-import { place3D } from '../src/embedder';
-import { fillMissingHydrogens } from '../src/hydrogens';
+import { place3D } from '../src/geometry/place3d';
+import { fillMissingHydrogens } from '../src/chem/hydrogens';
 import { parseMolBlock } from '../src/mol-parser';
 
 describe('place3D', () => {
   it('should place isolated atom at origin', () => {
     const molecule = {
-      atoms: [{ index: 0, element: 'C', x: 0, y: 0, z: 0 }],
+      atoms: [{ element: 'C', x: 0, y: 0, z: 0 }],
       bonds: [],
     };
     const placed = place3D(molecule);
     expect(placed).toHaveLength(1);
-    expect(placed[0].position).toEqual([0, 0, 0]);
+    expect(placed[0]).toEqual([0, 0, 0]);
   });
 
   it('should produce 3D coords for ethane', () => {
     const molecule = {
       atoms: [
-        { index: 0, element: 'C', x: 0, y: 0, z: 0 },
-        { index: 1, element: 'C', x: 1.5, y: 0, z: 0 },
-        { index: 2, element: 'H', x: -0.5, y: 0.8, z: 0 },
-        { index: 3, element: 'H', x: -0.5, y: -0.8, z: 0 },
-        { index: 4, element: 'H', x: 2.0, y: 0.8, z: 0 },
-        { index: 5, element: 'H', x: 2.0, y: -0.8, z: 0 },
-        { index: 6, element: 'H', x: -0.5, y: 0, z: 0 },
-        { index: 7, element: 'H', x: 2.0, y: 0, z: 0 },
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'C', x: 1.5, y: 0, z: 0 },
+        { element: 'H', x: -0.5, y: 0.8, z: 0 },
+        { element: 'H', x: -0.5, y: -0.8, z: 0 },
+        { element: 'H', x: 2.0, y: 0.8, z: 0 },
+        { element: 'H', x: 2.0, y: -0.8, z: 0 },
+        { element: 'H', x: -0.5, y: 0, z: 0 },
+        { element: 'H', x: 2.0, y: 0, z: 0 },
       ],
       bonds: [
         { atom1Index: 0, atom2Index: 1, order: 1 },
@@ -39,7 +39,7 @@ describe('place3D', () => {
     const placed = place3D(molecule);
     expect(placed).toHaveLength(8);
 
-    const zs = placed.map((p) => Math.abs(p.position[2]));
+    const zs = placed.map((p) => Math.abs(p[2]));
     expect(zs.some((z) => z > 0.1)).toBe(true);
   });
 
@@ -59,7 +59,7 @@ M  END
     const placed = place3D(molecule);
 
     // Check that not all coords are planar
-    const zs = placed.map((p) => Math.abs(p.position[2]));
+    const zs = placed.map((p) => Math.abs(p[2]));
     expect(zs.some((z) => z > 0.1)).toBe(true);
   });
 });

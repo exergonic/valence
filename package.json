@@ -19,7 +19,6 @@
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
     "jsme-editor": "^2024.4.29",
-    "lil-gui": "^0.19.0",
     "three": "^0.160.0"
   },
   "devDependencies": {

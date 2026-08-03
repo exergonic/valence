@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { fillMissingHydrogens } from '../src/hydrogens';
+import { fillMissingHydrogens } from '../src/chem/hydrogens';
 
 describe('fillMissingHydrogens', () => {
   it('should add 3 hydrogens to a terminal carbon', () => {
     const mol = {
       atoms: [
-        { index: 0, element: 'C', x: 0, y: 0, z: 0 },
-        { index: 1, element: 'C', x: 1.5, y: 0, z: 0 },
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'C', x: 1.5, y: 0, z: 0 },
       ],
       bonds: [
         { atom1Index: 0, atom2Index: 1, order: 1 },
@@ -22,9 +22,9 @@ describe('fillMissingHydrogens', () => {
   it('should add 2 hydrogens to a middle carbon', () => {
     const mol = {
       atoms: [
-        { index: 0, element: 'C', x: 0, y: 0, z: 0 },
-        { index: 1, element: 'C', x: 1.5, y: 0, z: 0 },
-        { index: 2, element: 'C', x: 3.0, y: 0, z: 0 },
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'C', x: 1.5, y: 0, z: 0 },
+        { element: 'C', x: 3.0, y: 0, z: 0 },
       ],
       bonds: [
         { atom1Index: 0, atom2Index: 1, order: 1 },
@@ -46,11 +46,11 @@ describe('fillMissingHydrogens', () => {
   it('should not add hydrogens to carbon with 4 single bonds', () => {
     const mol = {
       atoms: [
-        { index: 0, element: 'C', x: 0, y: 0, z: 0 },
-        { index: 1, element: 'F', x: 1, y: 0, z: 0 },
-        { index: 2, element: 'Cl', x: -1, y: 0, z: 0 },
-        { index: 3, element: 'Br', x: 0, y: 1, z: 0 },
-        { index: 4, element: 'I', x: 0, y: -1, z: 0 },
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'F', x: 1, y: 0, z: 0 },
+        { element: 'Cl', x: -1, y: 0, z: 0 },
+        { element: 'Br', x: 0, y: 1, z: 0 },
+        { element: 'I', x: 0, y: -1, z: 0 },
       ],
       bonds: [
         { atom1Index: 0, atom2Index: 1, order: 1 },
@@ -67,8 +67,8 @@ describe('fillMissingHydrogens', () => {
   it('should account for double bond order', () => {
     const mol = {
       atoms: [
-        { index: 0, element: 'C', x: 0, y: 0, z: 0 },
-        { index: 1, element: 'O', x: 1.2, y: 0, z: 0 },
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'O', x: 1.2, y: 0, z: 0 },
       ],
       bonds: [
         { atom1Index: 0, atom2Index: 1, order: 2 },
@@ -82,8 +82,8 @@ describe('fillMissingHydrogens', () => {
   it('should not add extra hydrogens to fluorine with 1 bond', () => {
     const mol = {
       atoms: [
-        { index: 0, element: 'F', x: 0, y: 0, z: 0 },
-        { index: 1, element: 'H', x: 1, y: 0, z: 0 },
+        { element: 'F', x: 0, y: 0, z: 0 },
+        { element: 'H', x: 1, y: 0, z: 0 },
       ],
       bonds: [
         { atom1Index: 0, atom2Index: 1, order: 1 },
@@ -97,7 +97,7 @@ describe('fillMissingHydrogens', () => {
   it('should add hydrogens to bare halogen', () => {
     const mol = {
       atoms: [
-        { index: 0, element: 'Cl', x: 0, y: 0, z: 0 },
+        { element: 'Cl', x: 0, y: 0, z: 0 },
       ],
       bonds: [],
     };

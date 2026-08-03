@@ -1,75 +1,15 @@
-import * as THREE from 'three';
-import type { SceneContext } from '../scene';
+import type { SceneContext } from '../render';
+import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
-import { fillMissingHydrogens } from '../hydrogens';
-import { place3D } from '../embedder';
-import { fetch3D, computeFormula } from '../services/resolve3d';
-import type { PubChemInfo } from '../services/resolve3d';
-import { renderAtoms, renderBonds, renderOrbitals, renderLabels } from '../scene';
-import { hsvToHex } from '../scene/color-schemes';
+import { fillMissingHydrogens } from '../chem/hydrogens';
+import { place3D } from '../geometry/place3d';
+import { fetch3D, computeFormula } from '../geometry/resolve3d';
+import type { PubChemInfo } from '../geometry/resolve3d';
 
 declare global {
   interface Window {
     jsmeApplet: any;
   }
-}
-
-function clearGroup(g: THREE.Group) {
-  while (g.children.length > 0) {
-    const child = g.children[0];
-    g.remove(child);
-    if (child instanceof THREE.Mesh) {
-      child.geometry.dispose();
-      if (Array.isArray(child.material)) {
-        child.material.forEach(m => m.dispose());
-      } else {
-        child.material.dispose();
-      }
-    }
-  }
-}
-
-// Rebuild meshes without touching camera position
-function rebuildDisplay(ctx: SceneContext) {
-  if (!ctx.currentMolecule) return;
-  clearGroup(ctx.moleculeGroup);
-  clearGroup(ctx.orbitalGroup);
-  clearGroup(ctx.labelGroup);
-
-  const { atoms, bonds } = ctx.currentMolecule;
-  const c = ctx.display.colors;
-  const scheme = {
-    scheme: c.scheme,
-    sigma: hsvToHex(c.sigma[0], c.sigma[1], c.sigma[2]),
-    pi: hsvToHex(c.pi[0], c.pi[1], c.pi[2]),
-    lonePair: hsvToHex(c.lonePair[0], c.lonePair[1], c.lonePair[2]),
-  };
-  renderAtoms(ctx.moleculeGroup, atoms, ctx.display);
-  renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
-  renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme);
-  renderLabels(ctx.labelGroup, ctx.currentMolecule);
-  ctx.labelGroup.visible = ctx.display.showLabels;
-}
-
-// Full build including camera framing
-function buildScene(ctx: SceneContext) {
-  rebuildDisplay(ctx);
-
-  const center = new THREE.Vector3();
-  ctx.moleculeGroup.children.forEach((child) => {
-    if (child instanceof THREE.Mesh) {
-      center.add(child.position);
-    }
-  });
-  center.divideScalar(ctx.moleculeGroup.children.length || 1);
-
-  const box = new THREE.Box3().setFromObject(ctx.moleculeGroup);
-  const size = box.getSize(new THREE.Vector3()).length();
-  const dist = size * 1.5;
-  ctx.camera.position.set(center.x, center.y, center.z + dist);
-  ctx.camera.lookAt(center);
-  ctx.controls.target.set(center.x, center.y, center.z);
-  ctx.controls.update();
 }
 
 function setStatus(info: PubChemInfo) {
@@ -147,7 +87,7 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
         const placed = place3D(molecule);
         molecule = {
           atoms: molecule.atoms.map((a, i) => {
-            const p = placed[i].position;
+            const p = placed[i];
             return { ...a, x: p[0], y: p[1], z: p[2] };
           }),
           bonds: molecule.bonds,

@@ -54,7 +54,7 @@ export function getElementColor(element: string): number {
 }
 
 /** Covalent radius — used for orbital lobe sizing */
-export function getElementRadius(element: string): number {
+export function getCovalentRadius(element: string): number {
   return ELEMENT_RADII[element] ?? 0.7;
 }
 

@@ -13,7 +13,6 @@ export function parseMolBlock(molBlock: string): Molecule {
     const line = lines[4 + i];
     if (!line || line.length < 34) break;
     atoms.push({
-      index: i,
       element: line.substring(31, 34).trim(),
       x: parseFloat(line.substring(0, 10)),
       y: parseFloat(line.substring(10, 20)),

@@ -1,5 +1,5 @@
 import type { Molecule } from '../mol-parser';
-import { vecNormalize, vecDot, crossProduct, findPerpendicular } from './vec3';
+import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../utils/vec3';
 
 // Minimum |cos(angle)| between a promoted lone-pair p orbital and the
 // promoting atom's own σ-plane normal.  A real p orbital must be

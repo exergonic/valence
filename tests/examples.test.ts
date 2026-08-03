@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
-import { EXAMPLES } from '../src/data/examples';
+import { EXAMPLES } from '../src/ui/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
-import { classifyMolecule } from '../src/utils/classify';
+import { classifyMolecule } from '../src/chem/classify';
 
 interface AtomExpectation {
   element: string;
@@ -311,11 +311,11 @@ describe('Lone-pair promotion geometry gate', () => {
   // the sulfur's own σ plane.
   const TWISTED_THIOANISOLE: Molecule = {
     atoms: [
-      { index: 0, element: 'S', x: 2.2144, y: -0.5267, z: -0.5730 },
-      { index: 1, element: 'C', x: 0.4849, y: -0.2243, z: -0.2671 }, // ipso
-      { index: 2, element: 'C', x: -0.0151, y: 1.0769, z: -0.3173 }, // ortho (double bond)
-      { index: 3, element: 'C', x: -0.3686, y: -1.2887, z: 0.0225 }, // ortho
-      { index: 4, element: 'C', x: 2.9980, y: 0.4520, z: 0.7390 },   // methyl
+      { element: 'S', x: 2.2144, y: -0.5267, z: -0.5730 },
+      { element: 'C', x: 0.4849, y: -0.2243, z: -0.2671 }, // ipso
+      { element: 'C', x: -0.0151, y: 1.0769, z: -0.3173 }, // ortho (double bond)
+      { element: 'C', x: -0.3686, y: -1.2887, z: 0.0225 }, // ortho
+      { element: 'C', x: 2.9980, y: 0.4520, z: 0.7390 },   // methyl
     ],
     bonds: [
       { atom1Index: 0, atom2Index: 4, order: 1 }, // S–CH₃
@@ -330,11 +330,11 @@ describe('Lone-pair promotion geometry gate', () => {
   // geometrically valid and must still happen.
   const PLANAR_THIOANISOLE: Molecule = {
     atoms: [
-      { index: 0, element: 'S', x: 0, y: 0, z: 0 },
-      { index: 1, element: 'C', x: 1.75, y: 0, z: 0 },
-      { index: 2, element: 'C', x: 2.40, y: 1.28, z: 0 },
-      { index: 3, element: 'C', x: 2.40, y: -1.28, z: 0 },
-      { index: 4, element: 'C', x: -0.4355, y: 1.7465, z: 0 },
+      { element: 'S', x: 0, y: 0, z: 0 },
+      { element: 'C', x: 1.75, y: 0, z: 0 },
+      { element: 'C', x: 2.40, y: 1.28, z: 0 },
+      { element: 'C', x: 2.40, y: -1.28, z: 0 },
+      { element: 'C', x: -0.4355, y: 1.7465, z: 0 },
     ],
     bonds: [
       { atom1Index: 0, atom2Index: 4, order: 1 },

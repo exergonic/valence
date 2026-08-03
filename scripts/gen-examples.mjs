@@ -1,7 +1,7 @@
 import { parseMolBlock } from './src/mol-parser/parse-mol.js';
-import { fillMissingHydrogens } from './src/hydrogens/fill.js';
-import { place3D } from './src/embedder/place3d.js';
-import { computeFormula } from './src/services/resolve3d.js';
+import { fillMissingHydrogens } from './src/chem/hydrogens.js';
+import { place3D } from './src/geometry/place3d.js';
+import { computeFormula } from './src/geometry/resolve3d.js';
 
 function formatMol(atoms, bonds) {
   let out = '';
@@ -30,7 +30,7 @@ for (const ex of examples) {
   const molecule = fillMissingHydrogens(parseMolBlock(ex.mol));
   const placed = place3D(molecule);
   const atoms = molecule.atoms.map((a, i) => {
-    const p = placed[i].position;
+    const p = placed[i];
     return { ...a, x: p[0], y: p[1], z: p[2] };
   });
   const { formula } = computeFormula(atoms.map(a => a.element));

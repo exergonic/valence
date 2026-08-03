@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { SceneContext, ColorScheme } from '../scene';
-import { hexToHsv, COLOR_PRESETS } from '../scene/color-schemes';
+import type { SceneContext, ColorScheme } from '../render';
+import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 
 export function setupControls(ctx: SceneContext) {
   const panel = document.getElementById('controls-panel')!;

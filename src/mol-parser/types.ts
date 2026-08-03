@@ -1,5 +1,4 @@
 export interface Atom {
-  index: number;
   element: string;
   x: number;
   y: number;

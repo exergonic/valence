@@ -1,11 +1,3 @@
-import type { ColorScheme } from './setup';
-
-export interface SchemeColors {
-  sigma: number;  // hex number
-  pi: number;
-  lonePair: number;
-}
-
 export function hsvToHex(h: number, s: number, v: number): number {
   const i = Math.floor(h * 6);
   const f = h * 6 - i;
@@ -40,7 +32,9 @@ export function hexToHsv(hex: number): [number, number, number] {
   return [h, mx === 0 ? 0 : d / mx, mx];
 }
 
-// Preset color schemes — each defines sigma, pi, and lone pair as HSV values [h, s, v]
+// Preset color schemes — each defines sigma, pi, and lone pair as HSV values [h, s, v].
+// The UI stores the current scheme's HSV in ctx.display.colors; rebuild.ts converts
+// those to hex for the renderer.
 export const COLOR_PRESETS: Record<string, { sigma: [number,number,number]; pi: [number,number,number]; lonePair: [number,number,number] }> = {
   element:         { sigma: [0, 0, 1], pi: [0.58, 0.7, 1],   lonePair: [0.1, 0.7, 1] },
   monochrome:      { sigma: [0.58, 0.7, 1], pi: [0.58, 0.7, 1], lonePair: [0.58, 0.7, 1] },
@@ -51,12 +45,3 @@ export const COLOR_PRESETS: Record<string, { sigma: [number,number,number]; pi: 
   highcontrast:    { sigma: [0, 0, 1], pi: [0, 1, 1], lonePair: [0.33, 1, 1] },
   custom:          { sigma: [0.58, 0.7, 1], pi: [0.58, 0.7, 1], lonePair: [0.58, 0.7, 1] },
 };
-
-export function getSchemeColors(scheme: ColorScheme): SchemeColors {
-  const p = COLOR_PRESETS[scheme];
-  return {
-    sigma: hsvToHex(p.sigma[0], p.sigma[1], p.sigma[2]),
-    pi: hsvToHex(p.pi[0], p.pi[1], p.pi[2]),
-    lonePair: hsvToHex(p.lonePair[0], p.lonePair[1], p.lonePair[2]),
-  };
-}

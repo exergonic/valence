@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assignHybridization } from '../src/hybridization';
+import { assignHybridization } from '../src/chem/hybridize';
 
 describe('assignHybridization', () => {
   it('should return sp3 for tetrahedral geometry', () => {

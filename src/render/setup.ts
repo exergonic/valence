@@ -86,6 +86,6 @@ export function initScene(container: HTMLElement): SceneContext {
       atomScale: 1, bondScale: 1, showLabels: true, orbitalPreset: 'metallic', bgColor: '#1a1a2e',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
     },
-    rerender: () => {},
+    rerender: () => {},  // placeholder — mountJsmePanel installs the real rebuild
   };
 }

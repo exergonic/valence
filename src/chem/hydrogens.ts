@@ -1,6 +1,10 @@
 import type { Molecule } from '../mol-parser';
 
-const VALENCES: Record<string, number> = {
+// σ bonds an element usually forms in neutral compounds (octet rule) —
+// what's left over after counting bond orders gets filled with hydrogens.
+// NOT the same as VALENCE_ELECTRONS (valence.ts): N, O, S form 3, 2, 2
+// bonds here despite having 5, 6, 6 valence electrons.
+const BOND_VALENCE: Record<string, number> = {
   H: 1,
   He: 0,
   Li: 1, Be: 2, B: 3,
@@ -29,7 +33,7 @@ export function fillMissingHydrogens(molecule: Molecule): Molecule {
 
   for (let i = 0; i < atoms.length; i++) {
     const atom = atoms[i];
-    const valence = VALENCES[atom.element];
+    const valence = BOND_VALENCE[atom.element];
     if (!valence) continue;
 
     const missing = Math.max(0, valence - bondOrderSum[i]);
@@ -75,7 +79,6 @@ export function fillMissingHydrogens(molecule: Molecule): Molecule {
       const hy = atom.y + BOND_LENGTH * Math.sin(angle);
 
       atoms.push({
-        index: nextIndex + hAdded,
         element: 'H',
         x: hx,
         y: hy,

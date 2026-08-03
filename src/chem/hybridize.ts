@@ -1,5 +1,13 @@
-import type { HybridizationResult } from './types';
-import { VALENCE } from '../data/valence';
+import { VALENCE_ELECTRONS } from './valence';
+
+export type Hybridization = 'sp' | 'sp2' | 'sp3' | 'sp3d' | 'p';
+
+export type Geometry = 'linear' | 'trigonal_planar' | 'tetrahedral' | 'trigonal_bipyramidal';
+
+export interface HybridizationResult {
+  hybridization: Hybridization;
+  geometry: Geometry;
+}
 
 function vecAngle(
   a: [number, number, number],
@@ -16,9 +24,9 @@ function vecAngle(
 // sp = 2, sp² = 3, sp³ = 4.
 export function assignBySteric(steric: number): HybridizationResult {
   switch (steric) {
-    case 2: return { hybridization: 'sp', geometry: 'linear', bondAngles: [] };
-    case 3: return { hybridization: 'sp2', geometry: 'trigonal_planar', bondAngles: [] };
-    default: return { hybridization: 'sp3', geometry: 'tetrahedral', bondAngles: [] };
+    case 2: return { hybridization: 'sp', geometry: 'linear' };
+    case 3: return { hybridization: 'sp2', geometry: 'trigonal_planar' };
+    default: return { hybridization: 'sp3', geometry: 'tetrahedral' };
   }
 }
 
@@ -35,7 +43,7 @@ export function assignHybridization(
   // Not enough neighbors to measure angles: guess hybridization from valence
   // electron count.  (e.g. diatomic N≡N has steric number 2 → sp)
   if (neighborCount < 2) {
-    const lonePairs = Math.round(Math.max(0, (VALENCE[element] || 4) - neighborCount - piCount) / 2);
+    const lonePairs = Math.round(Math.max(0, (VALENCE_ELECTRONS[element] || 4) - neighborCount - piCount) / 2);
     const steric = Math.min(4, Math.max(2, neighborCount + lonePairs));
     return assignBySteric(steric);
   }
@@ -55,21 +63,21 @@ export function assignHybridization(
     // Rings can compress sp² C well below 120°; if the atom has its own π bond
     // (piCount > 0) we know it must be sp² regardless of the measured angle.
     if (deg > 165) {
-      return { hybridization: 'sp', geometry: 'linear', bondAngles: [deg] };
+      return { hybridization: 'sp', geometry: 'linear' };
     }
     if (deg > 110 || piCount > 0) {
-      return { hybridization: 'sp2', geometry: 'trigonal_planar', bondAngles: [deg] };
+      return { hybridization: 'sp2', geometry: 'trigonal_planar' };
     }
-    return { hybridization: 'sp3', geometry: 'tetrahedral', bondAngles: [deg] };
+    return { hybridization: 'sp3', geometry: 'tetrahedral' };
   }
 
   if (neighborCount === 3) {
     if (deg > 115) {
-      return { hybridization: 'sp2', geometry: 'trigonal_planar', bondAngles: [deg, deg, deg] };
+      return { hybridization: 'sp2', geometry: 'trigonal_planar' };
     }
-    return { hybridization: 'sp3', geometry: 'tetrahedral', bondAngles: [deg, deg, deg] };
+    return { hybridization: 'sp3', geometry: 'tetrahedral' };
   }
 
   // 4+ neighbors: always tetrahedral (VSEPR AX₄, AX₃E, AX₂E₂, etc.)
-  return { hybridization: 'sp3', geometry: 'tetrahedral', bondAngles: [109.5, 109.5, 109.5, 109.5] };
+  return { hybridization: 'sp3', geometry: 'tetrahedral' };
 }

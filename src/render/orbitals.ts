@@ -1,10 +1,9 @@
 import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
-import { createLobeMesh, orientLobe } from '../orbitals';
-import { sigmaLobe, piLobe, lonePairLobe } from '../orbitals/lathe';
-import { getElementColor, getElementRadius } from './chem-data';
-import { classifyMolecule } from '../utils/classify';
+import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
+import { getElementColor, getCovalentRadius } from './chem-data';
+import { classifyMolecule } from '../chem/classify';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular, rotateRodrigues, rotateToward } from '../utils/vec3';
 
 export function renderOrbitals(
@@ -49,7 +48,7 @@ export function renderOrbitals(
     });
 
     const color = colorScheme.scheme === 'element' ? getElementColor(atom.element) : colorScheme.sigma;
-    const atomScale = getElementRadius(atom.element) + 0.2;
+    const atomScale = getCovalentRadius(atom.element) + 0.2;
 
     // Sigma bonds: lobes pointing toward each neighbor
     for (const vec of neighborVectors) {
@@ -185,8 +184,8 @@ function getLonePairDirections(
 
   // Two empty hybrids, one σ bond, and a known π-plane normal:
   // lone pairs placed 120° apart in the plane perpendicular to the
-  // σ bond, guided by the known plane (e.g. conjugated sp² O in
-  // furan with one σ bond and one lone pair rotated into p).
+  // σ bond, guided by the known plane (e.g. O₂ — one σ bond, two
+  // lone pairs straddling the π plane).
   if (missing === 2 && sigmaDirs.length === 1 && sigmaPlaneNormal) {
     const a = vecNormalize(sigmaDirs[0]);
     let axis: [number, number, number] = sigmaPlaneNormal;

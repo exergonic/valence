@@ -37,7 +37,7 @@ export function computeFormula(atoms: string[]): { formula: string; weight: numb
   return { formula, weight: Math.round(weight * 100) / 100 };
 }
 
-/** Parse PubChem data fields embedded after M END in the SDF */
+/** Parse the PubChem compound CID embedded after M END in the SDF */
 function parsePubChemMeta(sdf: string): Partial<PubChemInfo> {
   const info: Partial<PubChemInfo> = {};
   const lines = sdf.split('\n');

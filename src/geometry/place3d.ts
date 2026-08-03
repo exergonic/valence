@@ -1,12 +1,6 @@
 import type { Molecule } from '../mol-parser';
 import { optimizeTorsions } from './torsions';
 
-export interface PlacedAtom {
-  index: number;
-  element: string;
-  position: [number, number, number];
-}
-
 const BOND_LENGTH = 1.0;
 
 const TETRA_VECTORS: [number, number, number][] = [
@@ -57,13 +51,18 @@ function alignVectors(from: [number, number, number], to: [number, number, numbe
   };
 }
 
-function getIdealVectors(count: number): [number, number, number][] {
+// Ideal hybrid-orbital directions: tetrahedral (sp³), trigonal (sp²),
+// linear (sp).  The embedder walks the molecular graph placing each
+// neighbor along the next unused ideal vector of its parent atom.
+function idealHybridVectors(count: number): [number, number, number][] {
   if (count <= 2) return LINEAR_VECTORS;
   if (count === 3) return TRIG_VECTORS;
   return TETRA_VECTORS;
 }
 
-export function place3D(molecule: Molecule): PlacedAtom[] {
+// Fallback 3D embedder: graph-walk placement along ideal hybrid vectors,
+// then staggered-alkane torsion optimization.
+export function place3D(molecule: Molecule): [number, number, number][] {
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
   for (const bond of molecule.bonds) {
@@ -91,7 +90,7 @@ export function place3D(molecule: Molecule): PlacedAtom[] {
   while (queue.length > 0) {
     const curr = queue.shift()!;
     const coordinationNumber = adj[curr].length;
-    const vectors = getIdealVectors(coordinationNumber);
+    const vectors = idealHybridVectors(coordinationNumber);
 
     const unplaced = adj[curr].filter((ni) => !placed.has(ni));
     if (unplaced.length === 0) continue;
@@ -155,9 +154,6 @@ export function place3D(molecule: Molecule): PlacedAtom[] {
 
   optimizeTorsions(molecule, adj, parent, pos);
 
-  return molecule.atoms.map((a, i) => ({
-    index: a.index,
-    element: a.element,
-    position: pos[i] || [a.x, a.y, 0],
-  }));
+  // Unplaced atoms (isolated) keep their 2D input coordinates.
+  return pos.map((p, i) => p || [molecule.atoms[i].x, molecule.atoms[i].y, 0]);
 }

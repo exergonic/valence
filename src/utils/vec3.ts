@@ -1,3 +1,7 @@
+export function vecSub(a: [number, number, number], b: [number, number, number]): [number, number, number] {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
 export function vecDot(a: [number, number, number], b: [number, number, number]): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
@@ -19,6 +23,15 @@ export function vecNormalize(v: [number, number, number]): [number, number, numb
   return [v[0] / len, v[1] / len, v[2] / len];
 }
 
+// Removes the component of v along axis (Gram-Schmidt projection).
+export function projectPerpendicular(
+  v: [number, number, number],
+  axis: [number, number, number],
+): [number, number, number] {
+  const d = vecDot(v, axis);
+  return [v[0] - axis[0] * d, v[1] - axis[1] * d, v[2] - axis[2] * d];
+}
+
 export function findPerpendicular(v: [number, number, number]): [number, number, number] {
   const absX = Math.abs(v[0]);
   const absY = Math.abs(v[1]);
@@ -32,6 +45,7 @@ export function findPerpendicular(v: [number, number, number]): [number, number,
   return crossProduct(v, [0, 0, 1]);
 }
 
+// Rodrigues rotation of v around axis by angle given via cos/sin.
 export function rotateRodrigues(
   v: [number, number, number],
   axis: [number, number, number],
@@ -51,6 +65,7 @@ export function rotateRodrigues(
   ];
 }
 
+// Rotates v so the direction `from` lands on `to` (v rotates with it).
 export function rotateToward(
   v: [number, number, number],
   from: [number, number, number],

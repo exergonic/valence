@@ -1,5 +1,47 @@
 import * as THREE from 'three';
-import type { LobeProfile } from './types';
+
+// Orbital lobes are surfaces of revolution: a 2D teardrop profile revolved
+// around the lobe axis with LatheGeometry.
+export interface LobeProfile {
+  points: { x: number; y: number }[];
+  segments: number;
+}
+
+const SEGMENTS = 24;
+
+// Hand-tuned teardrop outline: radius swells to a maximum near 60% of the
+// length, then tapers to the tip.  x = radius, y = distance along the axis.
+function lobePoints(length: number, maxRadius: number): { x: number; y: number }[] {
+  return [
+    { x: 0, y: 0 },
+    { x: maxRadius * 0.15, y: length * 0.05 },
+    { x: maxRadius * 0.5, y: length * 0.15 },
+    { x: maxRadius * 0.85, y: length * 0.35 },
+    { x: maxRadius, y: length * 0.6 },
+    { x: maxRadius * 0.8, y: length * 0.8 },
+    { x: maxRadius * 0.35, y: length * 0.93 },
+    { x: 0, y: length },
+  ];
+}
+
+const SIGMA_LENGTH = 1.0;
+const SIGMA_RADIUS = 0.25;
+const PI_LENGTH = 1.1;
+const PI_RADIUS = 0.35;
+const LONE_PAIR_LENGTH = 1.2;
+const LONE_PAIR_RADIUS = 0.4;
+
+export function sigmaLobe(): LobeProfile {
+  return { points: lobePoints(SIGMA_LENGTH, SIGMA_RADIUS), segments: SEGMENTS };
+}
+
+export function piLobe(): LobeProfile {
+  return { points: lobePoints(PI_LENGTH, PI_RADIUS), segments: SEGMENTS };
+}
+
+export function lonePairLobe(): LobeProfile {
+  return { points: lobePoints(LONE_PAIR_LENGTH, LONE_PAIR_RADIUS), segments: SEGMENTS };
+}
 
 export function createLobeMesh(
   profile: LobeProfile,
