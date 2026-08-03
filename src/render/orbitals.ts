@@ -4,7 +4,8 @@ import type { ColorScheme } from './setup';
 import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
 import { getElementColor, getCovalentRadius } from './chem-data';
 import { classifyMolecule } from '../chem/classify';
-import { vecNormalize, vecDot, crossProduct, findPerpendicular, rotateRodrigues, rotateToward } from '../utils/vec3';
+import { getLonePairDirections } from '../utils/lone-pairs';
+import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
 
 export function renderOrbitals(
   group: THREE.Group,
@@ -126,118 +127,4 @@ function addPiOrbital(
     ]);
     group.add(negative);
   }
-}
-
-function getLonePairDirections(
-  sigmaDirs: [number, number, number][],
-  total: number,
-  sigmaPlaneNormal?: [number, number, number] | null,
-): [number, number, number][] {
-  const missing = total - sigmaDirs.length;
-  if (missing <= 0) return [];
-
-  // One empty hybrid orbital: lone pair opposite the σ-bond centroid
-  // (e.g. NH₃, H₂O: sp³ with one or two lone pairs filling one slot;
-  //  also AX₃E or AX₂E₂ trigonal pyramidal / bent geometries).
-  if (missing === 1) {
-    const sum: [number, number, number] = [0, 0, 0];
-    for (const d of sigmaDirs) { sum[0] += d[0]; sum[1] += d[1]; sum[2] += d[2]; }
-    const lp = vecNormalize([-sum[0], -sum[1], -sum[2]]);
-    if (lp[0] === 0 && lp[1] === 0 && lp[2] === 0) return [[0, 0, 1]];
-    return [lp];
-  }
-
-  // Two empty hybrids with two σ bonds: lone pair positions above and
-  // below the σ-bond plane (e.g. bent AX₂E₂ like H₂O — 2 σ bonds
-  // in the plane, 2 lone pairs in equatorial-like positions).
-  if (missing === 2 && sigmaDirs.length >= 2) {
-    const a = vecNormalize(sigmaDirs[0]);
-    const b = vecNormalize(sigmaDirs[1]);
-    const cosPhi = vecDot(a, b);
-
-    if (Math.abs(cosPhi + 1) < 1e-6) {
-      const perp = findPerpendicular(a);
-      return [perp, [-perp[0], -perp[1], -perp[2]]];
-    }
-
-    // Coefficients for placing 2 lone pairs when 2 σ bonds define a
-    // plane.  Derived from VSEPR: lone pairs occupy equatorial-like
-    // positions above and below the σ-bond plane, symmetric about it.
-    // alpha = -1 / (3(1+cosϕ)), gamma = sqrt(1 − 2/(9(1+cosϕ)))
-    const sumAB: [number, number, number] = [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-    const normal = vecNormalize(crossProduct(a, b));
-    const alpha = -1 / (3 * (1 + cosPhi));
-    const gamma = Math.sqrt(1 - 2 / (9 * (1 + cosPhi)));
-
-    const lp1: [number, number, number] = [
-      alpha * sumAB[0] + gamma * normal[0],
-      alpha * sumAB[1] + gamma * normal[1],
-      alpha * sumAB[2] + gamma * normal[2],
-    ];
-    const lp2: [number, number, number] = [
-      alpha * sumAB[0] - gamma * normal[0],
-      alpha * sumAB[1] - gamma * normal[1],
-      alpha * sumAB[2] - gamma * normal[2],
-    ];
-    return [vecNormalize(lp1), vecNormalize(lp2)];
-  }
-
-  // Two empty hybrids, one σ bond, and a known π-plane normal:
-  // lone pairs placed 120° apart in the plane perpendicular to the
-  // σ bond, guided by the known plane (e.g. O₂ — one σ bond, two
-  // lone pairs straddling the π plane).
-  if (missing === 2 && sigmaDirs.length === 1 && sigmaPlaneNormal) {
-    const a = vecNormalize(sigmaDirs[0]);
-    let axis: [number, number, number] = sigmaPlaneNormal;
-    const dotAV = vecDot(a, axis);
-    axis = [axis[0] - dotAV * a[0], axis[1] - dotAV * a[1], axis[2] - dotAV * a[2]];
-    axis = vecNormalize(axis);
-    if (axis[0] === 0 && axis[1] === 0 && axis[2] === 0) {
-      axis = findPerpendicular(a);
-    }
-    const cos120 = -0.5;
-    const sin120 = Math.sqrt(3) / 2;
-    const lp1 = rotateRodrigues(a, axis, cos120, sin120);
-    const lp2 = rotateRodrigues(a, axis, cos120, -sin120);
-    return [vecNormalize(lp1), vecNormalize(lp2)];
-  }
-
-  // Two empty hybrids, one σ bond, no plane normal:
-  // fallback to a perpendicular plane with 120° spacing
-  // (e.g. diatomic molecules or isolated fragments).
-  if (missing === 2 && sigmaDirs.length >= 1) {
-    const a = vecNormalize(sigmaDirs[0]);
-    const perp = findPerpendicular(a);
-    const cos120 = -0.5;
-    const sin120 = Math.sqrt(3) / 2;
-    const lp1: [number, number, number] = [
-      cos120 * a[0] + sin120 * perp[0],
-      cos120 * a[1] + sin120 * perp[1],
-      cos120 * a[2] + sin120 * perp[2],
-    ];
-    const lp2: [number, number, number] = [
-      cos120 * a[0] - sin120 * perp[0],
-      cos120 * a[1] - sin120 * perp[1],
-      cos120 * a[2] - sin120 * perp[2],
-    ];
-    return [vecNormalize(lp1), vecNormalize(lp2)];
-  }
-
-  // Three empty hybrids, one σ bond: tetrahedral arrangement of
-  // the three lone pairs around the remaining σ direction
-  // (e.g. XeF₂ or similar hypervalent AX₂E₃ geometry).
-  if (missing === 3 && sigmaDirs.length >= 1) {
-    const a = vecNormalize(sigmaDirs[0]);
-    const invSqrt3 = 1 / Math.sqrt(3);
-    const tets: [number, number, number][] = [
-      [invSqrt3, invSqrt3, invSqrt3],
-      [invSqrt3, -invSqrt3, -invSqrt3],
-      [-invSqrt3, invSqrt3, -invSqrt3],
-      [-invSqrt3, -invSqrt3, invSqrt3],
-    ];
-    const rotated = tets.map((v) => rotateToward(v, tets[0], a));
-    return rotated.slice(1).map((v) => vecNormalize(v));
-  }
-
-  return [];
 }
