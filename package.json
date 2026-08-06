@@ -19,6 +19,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.11.1",
     "jsme-editor": "^2024.4.29",
+    "mmff94-ts": "file:../mmff94-ts/mmff94-ts-0.1.0-alpha.1.tgz",
     "three": "^0.160.0"
   },
   "devDependencies": {

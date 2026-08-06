@@ -1,0 +1,135 @@
+import { describe, it, expect } from 'vitest';
+import { refineWithMMFF94 } from '../src/geometry/mmff-refine';
+import { place3D } from '../src/geometry/place3d';
+import { calc_energy } from 'mmff94-ts';
+import type { Molecule as MMFFMolecule } from 'mmff94-ts';
+import type { Molecule } from '../src/mol-parser';
+
+function placed(molecule: Molecule): Molecule {
+  const coords = place3D(molecule);
+  return {
+    atoms: molecule.atoms.map((a, i) => ({ ...a, x: coords[i][0], y: coords[i][1], z: coords[i][2] })),
+    bonds: molecule.bonds,
+  };
+}
+
+function bondLength(mol: Molecule, i: number, j: number): number {
+  const a = mol.atoms[i], b = mol.atoms[j];
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+}
+
+function angleDeg(mol: Molecule, i: number, j: number, k: number): number {
+  const a = mol.atoms[i], b = mol.atoms[j], c = mol.atoms[k];
+  const u = [a.x - b.x, a.y - b.y, a.z - b.z];
+  const v = [c.x - b.x, c.y - b.y, c.z - b.z];
+  const dot = u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+  const len = Math.hypot(...u) * Math.hypot(...v);
+  return (Math.acos(Math.max(-1, Math.min(1, dot / len))) * 180) / Math.PI;
+}
+
+function mmffEnergy(mol: Molecule): number {
+  const mmff: MMFFMolecule = {
+    atoms: mol.atoms.map((a, i) => ({ index: i, element: a.element, x: a.x, y: a.y, z: a.z })),
+    bonds: mol.bonds.map((b) => ({ atom1: b.atom1Index, atom2: b.atom2Index, bond_order: b.order })),
+  };
+  return calc_energy(mmff).total;
+}
+
+const ethane: Molecule = {
+  atoms: [
+    { element: 'C', x: 0, y: 0, z: 0 },
+    { element: 'C', x: 1.5, y: 0, z: 0 },
+    { element: 'H', x: -0.5, y: 0.8, z: 0 },
+    { element: 'H', x: -0.5, y: -0.8, z: 0 },
+    { element: 'H', x: 2.0, y: 0.8, z: 0 },
+    { element: 'H', x: 2.0, y: -0.8, z: 0 },
+    { element: 'H', x: -0.5, y: 0, z: 0 },
+    { element: 'H', x: 2.0, y: 0, z: 0 },
+  ],
+  bonds: [
+    { atom1Index: 0, atom2Index: 1, order: 1 },
+    { atom1Index: 0, atom2Index: 2, order: 1 },
+    { atom1Index: 0, atom2Index: 3, order: 1 },
+    { atom1Index: 0, atom2Index: 6, order: 1 },
+    { atom1Index: 1, atom2Index: 4, order: 1 },
+    { atom1Index: 1, atom2Index: 5, order: 1 },
+    { atom1Index: 1, atom2Index: 7, order: 1 },
+  ],
+};
+
+const water: Molecule = {
+  atoms: [
+    { element: 'O', x: 0, y: 0, z: 0 },
+    { element: 'H', x: 1, y: 0, z: 0 },
+    { element: 'H', x: -1, y: 0, z: 0 },
+  ],
+  bonds: [
+    { atom1Index: 0, atom2Index: 1, order: 1 },
+    { atom1Index: 0, atom2Index: 2, order: 1 },
+  ],
+};
+
+describe('refineWithMMFF94', () => {
+  it('relaxes ethane to the reference minimum: total −4.73436 kcal/mol', () => {
+    // The obenergy reference for the ethane fixture gives TOTAL =
+    // −4.73436 (torsion −4.95900 — the MMFF94 H-C-C-H parameters with
+    // their negative V1 make the near-eclipsed geometry the actual
+    // minimum; place3D's exactly-linear axial H-C-C angles are the
+    // real trap, and the refined geometry must land on the reference
+    // energy, not a stalled plateau).
+    const refined = refineWithMMFF94(placed(ethane))!;
+    expect(refined).not.toBeNull();
+    expect(mmffEnergy(refined)).toBeCloseTo(-4.73436, 3);
+    expect(bondLength(refined, 0, 1)).toBeGreaterThan(1.45);
+    expect(bondLength(refined, 0, 1)).toBeLessThan(1.56);
+    for (const h of [2, 3, 6]) {
+      expect(bondLength(refined, 0, h)).toBeGreaterThan(1.05);
+      expect(bondLength(refined, 0, h)).toBeLessThan(1.15);
+    }
+  });
+
+  it('lowers the MMFF94 energy of the placed guess', () => {
+    const guess = placed(ethane);
+    const refined = refineWithMMFF94(guess)!;
+    expect(mmffEnergy(refined)).toBeLessThan(mmffEnergy(guess));
+  });
+
+  it('relaxes water: O–H ~0.96 Å, H–O–H ~104.5°', () => {
+    const refined = refineWithMMFF94(placed(water))!;
+    expect(bondLength(refined, 0, 1)).toBeGreaterThan(0.93);
+    expect(bondLength(refined, 0, 1)).toBeLessThan(1.00);
+    const hoh = angleDeg(refined, 1, 0, 2);
+    expect(hoh).toBeGreaterThan(101);
+    expect(hoh).toBeLessThan(108);
+  });
+
+  it('returns null for a corrupt bond (index out of range)', () => {
+    const broken: Molecule = {
+      atoms: [{ element: 'C', x: 0, y: 0, z: 0 }],
+      bonds: [{ atom1Index: 0, atom2Index: 5, order: 1 }],
+    };
+    expect(refineWithMMFF94(broken)).toBeNull();
+  });
+
+  it('returns null when the refinement produces non-finite coordinates', () => {
+    const nanMol: Molecule = {
+      atoms: [
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'C', x: NaN, y: 0, z: 0 },
+      ],
+      bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }],
+    };
+    expect(refineWithMMFF94(nanMol)).toBeNull();
+  });
+
+  it('is a safe no-op for molecules mmff94 cannot type (Ar)', () => {
+    const argon: Molecule = {
+      atoms: [{ element: 'Ar', x: 0, y: 0, z: 0 }],
+      bonds: [],
+    };
+    // The optimizer makes no progress (every term evaluates zero), so
+    // the caller keeps its own geometry — never a crash, never NaN,
+    // never a kicked displacement.
+    expect(refineWithMMFF94(argon)).toBeNull();
+  });
+});

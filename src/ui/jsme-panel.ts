@@ -3,6 +3,7 @@ import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
 import { fillMissingHydrogens } from '../chem/hydrogens';
 import { place3D } from '../geometry/place3d';
+import { refineWithMMFF94 } from '../geometry/mmff-refine';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import type { PubChemInfo } from '../geometry/resolve3d';
 
@@ -92,6 +93,11 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
           }),
           bonds: molecule.bonds,
         };
+        // MMFF94 refinement of the graph-walk guess: same force field
+        // PubChem uses for its 3D SDFs. Keeps the guess when the
+        // refinement cannot type the molecule.
+        const refined = refineWithMMFF94(molecule);
+        if (refined) molecule = refined;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         setStatus({ source: 'fallback', formula, weight: `${weight}` });
       }
