@@ -12,18 +12,16 @@
  * mmff94-ts cannot type — returns null and the caller keeps the
  * unrefined geometry.
  *
- * A deterministic symmetry-breaking kick precedes the optimization:
- * the embedder emits exact symmetries (identical coordinates on
- * symmetric centers), and the MMFF94 torsion energy is stationary at
- * exactly-planar dihedrals — an eclipsed geometry is a genuine saddle
- * that a first-order optimizer cannot leave. The kick moves off the
- * stationary point so the optimizer can reach the true minimum.
+ * A symmetry-breaking kick precedes the optimization for RING
+ * molecules only: the embedder's ring seed is a symmetric saddle the
+ * kick escapes faster, while acyclic molecules are best optimized
+ * as-is (see refineWithMMFF94's comment for the measurements).
  */
 import { optimize_lbfgs } from 'mmff94-ts';
 import type { Molecule as MMFFMolecule } from 'mmff94-ts';
 import type { Molecule } from '../mol-parser';
 import { fillMissingHydrogens } from '../chem/hydrogens';
-import { place3D } from './place3d';
+import { place3D, hasRingBonds } from './place3d';
 
 /** Deterministic ±0.5 hash of the atom index (reproducible tests). */
 function hash(i: number, seed: number): number {
@@ -92,23 +90,32 @@ export function embedAndRefine(molecule: Molecule): Molecule {
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {
   try {
-    // Kick first: break the embedder's exact symmetries (see the file
-    // header). The kicked geometry is the optimizer's starting point.
-    const kicked = {
-      atoms: molecule.atoms.map((a, i) => ({
-        ...a,
-        x: a.x + KICK * hash(i, 1),
-        y: a.y + KICK * hash(i, 2),
-        z: a.z + KICK * hash(i, 3),
-      })),
-      bonds: molecule.bonds,
-    };
+    // The symmetry-breaking kick applies ONLY to ring molecules: the
+    // embedder's ring seed is an equal-amplitude alternating pucker —
+    // a symmetric saddle the optimizer escapes faster with a nudge
+    // (cyclooctane: ~390 ms without, 223 ms with). For acyclic
+    // molecules the kick is harmful — a 0.1 Å perturbation can send
+    // the strong-Wolfe line search into a grind (vinyl phosphine:
+    // 131 ms without, 11.9 s with, 1000 iterations never converged).
+    // The kick is deterministic (index-hashed) for reproducible tests.
+    const kick = hasRingBonds(molecule);
+    const start: Molecule = kick
+      ? {
+          atoms: molecule.atoms.map((a, i) => ({
+            ...a,
+            x: a.x + KICK * hash(i, 1),
+            y: a.y + KICK * hash(i, 2),
+            z: a.z + KICK * hash(i, 3),
+          })),
+          bonds: molecule.bonds,
+        }
+      : molecule;
 
     const mmff: MMFFMolecule = {
-      atoms: kicked.atoms.map((a, i) => ({
+      atoms: start.atoms.map((a, i) => ({
         index: i, element: a.element, x: a.x, y: a.y, z: a.z,
       })),
-      bonds: kicked.bonds.map((b) => ({
+      bonds: start.bonds.map((b) => ({
         atom1: b.atom1Index, atom2: b.atom2Index, bond_order: b.order,
       })),
     };
@@ -117,15 +124,15 @@ export function refineWithMMFF94(molecule: Molecule): Molecule | null {
     const refined = result.molecule.atoms;
     if (refined.length !== molecule.atoms.length) return null;
     // No-progress detection: an untypeable molecule is a silent no-op
-    // for the optimizer (every term evaluates zero) — the kicked
-    // geometry comes back bitwise unchanged, and the caller should
-    // keep its own (un-kicked) geometry.
+    // for the optimizer (every term evaluates zero) — the geometry
+    // comes back bitwise unchanged, and the caller should keep its
+    // own.
     let moved = false;
     for (let i = 0; i < refined.length; i++) {
       if (
-        refined[i].x !== kicked.atoms[i].x ||
-        refined[i].y !== kicked.atoms[i].y ||
-        refined[i].z !== kicked.atoms[i].z
+        refined[i].x !== start.atoms[i].x ||
+        refined[i].y !== start.atoms[i].y ||
+        refined[i].z !== start.atoms[i].z
       ) {
         moved = true;
         break;

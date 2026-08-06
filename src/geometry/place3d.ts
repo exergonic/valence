@@ -102,6 +102,12 @@ function ringBonds(molecule: Molecule): Set<string> {
   return rings;
 }
 
+/** Does the molecule contain any ring bonds? (The symmetry-breaking
+ *  kick in the refinement path applies only to ring molecules.) */
+export function hasRingBonds(molecule: Molecule): boolean {
+  return ringBonds(molecule).size > 0;
+}
+
 // Fallback 3D embedder: graph-walk placement along ideal hybrid vectors,
 // then staggered-alkane torsion optimization.
 export function place3D(molecule: Molecule): [number, number, number][] {
