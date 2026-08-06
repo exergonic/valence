@@ -2,15 +2,21 @@ import type { Atom, Bond, Molecule } from './types';
 
 export function parseMolBlock(molBlock: string): Molecule {
   const lines = molBlock.split('\n');
-  if (lines.length < 4) return { atoms: [], bonds: [] };
 
-  const countsLine = lines[3];
+  // The counts line is the one carrying the V2000 marker. Its index
+  // is NOT fixed: most exporters emit a 4-line header (name, program,
+  // comment, counts), but JSME's "Copy as MOL" emits only 3 (name,
+  // blank, counts). Searching for the marker handles both.
+  const countsIdx = lines.findIndex((l) => l.includes('V2000'));
+  if (countsIdx === -1) return { atoms: [], bonds: [] };
+
+  const countsLine = lines[countsIdx];
   const atomCount = parseInt(countsLine.substring(0, 3).trim()) || 0;
   const bondCount = parseInt(countsLine.substring(3, 6).trim()) || 0;
 
   const atoms: Atom[] = [];
   for (let i = 0; i < atomCount; i++) {
-    const line = lines[4 + i];
+    const line = lines[countsIdx + 1 + i];
     if (!line || line.length < 34) break;
     atoms.push({
       element: line.substring(31, 34).trim(),
@@ -20,7 +26,7 @@ export function parseMolBlock(molBlock: string): Molecule {
     });
   }
 
-  const bondStart = 4 + atomCount;
+  const bondStart = countsIdx + 1 + atomCount;
   const bonds: Bond[] = [];
   for (let i = 0; i < bondCount; i++) {
     const line = lines[bondStart + i];

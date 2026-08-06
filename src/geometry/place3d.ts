@@ -60,6 +60,48 @@ function idealHybridVectors(count: number): [number, number, number][] {
   return TETRA_VECTORS;
 }
 
+/**
+ * Ring bonds: a bond (a, b) is in a ring when a still reaches b after
+ * removing the bond itself. The graph-walk embedder cannot close a
+ * ring — it walks around the ring in a zig-zag and the closure bond
+ * ends up meters off, with adjacent ring H's overlapping (cyclooctane
+ * H-H at 0.90 Å). Ring atoms are therefore seeded from the 2D input
+ * coordinates, which are a proper polygon.
+ */
+function ringBonds(molecule: Molecule): Set<string> {
+  const adj: number[][] = Array.from({ length: molecule.atoms.length }, () => []);
+  for (const bond of molecule.bonds) {
+    adj[bond.atom1Index].push(bond.atom2Index);
+    adj[bond.atom2Index].push(bond.atom1Index);
+  }
+  const rings = new Set<string>();
+  for (const bond of molecule.bonds) {
+    const a = bond.atom1Index;
+    const b = bond.atom2Index;
+    // BFS from a, skipping the direct a-b edge: is b still reachable?
+    const seen = new Set<number>([a]);
+    const queue = adj[a].filter((nb) => nb !== b);
+    for (const nb of queue) seen.add(nb);
+    let found = false;
+    let head = 0;
+    while (head < queue.length && !found) {
+      const node = queue[head++];
+      for (const nb of adj[node]) {
+        if (nb === b) {
+          found = true;
+          break;
+        }
+        if (!seen.has(nb)) {
+          seen.add(nb);
+          queue.push(nb);
+        }
+      }
+    }
+    if (found) rings.add(`${Math.min(a, b)}-${Math.max(a, b)}`);
+  }
+  return rings;
+}
+
 // Fallback 3D embedder: graph-walk placement along ideal hybrid vectors,
 // then staggered-alkane torsion optimization.
 export function place3D(molecule: Molecule): [number, number, number][] {
@@ -74,9 +116,119 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   const placed = new Set<number>();
   const parent: number[] = new Array(n).fill(-1);
 
+  // Seed ring atoms from the 2D input: the sketcher's ring is a proper
+  // polygon (correct closure, correct angles, no overlaps), while the
+  // graph walk would leave the ring a broken zig-zag that the MMFF94
+  // optimizer then spends hundreds of iterations rebuilding. The ring
+  // is lifted with alternating ±z offsets (a rough pucker): a flat
+  // ring is a high-energy symmetric start whose collective puckering
+  // costs the optimizer hundreds of iterations; the alternation gives
+  // it the puckered geometry to start from.
+  const rings = ringBonds(molecule);
+  const ringAtoms = new Set<number>();
+  for (const key of rings) {
+    const [i, j] = key.split('-').map(Number);
+    ringAtoms.add(i);
+    ringAtoms.add(j);
+  }
+  // Traverse the ring cycle so the alternation is consistent.
+  const ringList: number[] = [];
+  if (ringAtoms.size > 0) {
+    const first = [...ringAtoms][0];
+    const ringAdj = new Map<number, number[]>();
+    for (const key of rings) {
+      const [i, j] = key.split('-').map(Number);
+      if (!ringAdj.has(i)) ringAdj.set(i, []);
+      if (!ringAdj.has(j)) ringAdj.set(j, []);
+      ringAdj.get(i)!.push(j);
+      ringAdj.get(j)!.push(i);
+    }
+    let prev = -1;
+    let curr = first;
+    while (ringList.length < ringAtoms.size) {
+      ringList.push(curr);
+      const nbs = ringAdj.get(curr)!.filter((nb) => nb !== prev);
+      if (nbs.length === 0) break;
+      prev = curr;
+      curr = nbs[0];
+    }
+  }
+  const PUCKER = 0.4; // Å of alternating out-of-plane lift
+  ringList.forEach((i, k) => {
+    pos[i] = [molecule.atoms[i].x, molecule.atoms[i].y, (k % 2 === 0 ? 1 : -1) * PUCKER];
+    placed.add(i);
+    parent[i] = i;
+  });
+
+  // Ring H placement: the vector matching cannot know the ring plane,
+  // so a flat ring's leftover "equatorial" vectors point INTO the ring
+  // and adjacent H's collide (0.62 Å on cyclooctane). Place ring H's
+  // chemically instead: the first H axial (along the ring normal), the
+  // second equatorial (outward from the ring centroid). The axial H's
+  // of adjacent carbons are then parallel and the equatorial ones
+  // diverge — no collisions.
+  if (ringAtoms.size > 0) {
+    const centroid: [number, number, number] = [0, 0, 0];
+    for (const i of ringAtoms) {
+      centroid[0] += pos[i][0];
+      centroid[1] += pos[i][1];
+      centroid[2] += pos[i][2];
+    }
+    centroid[0] /= ringAtoms.size;
+    centroid[1] /= ringAtoms.size;
+    centroid[2] /= ringAtoms.size;
+    for (const i of ringAtoms) {
+      const ringNbs = adj[i].filter((nb) => ringAtoms.has(nb));
+      if (ringNbs.length !== 2) continue;
+      const hNbs = adj[i].filter((nb) => molecule.atoms[nb].element === 'H' && !placed.has(nb));
+      if (hNbs.length === 0) continue;
+      const v1 = [pos[ringNbs[0]][0] - pos[i][0], pos[ringNbs[0]][1] - pos[i][1], pos[ringNbs[0]][2] - pos[i][2]];
+      const v2 = [pos[ringNbs[1]][0] - pos[i][0], pos[ringNbs[1]][1] - pos[i][1], pos[ringNbs[1]][2] - pos[i][2]];
+      const l1 = Math.hypot(...v1) || 1;
+      const l2 = Math.hypot(...v2) || 1;
+      const u1 = [v1[0] / l1, v1[1] / l1, v1[2] / l1];
+      const u2 = [v2[0] / l2, v2[1] / l2, v2[2] / l2];
+      // Ring normal from the two ring bonds.
+      let n: [number, number, number] = [
+        u1[1] * u2[2] - u1[2] * u2[1],
+        u1[2] * u2[0] - u1[0] * u2[2],
+        u1[0] * u2[1] - u1[1] * u2[0],
+      ];
+      const ln = Math.hypot(...n);
+      if (ln < 1e-9) continue;
+      n = [n[0] / ln, n[1] / ln, n[2] / ln];
+      // Outward = away from the centroid, projected onto the ring plane.
+      const out = [
+        pos[i][0] - centroid[0],
+        pos[i][1] - centroid[1],
+        pos[i][2] - centroid[2],
+      ];
+      const lo = Math.hypot(...out);
+      let eq: [number, number, number] = lo > 1e-9
+        ? [out[0] / lo, out[1] / lo, out[2] / lo]
+        : [1, 0, 0];
+      const ndot = n[0] * eq[0] + n[1] * eq[1] + n[2] * eq[2];
+      eq = [eq[0] - ndot * n[0], eq[1] - ndot * n[1], eq[2] - ndot * n[2]];
+      const le = Math.hypot(...eq);
+      if (le > 1e-9) eq = [eq[0] / le, eq[1] / le, eq[2] / le];
+
+      const slots = [n, eq];
+      for (let k = 0; k < hNbs.length && k < 2; k++) {
+        const h = hNbs[k];
+        pos[h] = [
+          pos[i][0] + BOND_LENGTH * slots[k][0],
+          pos[i][1] + BOND_LENGTH * slots[k][1],
+          pos[i][2] + BOND_LENGTH * slots[k][2],
+        ];
+        placed.add(h);
+        parent[h] = i;
+      }
+    }
+  }
+
   let root = 0;
   for (let i = 0; i < n; i++) {
-    if (molecule.atoms[i].element !== 'H' && adj[i].length > 0) {
+    if (molecule.atoms[i].element !== 'H' && adj[i].length > 0 && !placed.has(i)) {
       root = i;
       break;
     }
@@ -86,7 +238,7 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   placed.add(root);
   parent[root] = root;
 
-  const queue = [root];
+  const queue = [root, ...ringAtoms];
   while (queue.length > 0) {
     const curr = queue.shift()!;
     const coordinationNumber = adj[curr].length;

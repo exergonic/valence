@@ -34,12 +34,49 @@ function hash(i: number, seed: number): number {
 const KICK = 0.1;
 
 /**
+ * A generic de-overlap pre-pass for the embedded geometry: the
+ * graph-walk embedder can place nonbonded atoms almost on top of each
+ * other (cyclooctane's ring H's land 0.90 Å apart), and the optimizer
+ * then grinds hundreds of iterations pushing them apart through the
+ * steep vdW wall. Any nonbonded pair closer than 1.0 Å is pushed apart
+ * to 1.0 Å along the pair axis (bonded pairs excluded — their
+ * equilibrium is ~1.0-1.5 Å). Two passes: the second resolves overlaps
+ * the first pass's pushes created.
+ */
+function separateOverlaps(molecule: Molecule): Molecule {
+  const MIN_DIST = 1.0;
+  const bonded = new Set<string>();
+  for (const b of molecule.bonds) {
+    bonded.add(`${Math.min(b.atom1Index, b.atom2Index)}-${Math.max(b.atom1Index, b.atom2Index)}`);
+  }
+  const atoms = molecule.atoms.map((a) => ({ ...a }));
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 0; i < atoms.length; i++) {
+      for (let j = i + 1; j < atoms.length; j++) {
+        if (bonded.has(`${i}-${j}`)) continue;
+        const dx = atoms[j].x - atoms[i].x;
+        const dy = atoms[j].y - atoms[i].y;
+        const dz = atoms[j].z - atoms[i].z;
+        const d = Math.hypot(dx, dy, dz);
+        if (d < MIN_DIST) {
+          const push = (MIN_DIST - d) / 2;
+          const ux = dx / d, uy = dy / d, uz = dz / d;
+          atoms[i].x -= ux * push; atoms[i].y -= uy * push; atoms[i].z -= uz * push;
+          atoms[j].x += ux * push; atoms[j].y += uy * push; atoms[j].z += uz * push;
+        }
+      }
+    }
+  }
+  return { atoms, bonds: molecule.bonds };
+}
+
+/**
  * The full local geometry pipeline: add implicit hydrogens, embed with
- * the graph-walk embedder, then refine with MMFF94. Returns the best
- * geometry available (refined, or the placed guess when the refinement
- * cannot type the molecule). Runs inside the geometry worker for large
- * molecules; also the synchronous fallback when Workers are
- * unavailable.
+ * the graph-walk embedder, separate any overlapping atoms, then refine
+ * with MMFF94. Returns the best geometry available (refined, or the
+ * separated placed guess when the refinement cannot type the
+ * molecule). Runs inside the geometry worker for large molecules; also
+ * the synchronous fallback when Workers are unavailable.
  */
 export function embedAndRefine(molecule: Molecule): Molecule {
   const withH = fillMissingHydrogens(molecule);
@@ -50,7 +87,7 @@ export function embedAndRefine(molecule: Molecule): Molecule {
     })),
     bonds: withH.bonds,
   };
-  return refineWithMMFF94(placed) ?? placed;
+  return refineWithMMFF94(separateOverlaps(placed)) ?? separateOverlaps(placed);
 }
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {

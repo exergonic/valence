@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { refineWithMMFF94, embedAndRefine } from '../src/geometry/mmff-refine';
 import { place3D } from '../src/geometry/place3d';
+import { parseMolBlock } from '../src/mol-parser';
 import { calc_energy } from 'mmff94-ts';
 import type { Molecule as MMFFMolecule } from 'mmff94-ts';
 import type { Molecule } from '../src/mol-parser';
@@ -101,6 +102,67 @@ describe('refineWithMMFF94', () => {
     const result = embedAndRefine(ethane);
     expect(result.atoms.length).toBe(ethane.atoms.length);
     expect(mmffEnergy(result)).toBeCloseTo(-4.73436, 3);
+  });
+
+  it('cyclooctane: the ring embeds as a puckered polygon and refines without overlaps', () => {
+    // The case that exposed the embedder's broken ring walk: the
+    // zig-zag left the closure meters off and adjacent ring H's at
+    // 0.90 Å, and the optimizer ground 361 iterations through the vdW
+    // wall. The ring must now seed from the 2D polygon (alternating
+    // pucker) and refine to a closed, overlap-free, low-energy ring.
+    const cyclo = parseMolBlock(`JME 2024-04-29 Thu Aug 06 13:04:05 GMT-400 2026
+
+  8  8  0  0  0  0  0  0  0  0999 V2000
+    2.3899    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.3799    0.9899    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.3799    2.3899    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3899    3.3799    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9899    3.3799    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    2.3899    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.9899    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9899    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  5  6  1  0  0  0  0
+  6  7  1  0  0  0  0
+  7  8  1  0  0  0  0
+  8  1  1  0  0  0  0
+M  END
+`);
+    const result = embedAndRefine(cyclo);
+    expect(result.atoms).toHaveLength(24);
+    expect(result.bonds).toHaveLength(24);
+
+    // The ring closed: every C-C bond at the MMFF94 equilibrium.
+    for (const b of result.bonds) {
+      if (result.atoms[b.atom1Index].element !== 'C' || result.atoms[b.atom2Index].element !== 'C') continue;
+      const d = bondLength(result, b.atom1Index, b.atom2Index);
+      expect(d).toBeGreaterThan(1.45);
+      expect(d).toBeLessThan(1.56);
+    }
+
+    // No nonbonded overlaps survived the refinement.
+    let minNonbonded = Infinity;
+    for (let i = 0; i < result.atoms.length; i++) {
+      for (let j = i + 1; j < result.atoms.length; j++) {
+        const bonded = result.bonds.some((b) =>
+          (b.atom1Index === i && b.atom2Index === j) || (b.atom1Index === j && b.atom2Index === i));
+        if (bonded) continue;
+        const d = Math.hypot(
+          result.atoms[i].x - result.atoms[j].x,
+          result.atoms[i].y - result.atoms[j].y,
+          result.atoms[i].z - result.atoms[j].z,
+        );
+        if (d < minNonbonded) minNonbonded = d;
+      }
+    }
+    expect(minNonbonded).toBeGreaterThan(1.2);
+
+    // A low-energy ring minimum (measured 13.73; window for trajectory).
+    expect(mmffEnergy(result)).toBeGreaterThan(5);
+    expect(mmffEnergy(result)).toBeLessThan(20);
   });
 
   it('relaxes water: O–H ~0.96 Å, H–O–H ~104.5°', () => {
