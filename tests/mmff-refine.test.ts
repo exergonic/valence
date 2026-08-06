@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { refineWithMMFF94 } from '../src/geometry/mmff-refine';
+import { refineWithMMFF94, embedAndRefine } from '../src/geometry/mmff-refine';
 import { place3D } from '../src/geometry/place3d';
 import { calc_energy } from 'mmff94-ts';
 import type { Molecule as MMFFMolecule } from 'mmff94-ts';
@@ -92,6 +92,15 @@ describe('refineWithMMFF94', () => {
     const guess = placed(ethane);
     const refined = refineWithMMFF94(guess)!;
     expect(mmffEnergy(refined)).toBeLessThan(mmffEnergy(guess));
+  });
+
+  it('embedAndRefine runs the full pipeline (the worker path) to the ethane reference', () => {
+    // The exact composition the geometry worker executes: implicit
+    // H's (none needed here) -> embedder -> refinement. Must land on
+    // the same reference total as the manual placed + refine path.
+    const result = embedAndRefine(ethane);
+    expect(result.atoms.length).toBe(ethane.atoms.length);
+    expect(mmffEnergy(result)).toBeCloseTo(-4.73436, 3);
   });
 
   it('relaxes water: O–H ~0.96 Å, H–O–H ~104.5°', () => {

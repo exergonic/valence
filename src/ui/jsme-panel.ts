@@ -1,9 +1,7 @@
 import type { SceneContext } from '../render';
 import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
-import { fillMissingHydrogens } from '../chem/hydrogens';
-import { place3D } from '../geometry/place3d';
-import { refineWithMMFF94 } from '../geometry/mmff-refine';
+import { computeLocalGeometry } from '../geometry/local-geometry';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import type { PubChemInfo } from '../geometry/resolve3d';
 
@@ -100,20 +98,14 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         setStatus({ ...result.info, formula, weight: `${weight}` });
       } else {
-        molecule = fillMissingHydrogens(molecule);
-        const placed = place3D(molecule);
-        molecule = {
-          atoms: molecule.atoms.map((a, i) => {
-            const p = placed[i];
-            return { ...a, x: p[0], y: p[1], z: p[2] };
-          }),
-          bonds: molecule.bonds,
-        };
-        // MMFF94 refinement of the graph-walk guess: same force field
-        // PubChem uses for its 3D SDFs. Keeps the guess when the
-        // refinement cannot type the molecule.
-        const refined = refineWithMMFF94(molecule);
-        if (refined) molecule = refined;
+        // The local pipeline (implicit H's + embedder + MMFF94
+        // refinement) runs in a Web Worker: for larger molecules the
+        // optimizer takes seconds, and the main thread must stay
+        // responsive — a blocked event loop past ~10 s makes the
+        // browser offer "Page Unresponsive". Falls back to the
+        // synchronous path when Workers are unavailable.
+        const local = await computeLocalGeometry(molecule);
+        if (local) molecule = local;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         setStatus({ source: forceLocal ? 'local' : 'fallback', formula, weight: `${weight}` });
       }

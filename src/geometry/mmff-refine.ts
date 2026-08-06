@@ -22,6 +22,8 @@
 import { optimize_lbfgs } from 'mmff94-ts';
 import type { Molecule as MMFFMolecule } from 'mmff94-ts';
 import type { Molecule } from '../mol-parser';
+import { fillMissingHydrogens } from '../chem/hydrogens';
+import { place3D } from './place3d';
 
 /** Deterministic ±0.5 hash of the atom index (reproducible tests). */
 function hash(i: number, seed: number): number {
@@ -30,6 +32,26 @@ function hash(i: number, seed: number): number {
 
 /** The symmetry-breaking kick: 0.1 Å per atom, index-hashed. */
 const KICK = 0.1;
+
+/**
+ * The full local geometry pipeline: add implicit hydrogens, embed with
+ * the graph-walk embedder, then refine with MMFF94. Returns the best
+ * geometry available (refined, or the placed guess when the refinement
+ * cannot type the molecule). Runs inside the geometry worker for large
+ * molecules; also the synchronous fallback when Workers are
+ * unavailable.
+ */
+export function embedAndRefine(molecule: Molecule): Molecule {
+  const withH = fillMissingHydrogens(molecule);
+  const coords = place3D(withH);
+  const placed: Molecule = {
+    atoms: withH.atoms.map((a, i) => ({
+      ...a, x: coords[i][0], y: coords[i][1], z: coords[i][2],
+    })),
+    bonds: withH.bonds,
+  };
+  return refineWithMMFF94(placed) ?? placed;
+}
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {
   try {
