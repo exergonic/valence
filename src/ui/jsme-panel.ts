@@ -42,6 +42,16 @@ function setStatus(info: PubChemInfo) {
     document.getElementById('info-cid')!.textContent = '';
     document.getElementById('info-link')!.style.display = 'none';
     popup.classList.remove('hidden');
+  } else if (info.source === 'local') {
+    const sourceEl = document.getElementById('info-source')!;
+    sourceEl.className = 'fallback';
+    sourceEl.textContent = '⚡ Local MMFF94';
+    document.getElementById('info-name')!.textContent = 'Embedder + MMFF94 refinement (forced)';
+    document.getElementById('info-formula')!.textContent = info.formula || '';
+    document.getElementById('info-weight')!.textContent = info.weight ? `MW ${info.weight}` : '';
+    document.getElementById('info-cid')!.textContent = '';
+    document.getElementById('info-link')!.style.display = 'none';
+    popup.classList.remove('hidden');
   } else {
     const sourceEl = document.getElementById('info-source')!;
     sourceEl.className = 'warning';
@@ -76,7 +86,13 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
       let molecule = parseMolBlock(molBlock);
       if (molecule.atoms.length === 0) return;
 
-      const result = await fetch3D(smiles);
+      // "Force local lookup" (debug/offline toggle): skip PubChem and
+      // CIR entirely and go straight to the local embedder + MMFF94
+      // refinement — the same code path the network failure falls
+      // back to. Re-enabled from the old RDKit-era debug toggle; it
+      // now exercises the mmff94-ts geometry bridge.
+      const forceLocal = (document.getElementById('ctrl-force-fallback') as HTMLInputElement | null)?.checked ?? false;
+      const result = forceLocal ? null : await fetch3D(smiles);
       if (result) {
         const fetched = parseMolBlock(result.sdf);
         if (fetched.atoms.length > 0) molecule = fetched;
@@ -99,7 +115,7 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
         const refined = refineWithMMFF94(molecule);
         if (refined) molecule = refined;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-        setStatus({ source: 'fallback', formula, weight: `${weight}` });
+        setStatus({ source: forceLocal ? 'local' : 'fallback', formula, weight: `${weight}` });
       }
 
       ctx.currentMolecule = molecule;

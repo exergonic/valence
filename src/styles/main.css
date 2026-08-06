@@ -286,6 +286,19 @@ html, body {
   border-bottom: none;
 }
 
+/* The debug/offline toggle — dashed box to signal it is a power-user
+   switch, not part of the normal rendering controls. */
+.ctrl-debug {
+  margin-bottom: 0;
+  padding: 6px 8px;
+  border: 1px dashed rgba(255,255,255,0.15);
+  border-radius: 6px;
+}
+.ctrl-debug .ctrl-toggle span {
+  color: #888;
+  font-size: 11px;
+}
+
 .ctrl-label {
   display: block;
   font-weight: 600;
