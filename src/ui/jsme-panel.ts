@@ -79,9 +79,21 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
     renderBtn.disabled = true;
 
     try {
+      // Per-stage timing marks (console.log): the first diagnostic
+      // when a render feels slow — paste the [render-timing] line.
+      // 2026-08-06 (the diethylphosphine "3 s" report): the local
+      // stage measured 2.4 s in every user-facing browser (Edge,
+      // Brave, Helium) vs ~300 ms in the Hermes pane and headless
+      // Edge — the pipeline was identical, and the cause was
+      // OS-level CPU throttling of the browser processes (Windows
+      // Efficiency Mode), not the geometry code. The marks stay
+      // because the next slowness report starts here.
+      const t0 = performance.now();
       const smiles = applet.smiles();
       const molBlock = applet.molFile();
+      const t1 = performance.now();
       let molecule = parseMolBlock(molBlock);
+      const t2 = performance.now();
       if (molecule.atoms.length === 0) return;
 
       // "Force local lookup" (debug/offline toggle): skip PubChem and
@@ -91,6 +103,7 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
       // now exercises the mmff94-ts geometry bridge.
       const forceLocal = (document.getElementById('ctrl-force-fallback') as HTMLInputElement | null)?.checked ?? false;
       const result = forceLocal ? null : await fetch3D(smiles);
+      const t3 = performance.now();
       if (result) {
         const fetched = parseMolBlock(result.sdf);
         if (fetched.atoms.length > 0) molecule = fetched;
@@ -105,9 +118,16 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
         // browser offer "Page Unresponsive". Falls back to the
         // synchronous path when Workers are unavailable.
         const local = await computeLocalGeometry(molecule);
+        const t4 = performance.now();
         if (local) molecule = local;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         setStatus({ source: forceLocal ? 'local' : 'fallback', formula, weight: `${weight}` });
+        console.log('[render-timing]', {
+          jsme: +(t1 - t0).toFixed(1),
+          parse: +(t2 - t1).toFixed(1),
+          fetch: +(t3 - t2).toFixed(1),
+          local: +(t4 - t3).toFixed(1),
+        });
       }
 
       ctx.currentMolecule = molecule;
