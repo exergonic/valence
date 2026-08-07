@@ -124,7 +124,16 @@ export function refineWithMMFF94(molecule: Molecule): Molecule | null {
       })),
     };
 
-    const result = optimize_lbfgs(mmff);
+    const result = optimize_lbfgs(mmff, { max_iterations: 200 });
+    // The 200-iteration budget (measured 2026-08-06, diethylphosphine):
+    // the fallback geometry's bonds/angles are converged long before
+    // the energy's soft torsional modes, which creep at 1e-3/step —
+    // the full 1000-iteration convergence cost 404 ms on a 16-atom
+    // molecule, and pathological starts (JSME-layout-dependent descent
+    // trajectories) ground the strong-Wolfe line search to a full
+    // ~16 s. At the cap the geometry is identical and the worst case
+    // is bounded (~300 ms); the ethane −4.73436 and vinyl-phosphine
+    // pyramidal pins converge within the cap and hold exactly.
     const refined = result.molecule.atoms;
     if (refined.length !== molecule.atoms.length) return null;
     // No-progress detection: an untypeable molecule is a silent no-op
