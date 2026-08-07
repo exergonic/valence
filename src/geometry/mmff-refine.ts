@@ -28,9 +28,6 @@ function hash(i: number, seed: number): number {
   return (((i + 1) * 2654435761 + seed * 97) % 1000) / 1000 - 0.5;
 }
 
-/** The symmetry-breaking kick: 0.1 Å per atom, index-hashed. */
-const KICK = 0.1;
-
 /**
  * A generic de-overlap pre-pass for the embedded geometry: the
  * graph-walk embedder can place nonbonded atoms almost on top of each
@@ -90,22 +87,29 @@ export function embedAndRefine(molecule: Molecule): Molecule {
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {
   try {
-    // The symmetry-breaking kick applies ONLY to ring molecules: the
-    // embedder's ring seed is an equal-amplitude alternating pucker —
-    // a symmetric saddle the optimizer escapes faster with a nudge
-    // (cyclooctane: ~390 ms without, 223 ms with). For acyclic
-    // molecules the kick is harmful — a 0.1 Å perturbation can send
-    // the strong-Wolfe line search into a grind (vinyl phosphine:
-    // 131 ms without, 11.9 s with, 1000 iterations never converged).
-    // The kick is deterministic (index-hashed) for reproducible tests.
-    const kick = hasRingBonds(molecule);
+    // The symmetry-breaking kick applies to every molecule: the
+    // embedder emits exact symmetries, and a symmetric start can
+    // trap the optimizer at a spurious stationary point. Measured on
+    // vinyl phosphine (2026-08-06): from the placed start the plain
+    // descent converged at a trigonal-planar P (E 20.77 — a real
+    // stationary point of the potential, Tinker's potential agrees),
+    // while a 0.01 Å perturbation escaped to the pyramidal minimum
+    // (E 10.45, H-P-H 101°). The magnitude matters: ring molecules
+    // need the 0.1 Å nudge to leave their equal-amplitude pucker
+    // saddle (cyclooctane 390→223 ms), while acyclic molecules grind
+    // on a 0.1 Å kick (vinyl phosphine: 1000+ iterations never
+    // converged — the old strong-Wolfe stall) but converge cleanly
+    // with 0.05 Å (157 iterations, 172 ms — the measured sweet spot;
+    // 0.01 Å is slower and 0.1 Å re-triggers the grind). The kick is
+    // deterministic (index-hashed) for reproducible tests.
+    const kick = hasRingBonds(molecule) ? 0.1 : 0.05;
     const start: Molecule = kick
       ? {
           atoms: molecule.atoms.map((a, i) => ({
             ...a,
-            x: a.x + KICK * hash(i, 1),
-            y: a.y + KICK * hash(i, 2),
-            z: a.z + KICK * hash(i, 3),
+            x: a.x + kick * hash(i, 1),
+            y: a.y + kick * hash(i, 2),
+            z: a.z + kick * hash(i, 3),
           })),
           bonds: molecule.bonds,
         }
