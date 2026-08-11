@@ -1,0 +1,23 @@
+mmff94-ts oracle — valence classifier vs the reference typer
+corpus: 16 molecules, 55 heavy atoms
+agreement: 53/55 (100.0%), documented deviations: 2, unexplained: 0
+Methane (CH₄): 1/1
+Ethene (C₂H₄): 2/2
+Ethyne (C₂H₂): 2/2
+Benzene (C₆H₆): 6/6
+Pyridine (C₅H₅N): 6/6
+Pyrrole (C₄H₅N): 5/5
+Imidazole (C₃H₄N₂): 5/5
+Phenol (C₆H₅OH): 6/7
+Nitrogen (N₂): 2/2
+Oxygen (O₂): 2/2
+Water (H₂O): 1/1
+But-1-en-3-yne (H₂C=CH-C≡CH): 4/4
+dimethyl ether: 3/3
+formaldehyde: 2/2
+methoxide anion: 1/2
+thioanisole (twisted): 5/5
+
+documented deviations:
+Phenol (C₆H₅OH) O: valence sp2, type 6 → sp3 — promotion label: the phenol O is delocalized (sp² with a p orbital), but MMFF94 types it 6 (OR, the ether/alcohol type) — the type space does not separate O–C(sp²) from O–C(sp³), so the mapped sp³ expectation is met by the base class, not the promoted label.
+methoxide anion O: valence sp2, type 35 → sp3 — alkoxide floor() artifact: a 1-σ O⁻ reads 5 electrons → 2.5 per lone pair, floor() keeps 2 → sp² with a rendered p lobe, but the true count is 3 lone pairs → sp³. Known fix: the environment rule (1-σ O on sp3 C → sp³), same distinction MMFF94 draws between type 35 and type 32.
