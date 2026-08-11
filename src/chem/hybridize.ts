@@ -9,17 +9,6 @@ export interface HybridizationResult {
   geometry: Geometry;
 }
 
-function vecAngle(
-  a: [number, number, number],
-  b: [number, number, number],
-): number {
-  const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  const la = Math.sqrt(a[0] ** 2 + a[1] ** 2 + a[2] ** 2);
-  const lb = Math.sqrt(b[0] ** 2 + b[1] ** 2 + b[2] ** 2);
-  if (la < 1e-8 || lb < 1e-8) return 0;
-  return Math.acos(Math.max(-1, Math.min(1, dot / (la * lb))));
-}
-
 // VSEPR: steric number = (σ bonds) + (lone pairs).
 // sp = 2, sp² = 3, sp³ = 4.
 export function assignBySteric(steric: number): HybridizationResult {
@@ -30,54 +19,39 @@ export function assignBySteric(steric: number): HybridizationResult {
   }
 }
 
-// Uses measured bond angles to choose hybridization when 3D coordinates are
-// available.  Falls back to steric-number counting (valence electrons minus
-// σ bonds minus π bonds) when there aren't enough vectors to measure angles.
+// Hybridization is an electron-domain count: how many σ bonds and lone
+// pairs surround the atom. Both are discrete properties of the bond graph
+// (elements + bond orders), so the count never needs 3D coordinates.
+//
+// The earlier version measured bond angles and thresholded them (2
+// neighbors: >165° linear, >115° sp², else sp³). Measured angles are the
+// OUTPUT of geometry refinement, not an identity of the atom: the MMFF94
+// C–O–C equilibrium of dimethyl ether is 111.7°, and the old 110° cut
+// classified every refined ether oxygen as sp² with a pure p orbital
+// instead of two equivalent sp³ lone pairs. No threshold can separate the
+// continuous sp³ range (104–113°) from sp²'s ~120°, but the topology can:
+// an ether O has 2 σ bonds → 2 lone pairs → 4 domains → sp³ at any angle,
+// while a carbonyl O (1 σ + 1 π) has 3 domains → sp². Ring compression
+// works the same way: a cyclopropane carbon is CH₂ — 4 σ bonds — and
+// reads sp³ whatever the 60° ring angle.
 export function assignHybridization(
   element: string,
-  neighborVectors: [number, number, number][],
+  sigmaBonds: number,
   piCount: number = 0,
 ): HybridizationResult {
-  const neighborCount = neighborVectors.length;
+  const valence = VALENCE_ELECTRONS[element] || 4;
 
-  // Not enough neighbors to measure angles: guess hybridization from valence
-  // electron count.  (e.g. diatomic N≡N has steric number 2 → sp)
-  if (neighborCount < 2) {
-    const lonePairs = Math.round(Math.max(0, (VALENCE_ELECTRONS[element] || 4) - neighborCount - piCount) / 2);
-    const steric = Math.min(4, Math.max(2, neighborCount + lonePairs));
-    return assignBySteric(steric);
-  }
+  // Lone pairs from the valence-electron bookkeeping. floor() resolves the
+  // half-electron remainders that formal charge would: a nitro N
+  // (5 − 3 σ − 1 π = 1 → 0.5) keeps 0 lone pairs (sp²) and a carboxylate
+  // O⁻ (6 − 1 = 5 → 2.5) keeps 2 (sp² — the resonance structure), where
+  // round() would inflate both by one. The cost is a bare amide anion
+  // (1.5 → 1 lone pair, sp²) reading one short of its true sp³.
+  const lonePairs = Math.floor(Math.max(0, (valence - sigmaBonds - piCount) / 2));
 
-  const angles: number[] = [];
-  for (let i = 0; i < neighborCount; i++) {
-    for (let j = i + 1; j < neighborCount; j++) {
-      angles.push(vecAngle(neighborVectors[i], neighborVectors[j]));
-    }
-  }
-
-  const avgAngle = angles.reduce((s, a) => s + a, 0) / angles.length;
-  const deg = avgAngle * (180 / Math.PI);
-
-  if (neighborCount === 2) {
-    // Linear (sp): 180°. Trigonal planar (sp²): ~120°. Tetrahedral (sp³): ~109.5°.
-    // Rings can compress sp² C well below 120°; if the atom has its own π bond
-    // (piCount > 0) we know it must be sp² regardless of the measured angle.
-    if (deg > 165) {
-      return { hybridization: 'sp', geometry: 'linear' };
-    }
-    if (deg > 110 || piCount > 0) {
-      return { hybridization: 'sp2', geometry: 'trigonal_planar' };
-    }
-    return { hybridization: 'sp3', geometry: 'tetrahedral' };
-  }
-
-  if (neighborCount === 3) {
-    if (deg > 115) {
-      return { hybridization: 'sp2', geometry: 'trigonal_planar' };
-    }
-    return { hybridization: 'sp3', geometry: 'tetrahedral' };
-  }
-
-  // 4+ neighbors: always tetrahedral (VSEPR AX₄, AX₃E, AX₂E₂, etc.)
-  return { hybridization: 'sp3', geometry: 'tetrahedral' };
+  // Steric number = σ bonds + lone pairs. The clamp covers the edges:
+  // hydrogen (1 domain) reads as sp, and hypervalent atoms (5+ σ bonds)
+  // read as sp³.
+  const steric = Math.min(4, Math.max(2, sigmaBonds + lonePairs));
+  return assignBySteric(steric);
 }

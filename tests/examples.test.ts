@@ -364,3 +364,71 @@ describe('Lone-pair promotion geometry gate', () => {
     expect(Math.abs(s.piDirection![2])).toBeGreaterThan(0.999);
   });
 });
+
+describe('Two-coordinate oxygen — topology, not angle (2026-08-06)', () => {
+  // Regression: the angle-thresholded classifier cut at 110° (later 115°),
+  // and the MMFF94 C–O–C equilibrium of dimethyl ether is 111.7°, so every
+  // refined ether O rendered as sp² with a pure p orbital instead of two
+  // equivalent sp³ lone pairs. Hybridization is a domain count — 2 σ bonds
+  // → 2 lone pairs → 4 domains → sp³ at ANY geometry.
+  const DIMETHYL_ETHER: Molecule = {
+    atoms: [
+      { element: 'O', x: 0, y: 0, z: 0 },
+      { element: 'C', x: 1, y: 0, z: 0 },
+      { element: 'C', x: -0.3695, y: 0.9292, z: 0 }, // 111.7°
+    ],
+    bonds: [
+      { atom1Index: 0, atom2Index: 1, order: 1 },
+      { atom1Index: 0, atom2Index: 2, order: 1 },
+    ],
+  };
+
+  it('ether oxygen is sp³ with two σ lone pairs — the pure-p regression', () => {
+    const o = classifyMolecule(DIMETHYL_ETHER)[0];
+    expect(o.element).toBe('O');
+    expect(o.hybridization).toBe('sp³');
+    expect(o.lonePairs).toBe(2);
+    expect(o.hasPi).toBe(false);
+    expect(o.piDirection).toBeNull();
+  });
+
+  // Same single-bond topology stretched to 120° — squarely inside the old
+  // sp² band (>115°). The classification must not see the geometry.
+  const STRETCHED_ETHER: Molecule = {
+    atoms: [
+      { element: 'O', x: 0, y: 0, z: 0 },
+      { element: 'C', x: 1, y: 0, z: 0 },
+      { element: 'C', x: -0.5, y: 0.866, z: 0 }, // 120°
+    ],
+    bonds: [
+      { atom1Index: 0, atom2Index: 1, order: 1 },
+      { atom1Index: 0, atom2Index: 2, order: 1 },
+    ],
+  };
+
+  it('an ether O stretched to 120° is STILL sp³ — angles do not decide', () => {
+    const o = classifyMolecule(STRETCHED_ETHER)[0];
+    expect(o.hybridization).toBe('sp³');
+    expect(o.lonePairs).toBe(2);
+    expect(o.hasPi).toBe(false);
+  });
+
+  // Control: the same oxygen family, different topology — one double bond.
+  // 1 σ + 1 π → 3 domains → sp² with a real p orbital.
+  const FORMALDEHYDE: Molecule = {
+    atoms: [
+      { element: 'O', x: 0, y: 0, z: 0 },
+      { element: 'C', x: 1.2, y: 0, z: 0 },
+    ],
+    bonds: [{ atom1Index: 0, atom2Index: 1, order: 2 }],
+  };
+
+  it('carbonyl oxygen (1 σ + 1 π) is sp² with a p orbital — topology control', () => {
+    const o = classifyMolecule(FORMALDEHYDE)[0];
+    expect(o.element).toBe('O');
+    expect(o.hybridization).toBe('sp²');
+    expect(o.lonePairs).toBe(2);
+    expect(o.hasPi).toBe(true);
+    expect(o.piDirection).not.toBeNull();
+  });
+});

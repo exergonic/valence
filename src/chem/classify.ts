@@ -1,6 +1,5 @@
 import type { Molecule } from '../mol-parser';
-import { assignHybridization, assignBySteric } from './hybridize';
-import { VALENCE_ELECTRONS } from './valence';
+import { assignHybridization } from './hybridize';
 import { computePiDirection, getPiDirectionFromNeighbor, sigmaPlaneNormal, MIN_PROMOTION_ALIGNMENT } from './pi';
 import { vecDot } from '../utils/vec3';
 
@@ -44,13 +43,14 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
       return [n.x - atom.x, n.y - atom.y, n.z - atom.z];
     });
 
-    // Step 1: pick hybridization — from bond angles when possible,
-    // otherwise from valence electron count (steric number).
-    const hybrid = bondVectors.length >= 2
-      ? assignHybridization(atom.element, bondVectors, piBondsPerAtom[atomIdx])
-      : assignBySteric(Math.min(4, Math.max(2,
-          neighborIndices.length + Math.round(Math.max(0,
-            (VALENCE_ELECTRONS[atom.element] || 4) - neighborIndices.length - piBondsPerAtom[atomIdx]) / 2))));
+    // Step 1: hybridization from the bond graph — element, σ bonds, and
+    // π bonds determine the electron-domain count. No angle measurement:
+    // measured angles are the OUTPUT of geometry refinement, and any
+    // threshold misclassifies part of the continuous range (the refined
+    // ether oxygen at 111.7° vs sp²'s ~120°). An ether O has 2 σ bonds →
+    // 2 lone pairs → 4 domains → sp³ at any angle; a carbonyl O
+    // (1 σ + 1 π) has 3 domains → sp².
+    const hybrid = assignHybridization(atom.element, neighborIndices.length, piBondsPerAtom[atomIdx]);
 
     // Step 2: count σ lone pairs from steric number − σ bonds.
     // (Steric number = σ bonds + lone pairs, by VSEPR)
