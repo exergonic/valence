@@ -55,7 +55,13 @@ function separateOverlaps(molecule: Molecule): Molecule {
         const d = Math.hypot(dx, dy, dz);
         if (d < MIN_DIST) {
           const push = (MIN_DIST - d) / 2;
-          const ux = dx / d, uy = dy / d, uz = dz / d;
+          // Exactly-coincident atoms (d === 0) have no direction to
+          // push along — the 5-vector wrap used to land a 5th
+          // substituent on top of the 1st, and dx/0 = NaN corrupted
+          // BOTH atoms (the 2026-08-12 PCl5 report). Nudge along x.
+          const ux = d > 1e-9 ? dx / d : 1;
+          const uy = d > 1e-9 ? dy / d : 0;
+          const uz = d > 1e-9 ? dz / d : 0;
           atoms[i].x -= ux * push; atoms[i].y -= uy * push; atoms[i].z -= uz * push;
           atoms[j].x += ux * push; atoms[j].y += uy * push; atoms[j].z += uz * push;
         }
@@ -82,7 +88,16 @@ export function embedAndRefine(molecule: Molecule): Molecule {
     })),
     bonds: withH.bonds,
   };
-  return refineWithMMFF94(separateOverlaps(placed)) ?? separateOverlaps(placed);
+  const fallback = separateOverlaps(placed);
+  // Never hand a NaN molecule to the renderer — a degenerate start
+  // (e.g. a 5-coordinate center whose 5th substituent overlapped the
+  // 1st) can poison the refine; the separated guess must be finite
+  // or the caller keeps its own geometry (the Ar no-op contract).
+  const finite = (m: Molecule) =>
+    m.atoms.every((a) => Number.isFinite(a.x) && Number.isFinite(a.y) && Number.isFinite(a.z));
+  const refined = refineWithMMFF94(fallback);
+  if (refined && finite(refined)) return refined;
+  return finite(fallback) ? fallback : placed;
 }
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {

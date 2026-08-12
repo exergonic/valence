@@ -261,6 +261,64 @@ M  END
     void P; void C2;
   });
 
+  it('phosphorus pentachloride: 5-coordinate center embeds as a trigonal bipyramid, never NaN (2026-08-12)', () => {
+    // The PCl5 report: the 5th substituent wrapped onto the 1st (only
+    // 4 TETRA vectors existed for count >= 4), the coincident atoms
+    // made separateOverlaps divide by zero (dx/0 = NaN poisoned BOTH
+    // atoms), and embedAndRefine handed the NaN molecule to the
+    // renderer — nothing displayed, and the app wedged for every
+    // molecule after. Now: place3D emits the sp³d trigonal
+    // bipyramid, separateOverlaps nudges coincident atoms along x,
+    // and embedAndRefine never returns non-finite coordinates.
+    const pcl5 = parseMolBlock(`JME 2024-04-29 Wed Aug 12 18:37:58 GMT-400 2026
+
+  6  5  0  0  0  0  0  0  0  0999 V2000
+    1.2124    1.4000    0.0000 P   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4248    0.7000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    1.2124    2.8000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.7000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    2.1000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    1.2124    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+M  END
+`);
+    const result = embedAndRefine(pcl5);
+    expect(result.atoms).toHaveLength(6);
+    for (const a of result.atoms) {
+      expect(Number.isFinite(a.x)).toBe(true);
+      expect(Number.isFinite(a.y)).toBe(true);
+      expect(Number.isFinite(a.z)).toBe(true);
+    }
+    const d = (i: number, j: number) => Math.hypot(
+      result.atoms[i].x - result.atoms[j].x,
+      result.atoms[i].y - result.atoms[j].y,
+      result.atoms[i].z - result.atoms[j].z,
+    );
+    // Five P–Cl bonds at ~2 Å (the MMFF94 empirical P–Cl length).
+    for (let i = 1; i <= 5; i++) {
+      expect(d(0, i)).toBeGreaterThan(1.7);
+      expect(d(0, i)).toBeLessThan(2.3);
+    }
+    // Trigonal bipyramid: two wide (axial) Cl–P–Cl angles, the rest
+    // near 90°/120° (the MMFF94 potential distorts the ideal TBP —
+    // measured axial pairs ~137–140°, the rest 82–112°).
+    const ang = (i: number, j: number, k: number) => {
+      const ax = result.atoms[i].x - result.atoms[j].x, ay = result.atoms[i].y - result.atoms[j].y, az = result.atoms[i].z - result.atoms[j].z;
+      const bx = result.atoms[k].x - result.atoms[j].x, by = result.atoms[k].y - result.atoms[j].y, bz = result.atoms[k].z - result.atoms[j].z;
+      const na = Math.hypot(ax, ay, az), nb = Math.hypot(bx, by, bz);
+      return (Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by + az * bz) / (na * nb)))) * 180) / Math.PI;
+    };
+    const angles: number[] = [];
+    for (let i = 1; i <= 5; i++) for (let j = i + 1; j <= 5; j++) angles.push(ang(i, 0, j));
+    const wide = angles.filter((a) => a > 130);
+    expect(wide.length).toBeGreaterThanOrEqual(2); // the axial pairs
+    expect(Math.min(...angles)).toBeGreaterThan(70); // no collapsed pair
+  });
+
   it('returns null for a corrupt bond (index out of range)', () => {
     const broken: Molecule = {
       atoms: [{ element: 'C', x: 0, y: 0, z: 0 }],

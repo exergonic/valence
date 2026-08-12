@@ -21,6 +21,29 @@ const LINEAR_VECTORS: [number, number, number][] = [
   [-1, 0, 0],
 ];
 
+// Trigonal bipyramidal (sp³d): two axial poles + an equatorial
+// trigonal plane. 5-coordinate centers (PCl5, the phosphoranes) fell
+// through to TETRA before, wrapping the 5th substituent onto the 1st
+// — two atoms exactly coincident, which the MMFF refinement then
+// turned into NaN coordinates (the 2026-08-12 PCl5 report).
+const TRIG_BIPYRAMIDAL_VECTORS: [number, number, number][] = [
+  [0, 0, 1],
+  [0, 0, -1],
+  [1, 0, 0],
+  [-0.5, Math.sqrt(3) / 2, 0],
+  [-0.5, -Math.sqrt(3) / 2, 0],
+];
+
+// Octahedral (sp³d²): ±x ±y ±z.
+const OCTAHEDRAL_VECTORS: [number, number, number][] = [
+  [1, 0, 0],
+  [-1, 0, 0],
+  [0, 1, 0],
+  [0, -1, 0],
+  [0, 0, 1],
+  [0, 0, -1],
+];
+
 function alignVectors(from: [number, number, number], to: [number, number, number]): (v: [number, number, number]) => [number, number, number] {
   const dot = from[0] * to[0] + from[1] * to[1] + from[2] * to[2];
   if (Math.abs(dot - 1) < 1e-6) return (v) => v;
@@ -51,12 +74,15 @@ function alignVectors(from: [number, number, number], to: [number, number, numbe
   };
 }
 
-// Ideal hybrid-orbital directions: tetrahedral (sp³), trigonal (sp²),
-// linear (sp).  The embedder walks the molecular graph placing each
-// neighbor along the next unused ideal vector of its parent atom.
+// Ideal hybrid-orbital directions: linear (sp), trigonal (sp²),
+// tetrahedral (sp³), trigonal bipyramidal (sp³d), octahedral (sp³d²).
+// The embedder walks the molecular graph placing each neighbor along
+// the next unused ideal vector of its parent atom.
 function idealHybridVectors(count: number): [number, number, number][] {
   if (count <= 2) return LINEAR_VECTORS;
   if (count === 3) return TRIG_VECTORS;
+  if (count === 5) return TRIG_BIPYRAMIDAL_VECTORS;
+  if (count >= 6) return OCTAHEDRAL_VECTORS;
   return TETRA_VECTORS;
 }
 
