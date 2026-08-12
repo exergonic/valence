@@ -248,6 +248,29 @@ const PCL5 = HEADER + `  6  5  0  0  0  0  0  0  0  0999 V2000
 M  END
 `;
 
+// Sulfur hexafluoride — the sp³d² octahedron: six F's at ±1.561 Å
+// on the three Cartesian axes (all F–S–F angles 90°/180°). The
+// experimental S–F length is 1.561 Å. Like PCl₅, deliberately NOT
+// MMFF94-refined (no parameters for hexacoordinate S) — the example
+// exists to show the textbook geometry. PubChem has no 3D conformer
+// (its generator fails on it, same as PCl₅); Cactus resolves one.
+const SF6 = HEADER + `  7  6  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 S   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5610    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.5610    0.0000    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.5610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000   -1.5610    0.0000 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    1.5610 F   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000   -1.5610 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+  1  7  1  0  0  0  0
+M  END
+`;
+
 export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
@@ -261,5 +284,6 @@ export const EXAMPLES: Example[] = [
   { name: 'Oxygen (O₂)', mol: O2 },
   { name: 'Water (H₂O)', mol: WATER },
   { name: 'Phosphorus pentachloride (PCl₅)', mol: PCL5 },
+  { name: 'Sulfur hexafluoride (SF₆)', mol: SF6 },
   { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
 ];

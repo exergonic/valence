@@ -31,6 +31,7 @@ const TYPE_TO_HYBRID: Record<number, string> = {
   2: 'sp2',  // C=C — vinylic C
   3: 'sp2',  // C=O — carbonyl C
   4: 'sp',   // CSP — acetylenic C
+  11: 'sp3', // F — covalent fluorine (1 σ + 3 lone pairs)
   12: 'sp3', // CL — covalent chlorine (1 σ + 3 lone pairs)
   25: 'sp3', // PO4 — tetracoordinate P (phosphates, phosphoranes; PCl₅'s penta-coordinate P is the deviation below)
   26: 'sp3', // P — tricoordinate phosphine
@@ -74,6 +75,12 @@ const DEVIATIONS: Deviation[] = [
     element: 'P',
     reason:
       'hypervalent P: 5 σ bonds → sp³d (the trigonal bipyramid), but MMFF94 types the penta-coordinate P as 25 — the same type as tetracoordinate PO4/phosphorane P — and the per-type table cannot separate them. The 25 row maps the tetracoordinate expectation; the graph-derived sp³d is the chemistry.',
+  },
+  {
+    molecule: 'Sulfur hexafluoride (SF₆)',
+    element: 'S',
+    reason:
+      'hypervalent S: 6 σ bonds → sp³d² (the octahedron), but MMFF94 types the hexacoordinate S as 15 — the same type as 2-coordinate thiol/sulfide S — and the per-type table cannot separate them. The 15 row maps the 2-coordinate expectation; the graph-derived sp³d² is the chemistry.',
   },
 ];
 

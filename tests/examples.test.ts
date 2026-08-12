@@ -111,6 +111,18 @@ const EXPECTATIONS: ExampleExpectations[] = [
     ],
   },
   {
+    name: 'Sulfur hexafluoride (SF₆)',
+    atoms: [
+      { element: 'S', hybridization: 'sp³d²', lonePairs: 0, hasPi: false },
+      { element: 'F', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'F', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'F', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'F', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'F', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'F', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+    ],
+  },
+  {
     name: 'Phenol (C₆H₅OH)',
     atoms: [
       { element: 'O', hybridization: 'sp²', lonePairs: 1, hasPi: true },
@@ -207,6 +219,41 @@ describe('PCl₅ example geometry (the ideal trigonal bipyramid)', () => {
     );
     expect(d(0, 1)).toBeCloseTo(2.02, 4);
     expect(d(0, 3)).toBeCloseTo(1.94, 4);
+  });
+});
+
+describe('SF₆ example geometry (the ideal octahedron)', () => {
+  // Same contract as the PCl₅ pin: the example carries the textbook
+  // sp³d² octahedron — all F–S–F angles 90° (adjacent) / 180°
+  // (opposite), S–F 1.561 Å — NOT an MMFF94-refined geometry (no
+  // parameters for hexacoordinate S).
+  it('has S–F at 1.561 Å and every F–S–F angle 90° or 180°', () => {
+    const example = EXAMPLES.find((e) => e.name === 'Sulfur hexafluoride (SF₆)');
+    if (!example) { expect.fail('SF₆ example not found'); return; }
+    const mol = parseMolBlock(example.mol);
+    const d = (i: number, j: number) => Math.hypot(
+      mol.atoms[i].x - mol.atoms[j].x,
+      mol.atoms[i].y - mol.atoms[j].y,
+      mol.atoms[i].z - mol.atoms[j].z,
+    );
+    const ang = (i: number, j: number, k: number) => {
+      const a = mol.atoms[i], b = mol.atoms[j], c = mol.atoms[k];
+      const ax = a.x - b.x, ay = a.y - b.y, az = a.z - b.z;
+      const bx = c.x - b.x, by = c.y - b.y, bz = c.z - b.z;
+      const na = Math.hypot(ax, ay, az), nb = Math.hypot(bx, by, bz);
+      return (Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by + az * bz) / (na * nb)))) * 180) / Math.PI;
+    };
+    for (let i = 1; i <= 6; i++) {
+      expect(d(0, i)).toBeCloseTo(1.561, 4);
+    }
+    const angles: number[] = [];
+    for (let i = 1; i <= 6; i++) for (let j = i + 1; j <= 6; j++) angles.push(ang(i, 0, j));
+    // 12 adjacent pairs at 90°, 3 opposite pairs at 180°.
+    const right = angles.filter((a) => Math.abs(a - 90) < 1e-6).length;
+    const straight = angles.filter((a) => Math.abs(a - 180) < 1e-6).length;
+    expect(right).toBe(12);
+    expect(straight).toBe(3);
+    expect(angles).toHaveLength(15);
   });
 });
 
