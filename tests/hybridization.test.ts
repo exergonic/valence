@@ -17,6 +17,20 @@ describe('assignHybridization (topology-first)', () => {
     expect(result.hybridization).toBe('sp3');
   });
 
+  it('should return sp3d for phosphorus pentachloride (5 σ bonds)', () => {
+    // PCl₅: P valence 5, 5 σ, 0 π → 0 lone pairs → 5 domains → sp³d.
+    const result = assignHybridization('P', 5);
+    expect(result.hybridization).toBe('sp3d');
+    expect(result.geometry).toBe('trigonal_bipyramidal');
+  });
+
+  it('should return sp3d2 for sulfur hexafluoride (6 σ bonds)', () => {
+    // SF₆: S valence 6, 6 σ → 0 lone pairs → 6 domains → sp³d².
+    const result = assignHybridization('S', 6);
+    expect(result.hybridization).toBe('sp3d2');
+    expect(result.geometry).toBe('octahedral');
+  });
+
   it('should return sp2 for trigonal carbon (3 σ bonds)', () => {
     const result = assignHybridization('C', 3);
     expect(result.hybridization).toBe('sp2');

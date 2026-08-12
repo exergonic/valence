@@ -1,8 +1,8 @@
 import { VALENCE_ELECTRONS } from './valence';
 
-export type Hybridization = 'sp' | 'sp2' | 'sp3' | 'sp3d' | 'p';
+export type Hybridization = 'sp' | 'sp2' | 'sp3' | 'sp3d' | 'sp3d2' | 'p';
 
-export type Geometry = 'linear' | 'trigonal_planar' | 'tetrahedral' | 'trigonal_bipyramidal';
+export type Geometry = 'linear' | 'trigonal_planar' | 'tetrahedral' | 'trigonal_bipyramidal' | 'octahedral';
 
 export interface HybridizationResult {
   hybridization: Hybridization;
@@ -10,11 +10,13 @@ export interface HybridizationResult {
 }
 
 // VSEPR: steric number = (σ bonds) + (lone pairs).
-// sp = 2, sp² = 3, sp³ = 4.
+// sp = 2, sp² = 3, sp³ = 4, sp³d = 5, sp³d² = 6.
 export function assignBySteric(steric: number): HybridizationResult {
   switch (steric) {
     case 2: return { hybridization: 'sp', geometry: 'linear' };
     case 3: return { hybridization: 'sp2', geometry: 'trigonal_planar' };
+    case 5: return { hybridization: 'sp3d', geometry: 'trigonal_bipyramidal' };
+    case 6: return { hybridization: 'sp3d2', geometry: 'octahedral' };
     default: return { hybridization: 'sp3', geometry: 'tetrahedral' };
   }
 }
@@ -50,8 +52,10 @@ export function assignHybridization(
   const lonePairs = Math.floor(Math.max(0, (valence - sigmaBonds - piCount) / 2));
 
   // Steric number = σ bonds + lone pairs. The clamp covers the edges:
-  // hydrogen (1 domain) reads as sp, and hypervalent atoms (5+ σ bonds)
-  // read as sp³.
-  const steric = Math.min(4, Math.max(2, sigmaBonds + lonePairs));
+  // hydrogen (1 domain) reads as sp, and hypervalent atoms read as
+  // sp³d (5 domains — PCl₅) or sp³d² (6 domains — SF₆). The floor()
+  // lone-pair count keeps hypervalent atoms honest: PCl₅'s P has
+  // (5 − 5)/2 = 0 lone pairs, so its 5 domains are all σ bonds.
+  const steric = Math.min(6, Math.max(2, sigmaBonds + lonePairs));
   return assignBySteric(steric);
 }

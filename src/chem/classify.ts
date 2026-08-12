@@ -55,7 +55,10 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
     // Step 2: count σ lone pairs from steric number − σ bonds.
     // (Steric number = σ bonds + lone pairs, by VSEPR)
     const stericNumber = hybrid.hybridization === 'sp' ? 2
-      : hybrid.hybridization === 'sp2' ? 3 : 4;
+      : hybrid.hybridization === 'sp2' ? 3
+      : hybrid.hybridization === 'sp3d' ? 5
+      : hybrid.hybridization === 'sp3d2' ? 6
+      : 4;
     const sigmaBonds = neighborIndices.length;
     let lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
@@ -114,6 +117,8 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
     // Conjugation turns sp³ into sp² (one σ lone pair became p).
     let hybridLabel = hybrid.hybridization === 'sp2' ? 'sp²'
       : hybrid.hybridization === 'sp3' ? 'sp³'
+      : hybrid.hybridization === 'sp3d' ? 'sp³d'
+      : hybrid.hybridization === 'sp3d2' ? 'sp³d²'
       : hybrid.hybridization;
     if (conjugated && hybrid.hybridization === 'sp3') hybridLabel = 'sp²';
 

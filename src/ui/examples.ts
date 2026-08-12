@@ -226,6 +226,28 @@ const BUTENYNE = HEADER + `  8  7  0  0  0  0  0  0  0  0999 V2000
 M  END
 `;
 
+// Phosphorus pentachloride — the sp³d trigonal bipyramid: two axial
+// Cl's (±z) and three equatorial Cl's at 120° in the xy plane.
+// Geometry is the IDEAL TBP with the experimental bond lengths
+// (axial 2.02 Å, equatorial 1.94 Å) — deliberately NOT MMFF94-
+// refined: the MMFF potential has no parameters for 5-coordinate P
+// and its minimum distorts the axial pairs to ~137–140° (measured
+// 2026-08-12). The example exists to show the textbook geometry.
+const PCL5 = HEADER + `  6  5  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 P   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    2.0200 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000   -2.0200 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    1.9400    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+   -0.9700    1.6801    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+   -0.9700   -1.6801    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+M  END
+`;
+
 export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
@@ -238,5 +260,6 @@ export const EXAMPLES: Example[] = [
   { name: 'Nitrogen (N₂)', mol: N2 },
   { name: 'Oxygen (O₂)', mol: O2 },
   { name: 'Water (H₂O)', mol: WATER },
+  { name: 'Phosphorus pentachloride (PCl₅)', mol: PCL5 },
   { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
 ];

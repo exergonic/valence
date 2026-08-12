@@ -31,6 +31,9 @@ const TYPE_TO_HYBRID: Record<number, string> = {
   2: 'sp2',  // C=C — vinylic C
   3: 'sp2',  // C=O — carbonyl C
   4: 'sp',   // CSP — acetylenic C
+  12: 'sp3', // CL — covalent chlorine (1 σ + 3 lone pairs)
+  25: 'sp3', // PO4 — tetracoordinate P (phosphates, phosphoranes; PCl₅'s penta-coordinate P is the deviation below)
+  26: 'sp3', // P — tricoordinate phosphine
   6: 'sp3',  // OR — O single-bonded to C (ethers, alcohols)
   7: 'sp2',  // O=C — doubly-bonded O
   15: 'sp3', // S — thiol, sulfide
@@ -65,6 +68,12 @@ const DEVIATIONS: Deviation[] = [
     element: 'O',
     reason:
       'alkoxide floor() artifact: a 1-σ O⁻ reads 5 electrons → 2.5 per lone pair, floor() keeps 2 → sp² with a rendered p lobe, but the true count is 3 lone pairs → sp³. Known fix: the environment rule (1-σ O on sp3 C → sp³), same distinction MMFF94 draws between type 35 and type 32.',
+  },
+  {
+    molecule: 'Phosphorus pentachloride (PCl₅)',
+    element: 'P',
+    reason:
+      'hypervalent P: 5 σ bonds → sp³d (the trigonal bipyramid), but MMFF94 types the penta-coordinate P as 25 — the same type as tetracoordinate PO4/phosphorane P — and the per-type table cannot separate them. The 25 row maps the tetracoordinate expectation; the graph-derived sp³d is the chemistry.',
   },
 ];
 

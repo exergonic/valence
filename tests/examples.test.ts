@@ -100,6 +100,17 @@ const EXPECTATIONS: ExampleExpectations[] = [
     ],
   },
   {
+    name: 'Phosphorus pentachloride (PCl₅)',
+    atoms: [
+      { element: 'P', hybridization: 'sp³d', lonePairs: 0, hasPi: false },
+      { element: 'Cl', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'Cl', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'Cl', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'Cl', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+      { element: 'Cl', hybridization: 'sp³', lonePairs: 3, hasPi: false },
+    ],
+  },
+  {
     name: 'Phenol (C₆H₅OH)',
     atoms: [
       { element: 'O', hybridization: 'sp²', lonePairs: 1, hasPi: true },
@@ -158,6 +169,45 @@ describe('Example orbital classifications', () => {
       }
     });
   }
+});
+
+describe('PCl₅ example geometry (the ideal trigonal bipyramid)', () => {
+  // The example deliberately carries the textbook TBP — axial 180°,
+  // equatorial 120°, axial–equatorial 90° — NOT the MMFF94-refined
+  // geometry, whose minimum distorts the axial pairs to ~137–140°
+  // (MMFF94 has no parameters for 5-coordinate P). This pins the
+  // example file itself: the app renders example MOL coordinates
+  // as-is, so a regression here is a regression in what students see.
+  it('has axial Cl–P–Cl at 180°, equatorial at 120°, axial–equatorial at 90°', () => {
+    const example = EXAMPLES.find((e) => e.name === 'Phosphorus pentachloride (PCl₅)');
+    if (!example) { expect.fail('PCl₅ example not found'); return; }
+    const mol = parseMolBlock(example.mol);
+    const ang = (i: number, j: number, k: number) => {
+      const a = mol.atoms[i], b = mol.atoms[j], c = mol.atoms[k];
+      const ax = a.x - b.x, ay = a.y - b.y, az = a.z - b.z;
+      const bx = c.x - b.x, by = c.y - b.y, bz = c.z - b.z;
+      const na = Math.hypot(ax, ay, az), nb = Math.hypot(bx, by, bz);
+      return (Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by + az * bz) / (na * nb)))) * 180) / Math.PI;
+    };
+    // Atoms 1 and 2 are the axial Cl's; 3, 4, 5 the equatorial.
+    // (2-decimal tolerance: the equatorial y-coordinate is rounded to
+    // 4 decimals in the MOL, 1.6801 ≈ 1.94·√3/2.)
+    expect(ang(1, 0, 2)).toBeCloseTo(180, 4);
+    expect(ang(3, 0, 4)).toBeCloseTo(120, 2);
+    expect(ang(3, 0, 5)).toBeCloseTo(120, 2);
+    expect(ang(4, 0, 5)).toBeCloseTo(120, 2);
+    expect(ang(1, 0, 3)).toBeCloseTo(90, 2);
+    expect(ang(1, 0, 4)).toBeCloseTo(90, 2);
+    expect(ang(2, 0, 3)).toBeCloseTo(90, 2);
+    // Experimental bond lengths: axial 2.02 Å, equatorial 1.94 Å.
+    const d = (i: number, j: number) => Math.hypot(
+      mol.atoms[i].x - mol.atoms[j].x,
+      mol.atoms[i].y - mol.atoms[j].y,
+      mol.atoms[i].z - mol.atoms[j].z,
+    );
+    expect(d(0, 1)).toBeCloseTo(2.02, 4);
+    expect(d(0, 3)).toBeCloseTo(1.94, 4);
+  });
 });
 
 describe('p-AO directionality', () => {

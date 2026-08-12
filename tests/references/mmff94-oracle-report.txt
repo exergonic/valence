@@ -1,6 +1,6 @@
 mmff94-ts oracle — valence classifier vs the reference typer
-corpus: 16 molecules, 55 heavy atoms
-agreement: 53/55 (100.0%), documented deviations: 2, unexplained: 0
+corpus: 17 molecules, 61 heavy atoms
+agreement: 58/61 (100.0%), documented deviations: 3, unexplained: 0
 Methane (CH₄): 1/1
 Ethene (C₂H₄): 2/2
 Ethyne (C₂H₂): 2/2
@@ -12,6 +12,7 @@ Phenol (C₆H₅OH): 6/7
 Nitrogen (N₂): 2/2
 Oxygen (O₂): 2/2
 Water (H₂O): 1/1
+Phosphorus pentachloride (PCl₅): 5/6
 But-1-en-3-yne (H₂C=CH-C≡CH): 4/4
 dimethyl ether: 3/3
 formaldehyde: 2/2
@@ -20,4 +21,5 @@ thioanisole (twisted): 5/5
 
 documented deviations:
 Phenol (C₆H₅OH) O: valence sp2, type 6 → sp3 — promotion label: the phenol O is delocalized (sp² with a p orbital), but MMFF94 types it 6 (OR, the ether/alcohol type) — the type space does not separate O–C(sp²) from O–C(sp³), so the mapped sp³ expectation is met by the base class, not the promoted label.
+Phosphorus pentachloride (PCl₅) P: valence sp3d, type 25 → sp3 — hypervalent P: 5 σ bonds → sp³d (the trigonal bipyramid), but MMFF94 types the penta-coordinate P as 25 — the same type as tetracoordinate PO4/phosphorane P — and the per-type table cannot separate them. The 25 row maps the tetracoordinate expectation; the graph-derived sp³d is the chemistry.
 methoxide anion O: valence sp2, type 35 → sp3 — alkoxide floor() artifact: a 1-σ O⁻ reads 5 electrons → 2.5 per lone pair, floor() keeps 2 → sp² with a rendered p lobe, but the true count is 3 lone pairs → sp³. Known fix: the environment rule (1-σ O on sp3 C → sp³), same distinction MMFF94 draws between type 35 and type 32.
