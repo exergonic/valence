@@ -487,6 +487,16 @@ html, body {
 #info-source.fallback { color: #ff8844; }
 #info-source.warning { color: #ff4444; }
 
+/* Generic-parameter warnings (the local MMFF94 path) — amber like
+   the source fallback, but a dedicated line under the source. */
+#info-warnings {
+  color: #ffb347;
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 4px 0;
+  white-space: pre-line;
+}
+
 #info-name {
   font-weight: 600;
   font-size: 15px;

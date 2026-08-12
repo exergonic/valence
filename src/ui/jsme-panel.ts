@@ -2,6 +2,7 @@ import type { SceneContext } from '../render';
 import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
 import { computeLocalGeometry } from '../geometry/local-geometry';
+import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import type { PubChemInfo } from '../geometry/resolve3d';
 
@@ -13,6 +14,12 @@ declare global {
 
 function setStatus(info: PubChemInfo) {
   const popup = document.getElementById('info-popup')!;
+  // Generic-parameter warnings for the local MMFF94 path: cleared on
+  // every status (an empty line is invisible), shown when the
+  // molecule runs on parameters MMFF94 was never given for.
+  const warningsEl = document.getElementById('info-warnings')!;
+  warningsEl.classList.toggle('hidden', !(info.warnings && info.warnings.length > 0));
+  warningsEl.textContent = info.warnings?.join('\n') ?? '';
 
   if (info.source === 'pubchem') {
     const sourceEl = document.getElementById('info-source')!;
@@ -121,7 +128,17 @@ export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
         const t4 = performance.now();
         if (local) molecule = local;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-        setStatus({ source: forceLocal ? 'local' : 'fallback', formula, weight: `${weight}` });
+        // Warn when the refined molecule runs on generic MMFF94
+        // parameters (hypervalent centers, untyped elements) — the
+        // user should not silently trust a geometry MMFF94 has no
+        // parameters for. The H-complete refined molecule is the
+        // right input: the report counts σ bonds including H's.
+        setStatus({
+          source: forceLocal ? 'local' : 'fallback',
+          formula,
+          weight: `${weight}`,
+          warnings: parameterGapWarnings(molecule),
+        });
         console.log('[render-timing]', {
           jsme: +(t1 - t0).toFixed(1),
           parse: +(t2 - t1).toFixed(1),

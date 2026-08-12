@@ -4,6 +4,8 @@ export interface PubChemInfo {
   name?: string;
   formula?: string;
   weight?: string;
+  /** Generic-parameter warnings for the local MMFF94 path (see parameter-warnings.ts). */
+  warnings?: string[];
 }
 
 const PUBCHEM_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles';
