@@ -235,6 +235,29 @@ M  END
     const pc = bondLength(result, 0, 1);
     expect(pc).toBeGreaterThan(1.5);
     expect(pc).toBeLessThan(1.8);
+    // The 2026-08-12 P-typing fix (mmff94-ts: 4-σ P=C → type 25): the
+    // refined tripod must be symmetric — with the old crd-2 ylide
+    // type 75 the minimum was asymmetric (P–C spread 0.067 Å, C–P–C
+    // spread 21°). Measured with the fix: 0.0065 Å / 11.8°.
+    const d = (i: number, j: number) => bondLength(result, i, j);
+    const ipsos = [2, 3, 4]; // the three aryl ipso C's (JSME atom order)
+    const pcAryl = ipsos.map((i) => d(0, i));
+    expect(Math.max(...pcAryl) - Math.min(...pcAryl)).toBeLessThan(0.02);
+    const angleAt = (i: number, j: number, k: number) => {
+      const a = result.atoms[i], b = result.atoms[j], c = result.atoms[k];
+      const ax = a.x - b.x, ay = a.y - b.y, az = a.z - b.z;
+      const bx = c.x - b.x, by = c.y - b.y, bz = c.z - b.z;
+      const na = Math.hypot(ax, ay, az), nb = Math.hypot(bx, by, bz);
+      return (Math.acos(Math.max(-1, Math.min(1, (ax * bx + ay * by + az * bz) / (na * nb)))) * 180) / Math.PI;
+    };
+    const cpc = [angleAt(1, 0, 2), angleAt(1, 0, 3), angleAt(1, 0, 4), angleAt(2, 0, 3), angleAt(2, 0, 4), angleAt(3, 0, 4)];
+    // The app refines at a 200-iteration budget (responsiveness), so
+    // the angles are mid-relaxation from the 2D embed start (measured
+    // 18°; the converged 10.7° spread is pinned in mmff94-ts's
+    // wittig-ylide.test.ts). The P–C length pin above is the strong
+    // discriminator — the old typing's minimum had BOTH asymmetric
+    // (spread 0.067 Å) AND angle spreads above 21°.
+    expect(Math.max(...cpc) - Math.min(...cpc)).toBeLessThan(20);
     void P; void C2;
   });
 
