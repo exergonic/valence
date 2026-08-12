@@ -153,10 +153,21 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     let curr = first;
     while (ringList.length < ringAtoms.size) {
       ringList.push(curr);
-      const nbs = ringAdj.get(curr)!.filter((nb) => nb !== prev);
-      if (nbs.length === 0) break;
-      prev = curr;
-      curr = nbs[0];
+      const nbs = ringAdj.get(curr)!.filter((nb) => nb !== prev && !ringList.includes(nb));
+      if (nbs.length === 0) {
+        // The walk exhausted its cycle. Molecules with SEVERAL
+        // SEPARATE rings (biphenyl, the triphenyl ylide) have
+        // multiple disjoint cycles — restart the walk at the next
+        // unplaced ring atom, or we crash later on pos[i] for the
+        // unplaced rings (the centroid loop reads every ring atom).
+        const next = [...ringAtoms].find((a) => !ringList.includes(a));
+        if (next === undefined) break;
+        prev = -1;
+        curr = next;
+      } else {
+        prev = curr;
+        curr = nbs[0];
+      }
     }
   }
   const PUCKER = 0.4; // Å of alternating out-of-plane lift

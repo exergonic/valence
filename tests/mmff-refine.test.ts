@@ -174,6 +174,70 @@ M  END
     expect(hoh).toBeLessThan(108);
   });
 
+  it('methylenetriphenylphosphorane: the multi-ring pipeline completes with hydrogens (2026-08-12)', () => {
+    // The reported dogfooding case: Ph₃P=CH₂ drawn in JSME (no
+    // explicit H's) rendered as an H-less mess on the local path. The
+    // cause was the embedder's ring walk covering only ONE ring —
+    // three separate phenyls left the others unplaced and place3D
+    // threw; the app fell back to the raw molecule. The full
+    // pipeline must now place all 17 H's and refine.
+    const wittig = parseMolBlock(`JME 2024-04-29 Wed Aug 12 09:29:50 GMT-400 2026
+
+ 20 22  0  0  0  0  0  0  0  0999 V2000
+    3.9985    4.1983    0.0000 P   0  0  0  0  0  0  0  0  0  0  0  0
+    5.3942    4.3078    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.1957    5.3452    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.6657    3.7699    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    4.0385    2.7989    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.7875    6.6140    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.9847    7.7609    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5900    7.6391    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9981    6.3703    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.8010    5.2234    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.6282    4.7099    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.2954    4.2815    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    2.9130    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0374    1.9730    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3703    2.4014    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.8466    2.0645    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.8865    0.6651    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    4.1185    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    5.3104    0.7343    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    5.2704    2.1338    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  6  7  1  0  0  0  0
+  7  8  2  0  0  0  0
+  8  9  1  0  0  0  0
+  9 10  2  0  0  0  0
+  3 10  1  0  0  0  0
+  3  6  2  0  0  0  0
+ 11 12  1  0  0  0  0
+ 12 13  2  0  0  0  0
+ 13 14  1  0  0  0  0
+ 14 15  2  0  0  0  0
+  4 15  1  0  0  0  0
+  4 11  2  0  0  0  0
+ 16 17  1  0  0  0  0
+ 17 18  2  0  0  0  0
+ 18 19  1  0  0  0  0
+ 19 20  2  0  0  0  0
+  5 20  1  0  0  0  0
+  5 16  2  0  0  0  0
+M  END
+`);
+    const result = embedAndRefine(wittig);
+    expect(result.atoms).toHaveLength(37); // 20 heavy + 17 H
+    const P = result.atoms[0];
+    const C2 = result.atoms[1];
+    const pc = bondLength(result, 0, 1);
+    expect(pc).toBeGreaterThan(1.5);
+    expect(pc).toBeLessThan(1.8);
+    void P; void C2;
+  });
+
   it('returns null for a corrupt bond (index out of range)', () => {
     const broken: Molecule = {
       atoms: [{ element: 'C', x: 0, y: 0, z: 0 }],
