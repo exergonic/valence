@@ -1,6 +1,6 @@
 [package]
 name = "valence"
-version = "0.6.0"
+version = "0.7.0"
 description = "Valence Bond Visualization — interactive 3D molecular orbital viewer"
 authors = ["Billy Wayne McCann"]
 license = "BSD-3-Clause"
