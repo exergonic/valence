@@ -35,10 +35,11 @@ Built specifically for the classroom, Valence embraces a purely geometric and al
 
 ## ✨ Core Capabilities
 
-*   **🧠 Hybridization Engine:** Dynamically assigns sp / sp² / sp³ states from measured bond angles. Includes geometry-derived conjugation detection (e.g., furan O, aniline N, amide N, H₂SO₄ O).
-*   **🌐 Robust 3D Embedding:** Leverages PubChem PUG REST (MMFF94-optimized) as a primary engine, with RDKit.js ETKDG (client-side WASM) and a custom graph-walk embedder + torsion optimizer as seamless fallbacks.
+*   **🧠 Hybridization Engine:** Assigns sp / sp² / sp³ / sp³d / sp³d² states by counting electron domains (σ bonds + lone pairs) from the molecular graph — never from measured angles, which are the *output* of geometry, not its identity. Includes conjugation detection (e.g., phenol O, amide N, H₂SO₄ O) with a geometric promotion gate.
+*   **🌐 Robust 3D Embedding:** Tries PubChem PUG REST for MMFF94-optimized coordinates, then the NIH CACTUS (CIR) resolver; the in-house fallback (implicit hydrogens + graph-walk embedder + MMFF94 refinement via the vendored `mmff94-ts` library, in a Web Worker) produces MMFF94-quality geometry with no native dependencies.
 *   **🎨 Advanced Orbital Rendering:** Powered by THREE.js. Utilizes precise `LatheGeometry` lobes to visualize σ, π, p, and lone pair orbitals.
 *   **🧭 p-AO Directionality:** Automatically orientates all π-system p-orbitals perpendicular to the σ plane, forcing parallel alignment across conjugated networks.
+*   **⚡ Generic-Parameter Warnings:** When the local MMFF94 path must use generic parameters (hypervalent centers like PCl₅/SF₆, elements outside the MMFF94 type space), the status popup warns that the refined geometry is approximate — validated against the 761-molecule MMFF94 suite so it never false-fires on covered chemistry.
 *   **📸 Quick Export:** Seamlessly capture and export 2× resolution PNG snapshots of the current viewport for lectures or assignments.
 
 ---
@@ -79,13 +80,13 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 ### Data Pipeline
 
 ```text
-[JSME MOL Block] ➔ Parse Atoms/Bonds ➔ Hybridization Engine ➔ 3D Embedder ➔ Torsion Optimizer ➔ [Three.js Render]
+[JSME MOL Block] ➔ Parse Atoms/Bonds ➔ Hybridization Engine ➔ 3D Embedder + MMFF94 Refinement ➔ [Three.js Render]
 ```
 
-1. **Input:** Draw a molecule in the JSME panel (or select a pre-built example).
+1. **Input:** Draw a molecule in the JSME panel (or select a pre-built example — methane through water, the hypervalent PCl₅ trigonal bipyramid and SF₆ octahedron, and more).
 2. **Primary 3D:** Attempt PubChem PUG REST for MMFF94-optimized coordinates.
-3. **WASM Fallback:** If PubChem is unreachable, utilize RDKit.js ETKDG + MMFF94 (~7 MB footprint).
-4. **Local Fallback:** If both fail, deploy the internal graph-walk embedder and torsion optimizer (adding implicit hydrogens as needed).
+3. **CIR Fallback:** If PubChem has no structure (e.g., its conformer generator fails), try the NIH CACTUS (CIR) resolver.
+4. **Local Fallback:** If both fail, run the in-house pipeline in a Web Worker: add implicit hydrogens, embed 3D coordinates with the graph-walk embedder, then refine with MMFF94 (the vendored `mmff94-ts` library, L-BFGS, 200-iteration budget). The status popup warns when the molecule must run on generic MMFF94 parameters.
 5. **Render:** Classify hybridization, map orbital geometry, and push to the Three.js canvas.
 
 ### Key Modules
@@ -93,13 +94,13 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 | Directory / File | Purpose |
 |------------------|---------|
 | `src/mol-parser/` | Custom fixed-width MOL block parser (~40 lines, zero external dependencies). |
-| `src/hydrogens/` | Algorithm to inject missing implicit hydrogens if PubChem 3D is unavailable. |
-| `src/hybridization/` | Analyzes measured bond angles (rather than basic connectivity) to assign true hybridization. |
-| `src/embedder/` | Places 3D coordinates via graph-walking and hybridization vectors. |
-| `src/embedder/torsions.ts`| Optimizes torsions to ensure staggered alkane conformations. |
-| `src/services/resolve3d.ts`| Interface for fetching MMFF94 coordinates from the PubChem PUG REST API. |
-| `src/scene/` | Core Three.js logic for rendering atoms, bonds, and lighting. |
-| `src/orbitals/` | Generates accurate `LatheGeometry` for individual sp, sp², and sp³ lobes. |
+| `src/chem/` | Chemistry engine: `hybridize.ts` (domain-count hybridization, sp → sp³d²), `classify.ts` + `pi.ts` (lone pairs, π directionality, the conjugation promotion gate), `hydrogens.ts` (implicit-H filling), `valence.ts`. |
+| `src/geometry/` | 3D coordinate acquisition: `resolve3d.ts` (PubChem → CIR), `place3d.ts` + `torsions.ts` (graph-walk embedder), `mmff-refine.ts` + `local-geometry.ts` (MMFF94 refinement in a Web Worker), `parameter-warnings.ts` (generic-parameter feedback). |
+| `src/render/` | Core Three.js logic: atoms, bonds, lighting, orbital lobes (`lobes.ts` LatheGeometry profiles), `rebuild.ts` state-driven rebuild. |
+| `src/ui/` | Control panel, JSME panel wiring, the examples list (`examples.ts`), tooltip. |
+| `src/utils/` | Vector math (`vec3.ts`) and pure lone-pair direction geometry (`lone-pairs.ts`). |
+
+The MMFF94 engine is consumed from `vendor/mmff94-ts-0.1.0-alpha.1.tgz` (a committed, self-contained bundle of the [mmff94-ts](https://github.com/exergonic/mmff94-ts) library — zero runtime dependencies; Vite embeds it into the worker chunk at build time).
 
 ---
 
@@ -111,5 +112,5 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 
 If you use Valence in your curriculum or presentations, please cite:
 
-> **Valence v0.5.0 — Valence Bond Visualization (2026).**
+> **Valence v0.7.0 — Valence Bond Visualization (2026).**
 > McCann, B. W. *https://github.com/exergonic/valence*
