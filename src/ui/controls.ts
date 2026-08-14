@@ -74,6 +74,19 @@ export function setupControls(ctx: SceneContext) {
     // The render button reads this on click; no immediate action needed.
   });
 
+  // Space-filling toggle
+  const spaceFillingToggle = panel.querySelector<HTMLInputElement>('#ctrl-space-filling')!;
+  spaceFillingToggle.addEventListener('change', () => {
+    ctx.display.spaceFilling = spaceFillingToggle.checked;
+    ctx.rerender();
+  });
+
+  // Auto-rotate toggle
+  const autoRotateToggle = panel.querySelector<HTMLInputElement>('#ctrl-auto-rotate')!;
+  autoRotateToggle.addEventListener('change', () => {
+    ctx.setAutoRotate(autoRotateToggle.checked);
+  });
+
   // ── Style tab ──
 
   // Pedagogical view presets (All / σ-only / π-only / LP-only)

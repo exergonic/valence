@@ -20,6 +20,8 @@ export interface DisplaySettings {
   bgColor: string;
   colors: ColorSettings;
   viewPreset: 'all' | 'sigma-only' | 'pi-only' | 'lone-pairs-only';
+  spaceFilling: boolean;
+  autoRotate: boolean;
 }
 
 export interface SceneContext {
@@ -37,6 +39,8 @@ export interface SceneContext {
   classifications: AtomClassification[] | null;
   rerender: () => void;
   teardown: () => void;
+  autoRotate: boolean;
+  setAutoRotate: (on: boolean) => void;
 }
 
 export function initScene(container: HTMLElement): SceneContext {
@@ -53,6 +57,14 @@ export function initScene(container: HTMLElement): SceneContext {
   controls.rotateSpeed = 3.0;
   controls.zoomSpeed = 1.2;
   controls.panSpeed = 0.8;
+
+  let autoRotate = false;
+  // Auto-rotate stops on first user interaction
+  controls.addEventListener('start', () => {
+    if (autoRotate) {
+      autoRotate = false;
+    }
+  });
 
   const light = new THREE.AmbientLight(0xffffff, 0.5);
   scene.add(light);
@@ -76,8 +88,17 @@ export function initScene(container: HTMLElement): SceneContext {
   hybridizationLabelGroup.visible = false;
   scene.add(hybridizationLabelGroup);
 
+  let autoRotate = false;
+
   function animate() {
     requestAnimationFrame(animate);
+    if (autoRotate) {
+      moleculeGroup.rotation.y += 0.005;
+      orbitalGroup.rotation.y += 0.005;
+      labelGroup.rotation.y += 0.005;
+      orbitalLabelGroup.rotation.y += 0.005;
+      hybridizationLabelGroup.rotation.y += 0.005;
+    }
     controls.update();
     renderer.render(scene, camera);
   }
@@ -96,15 +117,21 @@ export function initScene(container: HTMLElement): SceneContext {
     window.removeEventListener('resize', handleResize);
   };
 
+  let autoRotate = false;
+
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup,
     display: {
       atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', bgColor: '#1a1a2e',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
       viewPreset: 'all',
+      spaceFilling: false,
+      autoRotate: false,
     },
     classifications: null,
     rerender: () => {},
     teardown,
+    get autoRotate() { return autoRotate; },
+    setAutoRotate: (on: boolean) => { autoRotate = on; },
   };
 }

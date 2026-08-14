@@ -49,7 +49,10 @@ export function rebuildDisplay(ctx: SceneContext) {
     lonePair: hsvToHex(c.lonePair[0], c.lonePair[1], c.lonePair[2]),
   };
   renderAtoms(ctx.moleculeGroup, atoms, ctx.display);
-  renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
+  // In space-filling mode, hide bonds
+  if (!ctx.display.spaceFilling) {
+    renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
+  }
   renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.classifications);
 
   // Pedagogical view presets
