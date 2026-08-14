@@ -59,10 +59,68 @@ function setupExamples(ctx: SceneContext) {
     if (!ex) return;
 
     loadMolecule(ctx, ex.mol);
-    // Reset dropdown to the placeholder label after selecting
     dropdown.selectedIndex = 0;
   });
 }
+
+function setupKeyboardShortcuts(ctx: SceneContext) {
+  document.addEventListener('keydown', (e) => {
+    // Don't capture when typing in an input
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+
+    if (e.key === 'Enter') {
+      // Trigger render
+      document.getElementById('render-btn')?.click();
+    } else if (e.key === 'r' || e.key === 'R') {
+      // Reset view
+      document.getElementById('reset-view-btn')?.click();
+    } else if (e.key === 'Escape') {
+      // Close any open dialogs
+      document.getElementById('cite-dialog')?.classList.add('hidden');
+      document.getElementById('help-dialog')?.classList.add('hidden');
+    } else if (e.key >= '1' && e.key <= '9') {
+      // Jump to example by number
+      const idx = parseInt(e.key) - 1;
+      if (idx < EXAMPLES.length) {
+        loadMolecule(ctx, EXAMPLES[idx].mol);
+      }
+    }
+  });
+}
+
+function setupMeasureMode(ctx: SceneContext) {
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  const container = document.getElementById('canvas-container')!;
+
+  container.addEventListener('click', (e) => {
+    const measureState = (ctx as any)._measureState;
+    if (!measureState?.mode) return;
+
+    const rect = container.getBoundingClientRect();
+    mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, ctx.camera);
+
+    // Collect all meshes from molecule and orbital groups
+    const objects: THREE.Object3D[] = [];
+    ctx.moleculeGroup.children.forEach((c) => objects.push(c));
+    ctx.orbitalGroup.children.forEach((c) => objects.push(c));
+
+    const hits = raycaster.intersectObjects(objects, true);
+    if (hits.length > 0) {
+      const hit = hits[0].object;
+      const atomIndex = hit.userData?.atomIndex;
+      if (atomIndex !== undefined) {
+        measureState.addPoint(atomIndex);
+      }
+    }
+  });
+}
+
+// Need THREE for raycaster
+import * as THREE from 'three';
 
 async function main() {
   const scene = initScene(document.getElementById('canvas-container')!);
@@ -75,6 +133,8 @@ async function main() {
     scene.camera,
     scene.orbitalGroup,
   );
+  setupKeyboardShortcuts(scene);
+  setupMeasureMode(scene);
 }
 
 main();

@@ -43,96 +43,148 @@
             <option value="">Examples</option>
           </select>
         </div>
+
+        <!-- Persistent molecule info header -->
+        <div id="molecule-info" class="hidden">
+          <span id="mol-formula"></span>
+          <span id="mol-name"></span>
+          <span id="mol-weight"></span>
+          <span id="mol-source"></span>
+          <a id="mol-link" href="#" target="_blank" rel="noopener">View on PubChem &#8599;</a>
+        </div>
+
+        <!-- Tabbed controls panel -->
         <div id="controls-panel">
-          <div class="ctrl-section">
-            <label class="ctrl-toggle">
-              <input type="checkbox" id="ctrl-show-mol" />
-              <span>Atoms & Bonds</span>
-            </label>
-            <label class="ctrl-toggle">
-              <input type="checkbox" id="ctrl-show-orb" checked />
-              <span>Orbitals</span>
-            </label>
-            <label class="ctrl-toggle">
-              <input type="checkbox" id="ctrl-show-labels" checked />
-              <span>Atom Labels</span>
-            </label>
+          <div id="controls-tabs">
+            <button class="tab-btn active" data-tab="build">Build</button>
+            <button class="tab-btn" data-tab="style">Style</button>
+            <button class="tab-btn" data-tab="export">Export</button>
+            <button class="tab-btn" data-tab="measure">Measure</button>
           </div>
-          <div class="ctrl-section">
-            <label class="ctrl-slider">
-              <span>Atom Size</span>
-              <input type="range" id="ctrl-atom-scale" min="0.2" max="2.5" step="0.05" />
-            </label>
-            <label class="ctrl-slider">
-              <span>Bond Size</span>
-              <input type="range" id="ctrl-bond-scale" min="0.2" max="3" step="0.1" />
-            </label>
-          </div>
-          <div class="ctrl-section">
-            <span class="ctrl-label">Style</span>
-            <div class="preset-row">
-              <button class="preset-btn" data-preset="glass">Glass</button>
-              <button class="preset-btn" data-preset="glossy">Glossy</button>
-              <button class="preset-btn" data-preset="matte">Matte</button>
-              <button class="preset-btn active" data-preset="metallic">Metal</button>
+          <div id="tab-build" class="tab-content active">
+            <div class="ctrl-section">
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-mol" />
+                <span>Atoms & Bonds</span>
+              </label>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-orb" checked />
+                <span>Orbitals</span>
+              </label>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-labels" checked />
+                <span>Atom Labels</span>
+              </label>
+            </div>
+            <div class="ctrl-section">
+              <label class="ctrl-slider">
+                <span>Atom Size</span>
+                <input type="range" id="ctrl-atom-scale" min="0.2" max="2.5" step="0.05" />
+              </label>
+              <label class="ctrl-slider">
+                <span>Bond Size</span>
+                <input type="range" id="ctrl-bond-scale" min="0.2" max="3" step="0.1" />
+              </label>
+            </div>
+            <div class="ctrl-section">
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-force-fallback" />
+                <span>Force local lookup</span>
+              </label>
             </div>
           </div>
-          <div class="ctrl-section">
-            <span class="ctrl-label">Colors</span>
-            <div class="cs-row" id="cs-presets">
-              <button class="cs-btn active" data-cs="element">Element</button>
-              <button class="cs-btn" data-cs="monochrome">Mono</button>
-              <button class="cs-btn" data-cs="pedagogical">Pedagog</button>
-              <button class="cs-btn" data-cs="complementary">Compl</button>
-              <button class="cs-btn" data-cs="cool">Cool</button>
-              <button class="cs-btn" data-cs="warm">Warm</button>
-              <button class="cs-btn" data-cs="highcontrast">HC</button>
-              <button class="cs-btn" data-cs="custom">Custom</button>
+          <div id="tab-style" class="tab-content">
+            <div class="ctrl-section">
+              <span class="ctrl-label">Style</span>
+              <div class="preset-row">
+                <button class="preset-btn" data-preset="glass">Glass</button>
+                <button class="preset-btn" data-preset="glossy">Glossy</button>
+                <button class="preset-btn" data-preset="matte">Matte</button>
+                <button class="preset-btn active" data-preset="metallic">Metal</button>
+              </div>
             </div>
-            <div id="cs-custom" class="cs-custom hidden">
-              <div class="cs-channel"><span class="cs-label">σ</span><input type="color" class="cs-color" value="#4488ff" /></div>
-              <div class="cs-channel"><span class="cs-label">π</span><input type="color" class="cs-color" value="#4488ff" /></div>
-              <div class="cs-channel"><span class="cs-label">LP</span><input type="color" class="cs-color" value="#ffaa44" /></div>
+            <div class="ctrl-section">
+              <span class="ctrl-label">Colors</span>
+              <div class="cs-row" id="cs-presets">
+                <button class="cs-btn active" data-cs="element">Element</button>
+                <button class="cs-btn" data-cs="monochrome">Mono</button>
+                <button class="cs-btn" data-cs="pedagogical">Pedagog</button>
+                <button class="cs-btn" data-cs="complementary">Compl</button>
+                <button class="cs-btn" data-cs="cool">Cool</button>
+                <button class="cs-btn" data-cs="warm">Warm</button>
+                <button class="cs-btn" data-cs="highcontrast">HC</button>
+                <button class="cs-btn" data-cs="custom">Custom</button>
+              </div>
+              <div id="cs-custom" class="cs-custom hidden">
+                <div class="cs-channel"><span class="cs-label">σ</span><input type="color" class="cs-color" value="#4488ff" /></div>
+                <div class="cs-channel"><span class="cs-label">π</span><input type="color" class="cs-color" value="#4488ff" /></div>
+                <div class="cs-channel"><span class="cs-label">LP</span><input type="color" class="cs-color" value="#ffaa44" /></div>
+              </div>
+            </div>
+            <div class="ctrl-section">
+              <span class="ctrl-label">Background</span>
+              <div class="bg-row">
+                <button class="bg-btn" data-bg="#111118" style="background:#111118"></button>
+                <button class="bg-btn active" data-bg="#1a1a2e" style="background:#1a1a2e"></button>
+                <button class="bg-btn" data-bg="#2d2d2d" style="background:#2d2d2d"></button>
+                <button class="bg-btn" data-bg="#cccccc" style="background:#cccccc"></button>
+                <button class="bg-btn" data-bg="#ffffff" style="background:#ffffff"></button>
+                <input type="color" id="ctrl-bg-custom" value="#1a1a2e" title="Custom" />
+              </div>
             </div>
           </div>
-          <div class="ctrl-section">
-            <span class="ctrl-label">Background</span>
-            <div class="bg-row">
-              <button class="bg-btn" data-bg="#111118" style="background:#111118"></button>
-              <button class="bg-btn active" data-bg="#1a1a2e" style="background:#1a1a2e"></button>
-              <button class="bg-btn" data-bg="#2d2d2d" style="background:#2d2d2d"></button>
-              <button class="bg-btn" data-bg="#cccccc" style="background:#cccccc"></button>
-              <button class="bg-btn" data-bg="#ffffff" style="background:#ffffff"></button>
-              <input type="color" id="ctrl-bg-custom" value="#1a1a2e" title="Custom" />
+          <div id="tab-export" class="tab-content">
+            <div class="ctrl-section">
+              <span class="ctrl-label">Image</span>
+              <div class="export-row">
+                <button id="ctrl-export-png" class="export-btn">PNG</button>
+                <span class="export-note">2×</span>
+              </div>
+            </div>
+            <div class="ctrl-section">
+              <span class="ctrl-label">Structure</span>
+              <div class="export-row">
+                <button id="ctrl-export-sdf" class="export-btn">SDF</button>
+                <button id="ctrl-export-xyz" class="export-btn">XYZ</button>
+              </div>
+            </div>
+            <div class="ctrl-section">
+              <span class="clipboard-row">
+                <button id="ctrl-copy-smiles" class="export-btn">Copy SMILES</button>
+                <span id="clipboard-feedback" class="hidden">Copied!</span>
+              </span>
             </div>
           </div>
-          <div class="ctrl-section">
-            <span class="ctrl-label">Export</span>
-            <div class="export-row">
-              <button id="ctrl-export-png" class="export-btn">PNG</button>
-              <span class="export-note">2×</span>
+          <div id="tab-measure" class="tab-content">
+            <div class="ctrl-section">
+              <span class="ctrl-label">Measurement Mode</span>
+              <div class="export-row">
+                <button id="ctrl-measure-toggle" class="export-btn">Enable</button>
+              </div>
+              <p class="measure-hint">Click 2 atoms for distance, 3 for angle, 4 for dihedral.</p>
+              <div id="measure-points"></div>
+              <div id="measure-result"></div>
+              <button id="ctrl-measure-clear" class="export-btn measure-clear hidden">Clear</button>
             </div>
-          </div>
-          <div class="ctrl-section ctrl-debug">
-            <label class="ctrl-toggle">
-              <input type="checkbox" id="ctrl-force-fallback" />
-              <span>Force local lookup</span>
-            </label>
           </div>
         </div>
-        <div id="info-popup" class="hidden">
-          <button id="info-close">&times;</button>
-          <div id="info-source"></div>
-          <div id="info-warnings" class="hidden"></div>
-          <div id="info-name"></div>
-          <div id="info-formula"></div>
-          <div id="info-weight"></div>
-          <div id="info-cid"></div>
-          <a id="info-link" href="#" target="_blank" rel="noopener">View on PubChem &#8599;</a>
+
+        <!-- Floating action buttons -->
+        <div id="canvas-actions">
+          <button id="reset-view-btn" title="Reset view (R)">⟲</button>
+          <button id="help-btn" title="Help (?)">?</button>
         </div>
+
+        <!-- Loading overlay -->
+        <div id="loading-overlay" class="hidden">
+          <div class="loading-spinner"></div>
+          <span id="loading-text">Rendering...</span>
+        </div>
+
         <div id="tooltip" class="hidden"></div>
       </div>
     </div>
+
     <div id="cite-dialog" class="hidden">
       <div id="cite-content">
         <button id="cite-close">&times;</button>
@@ -142,6 +194,26 @@
         <button id="cite-copy" class="brand-btn">Copy to clipboard</button>
       </div>
     </div>
+
+    <div id="help-dialog" class="hidden">
+      <div id="help-content">
+        <button id="help-close">&times;</button>
+        <h3>How to use Valence</h3>
+        <ul>
+          <li><strong>Draw</strong> a molecule in the sketcher (left panel)</li>
+          <li>Click <strong>Render Molecule</strong> or press <kbd>Enter</kbd></li>
+          <li><strong>Hover</strong> orbitals to see their type (σ, π, lone pair)</li>
+          <li><strong>Rotate</strong> the view by dragging, <strong>zoom</strong> with scroll</li>
+          <li>Press <strong>R</strong> to reset the view</li>
+          <li>Try the <strong>Examples</strong> dropdown for pre-built molecules</li>
+          <li>Use the <strong>Style</strong> tab to change colors and materials</li>
+          <li>Use <strong>Measure</strong> tab to click atoms and measure distances/angles/dihedrals</li>
+          <li><strong>Export</strong> as PNG, SDF, XYZ, or copy the SMILES</li>
+        </ul>
+        <button id="help-ok" class="brand-btn">Got it</button>
+      </div>
+    </div>
+
     <script src="/jsme/jsme.nocache.js"></script>
     <script>
       function jsmeOnLoad() {

@@ -257,21 +257,122 @@ html, body {
   color: #ccc;
 }
 
-/* ── Controls Panel (right-side overlay) ── */
+/* ── Molecule Info Header (persistent) ── */
+
+#molecule-info {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: rgba(22, 22, 28, 0.92);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: #ccc;
+  font-size: 12px;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+  white-space: nowrap;
+  max-width: 80%;
+}
+
+#molecule-info.hidden { display: none; }
+
+#mol-formula {
+  font-weight: 700;
+  font-size: 14px;
+  color: #eee;
+}
+
+#mol-name {
+  color: #999;
+  font-style: italic;
+}
+
+#mol-weight {
+  color: #888;
+  font-size: 11px;
+}
+
+#mol-source {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+#mol-source.pubchem { background: rgba(68, 136, 255, 0.2); color: #4488ff; }
+#mol-source.cir { background: rgba(255, 136, 68, 0.2); color: #ff8844; }
+#mol-source.fallback { background: rgba(255, 136, 68, 0.2); color: #ff8844; }
+#mol-source.local { background: rgba(100, 200, 100, 0.2); color: #66cc66; }
+
+#mol-link {
+  color: #4488ff;
+  text-decoration: none;
+  font-size: 11px;
+}
+#mol-link:hover { text-decoration: underline; }
+
+/* ── Tabbed Controls Panel ── */
 
 #controls-panel {
   position: absolute;
   top: 12px;
   right: 12px;
-  width: 180px;
-  background: rgba(30, 30, 35, 0.88);
+  width: 190px;
+  background: rgba(30, 30, 35, 0.92);
   border-radius: 8px;
-  padding: 12px;
+  padding: 0;
   color: #ddd;
   font-size: 12px;
   user-select: none;
   backdrop-filter: blur(6px);
   z-index: 10;
+  overflow: hidden;
+}
+
+#controls-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 8px 4px;
+  border: none;
+  background: transparent;
+  color: #888;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tab-btn:hover {
+  color: #bbb;
+  background: rgba(255,255,255,0.03);
+}
+
+.tab-btn.active {
+  color: #4488ff;
+  background: rgba(68, 136, 255, 0.08);
+  border-bottom: 2px solid #4488ff;
+}
+
+.tab-content {
+  display: none;
+  padding: 12px;
+}
+
+.tab-content.active {
+  display: block;
 }
 
 .ctrl-section {
@@ -284,19 +385,6 @@ html, body {
   margin-bottom: 0;
   padding-bottom: 0;
   border-bottom: none;
-}
-
-/* The debug/offline toggle — dashed box to signal it is a power-user
-   switch, not part of the normal rendering controls. */
-.ctrl-debug {
-  margin-bottom: 0;
-  padding: 6px 8px;
-  border: 1px dashed rgba(255,255,255,0.15);
-  border-radius: 6px;
-}
-.ctrl-debug .ctrl-toggle span {
-  color: #888;
-  font-size: 11px;
 }
 
 .ctrl-label {
@@ -436,98 +524,119 @@ html, body {
   color: #666;
 }
 
-/* ── Info Popup ── */
+.clipboard-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
 
-#info-popup {
+#clipboard-feedback {
+  font-size: 10px;
+  color: #4488ff;
+}
+
+#clipboard-feedback.hidden { display: none; }
+
+/* ── Measure ── */
+
+.measure-hint {
+  font-size: 10px;
+  color: #888;
+  margin-top: 6px;
+  line-height: 1.4;
+}
+
+#measure-points {
+  margin-top: 6px;
+  font-size: 10px;
+  color: #aaa;
+  line-height: 1.5;
+}
+
+#measure-result {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #eee;
+  font-weight: 600;
+}
+
+.measure-clear {
+  margin-top: 8px;
+  padding: 4px 0;
+}
+
+/* ── Floating Action Buttons ── */
+
+#canvas-actions {
   position: absolute;
   bottom: 12px;
   right: 12px;
-  background: rgba(22, 22, 28, 0.94);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  padding: 14px 18px;
-  min-width: 200px;
-  max-width: 280px;
-  color: #ccc;
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   z-index: 10;
-  backdrop-filter: blur(8px);
-  line-height: 1.6;
-  transition: opacity 0.2s, transform 0.2s;
 }
 
-#info-popup.hidden {
-  opacity: 0;
-  transform: translateY(8px);
-  pointer-events: none;
-}
-
-#info-close {
-  position: absolute;
-  top: 6px;
-  right: 10px;
-  background: none;
+#canvas-actions button {
+  width: 32px;
+  height: 32px;
   border: none;
-  color: #666;
-  font-size: 18px;
+  border-radius: 6px;
+  background: rgba(30, 30, 35, 0.9);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #aaa;
+  font-size: 16px;
   cursor: pointer;
-  padding: 0;
-  line-height: 1;
-}
-#info-close:hover { color: #fff; }
-
-#info-source {
-  font-weight: 700;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  margin-bottom: 4px;
-}
-#info-source.pubchem { color: #4488ff; }
-#info-source.fallback { color: #ff8844; }
-#info-source.warning { color: #ff4444; }
-
-/* Generic-parameter warnings (the local MMFF94 path) — amber like
-   the source fallback, but a dedicated line under the source. */
-#info-warnings {
-  color: #ffb347;
-  font-size: 12px;
-  line-height: 1.35;
-  margin: 4px 0;
-  white-space: pre-line;
+  transition: all 0.12s;
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-#info-name {
-  font-weight: 600;
-  font-size: 15px;
-  color: #eee;
-  margin-bottom: 2px;
-}
-
-#info-formula {
-  font-size: 13px;
-  color: #ddd;
-}
-
-#info-weight {
-  font-size: 11px;
-  color: #888;
-}
-
-#info-cid {
-  font-size: 10px;
-  color: #666;
-  margin-top: 1px;
-}
-
-#info-link {
-  display: inline-block;
-  margin-top: 6px;
+#canvas-actions button:hover {
   color: #4488ff;
-  font-size: 11px;
-  text-decoration: none;
+  border-color: #4488ff;
 }
-#info-link:hover { text-decoration: underline; }
+
+/* ── Loading Overlay ── */
+
+#loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(10, 10, 15, 0.7);
+  z-index: 100;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.2s;
+}
+
+#loading-overlay.hidden {
+  display: none;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: #4488ff;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+#loading-text {
+  color: #ccc;
+  font-size: 14px;
+}
 
 /* ── Cite Dialog ── */
 
@@ -597,6 +706,78 @@ html, body {
 }
 #cite-close:hover { color: #333; }
 
+/* ── Help Dialog ── */
+
+#help-dialog {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.45);
+  z-index: 100;
+  transition: opacity 0.2s;
+}
+
+#help-dialog.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#help-content {
+  background: #fff;
+  border-radius: 10px;
+  padding: 24px 28px;
+  max-width: 420px;
+  position: relative;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+}
+
+#help-content h3 {
+  font-size: 15px;
+  margin-bottom: 12px;
+  color: #222;
+}
+
+#help-content ul {
+  list-style: none;
+  padding: 0;
+}
+
+#help-content li {
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+
+#help-content kbd {
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-family: monospace;
+}
+
+#help-ok {
+  display: block;
+  margin-left: auto;
+  margin-top: 12px;
+}
+
+#help-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #888;
+  cursor: pointer;
+}
+#help-close:hover { color: #333; }
+
 /* ── Tooltip ── */
 
 #tooltip {
@@ -617,4 +798,3 @@ html, body {
 #tooltip.hidden {
   opacity: 0;
 }
-
