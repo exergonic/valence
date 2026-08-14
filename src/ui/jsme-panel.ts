@@ -48,7 +48,7 @@ function updateMoleculeInfo(info: PubChemInfo) {
   }
 
   // Show warnings if present
-  const warningsEl = document.getElementById('info-warnings')!;
+  const warningsEl = document.getElementById('mol-warnings')!;
   warningsEl.classList.toggle('hidden', !(info.warnings && info.warnings.length > 0));
   warningsEl.textContent = info.warnings?.join('\n') ?? '';
 }
