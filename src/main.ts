@@ -59,7 +59,27 @@ function setupExamples(ctx: SceneContext) {
     if (!ex) return;
 
     loadMolecule(ctx, ex.mol);
-    dropdown.selectedIndex = 0;
+
+    // Populate the molecule info header for examples
+    const molecule = parseMolBlock(ex.mol);
+    const counts: Record<string, number> = {};
+    for (const a of molecule.atoms) counts[a.element] = (counts[a.element] || 0) + 1;
+    const rest = Object.keys(counts).filter((e) => e !== 'C' && e !== 'H').sort();
+    let formula = '';
+    if (counts['C']) formula += `C${counts['C'] > 1 ? counts['C'] : ''}`;
+    if (counts['H']) formula += `H${counts['H'] > 1 ? counts['H'] : ''}`;
+    for (const el of rest) formula += `${el}${counts[el] > 1 ? counts[el] : ''}`;
+
+    const container = document.getElementById('molecule-info')!;
+    container.classList.remove('hidden');
+    document.getElementById('mol-formula')!.textContent = formula;
+    document.getElementById('mol-name')!.textContent = ` · ${ex.name}`;
+    document.getElementById('mol-weight')!.textContent = '';
+    const sourceEl = document.getElementById('mol-source')!;
+    sourceEl.textContent = 'Example';
+    sourceEl.className = 'pubchem';
+    document.getElementById('mol-link')!.style.display = 'none';
+    document.getElementById('mol-warnings')!.classList.add('hidden');
   });
 }
 
