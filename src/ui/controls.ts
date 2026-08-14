@@ -42,6 +42,13 @@ export function setupControls(ctx: SceneContext) {
     ctx.orbitalGroup.visible = orbToggle.checked;
   });
 
+  // Atom Labels (C, N, O element symbols)
+  const labelsToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-labels')!;
+  ctx.labelGroup.visible = labelsToggle.checked;
+  labelsToggle.addEventListener('change', () => {
+    ctx.labelGroup.visible = labelsToggle.checked;
+  });
+
   // Atom Scale — drives the ball-and-stick spheres and the bond cylinders.
   // Orbital lobes intentionally do NOT scale here: their size is the
   // covalent radius (orbits.ts atomScale = getCovalentRadius + 0.2),
