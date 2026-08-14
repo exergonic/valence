@@ -10,7 +10,7 @@ export function renderAtoms(group: THREE.Group, atoms: Atom[], display?: Display
     const atom = atoms[i];
     const color = getElementColor(atom.element);
     const radius = spaceFilling
-      ? getVdwRadius(atom.element) * 0.5  // scale down slightly so molecules don't look huge
+      ? getVdwRadius(atom.element)
       : getVisualRadius(atom.element) * scale;
     const geo = new THREE.SphereGeometry(radius, 24, 24);
     const mat = new THREE.MeshPhongMaterial({ color });
