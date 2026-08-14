@@ -93,4 +93,12 @@ describe('assignHybridization (topology-first)', () => {
     const result = assignHybridization('F', 1);
     expect(result.hybridization).toBe('sp3');
   });
+
+  it('should return s for hydrogen (1 σ bond, 0 lone pairs)', () => {
+    // Hydrogen has 1 valence electron, 1 σ bond, 0 lone pairs → steric 1 → pure s orbital.
+    // Before the fix, the Math.max(2, ...) clamp incorrectly gave H steric 2 (sp) and 1 "lone pair".
+    const result = assignHybridization('H', 1);
+    expect(result.hybridization).toBe('s');
+    expect(result.geometry).toBe('linear');
+  });
 });

@@ -1,6 +1,6 @@
 import { VALENCE_ELECTRONS } from './valence';
 
-export type Hybridization = 'sp' | 'sp2' | 'sp3' | 'sp3d' | 'sp3d2' | 'p';
+export type Hybridization = 's' | 'sp' | 'sp2' | 'sp3' | 'sp3d' | 'sp3d2' | 'p';
 
 export type Geometry = 'linear' | 'trigonal_planar' | 'tetrahedral' | 'trigonal_bipyramidal' | 'octahedral';
 
@@ -10,11 +10,13 @@ export interface HybridizationResult {
 }
 
 // VSEPR: steric number = (σ bonds) + (lone pairs).
-// sp = 2, sp² = 3, sp³ = 4, sp³d = 5, sp³d² = 6.
+// 1 = s (hydrogen, no hybridization), 2 = sp, 3 = sp², 4 = sp³, 5 = sp³d, 6 = sp³d².
 export function assignBySteric(steric: number): HybridizationResult {
   switch (steric) {
+    case 1: return { hybridization: 's', geometry: 'linear' };
     case 2: return { hybridization: 'sp', geometry: 'linear' };
     case 3: return { hybridization: 'sp2', geometry: 'trigonal_planar' };
+    case 4: return { hybridization: 'sp3', geometry: 'tetrahedral' };
     case 5: return { hybridization: 'sp3d', geometry: 'trigonal_bipyramidal' };
     case 6: return { hybridization: 'sp3d2', geometry: 'octahedral' };
     default: return { hybridization: 'sp3', geometry: 'tetrahedral' };
@@ -51,11 +53,9 @@ export function assignHybridization(
   // (1.5 → 1 lone pair, sp²) reading one short of its true sp³.
   const lonePairs = Math.floor(Math.max(0, (valence - sigmaBonds - piCount) / 2));
 
-  // Steric number = σ bonds + lone pairs. The clamp covers the edges:
-  // hydrogen (1 domain) reads as sp, and hypervalent atoms read as
-  // sp³d (5 domains — PCl₅) or sp³d² (6 domains — SF₆). The floor()
-  // lone-pair count keeps hypervalent atoms honest: PCl₅'s P has
-  // (5 − 5)/2 = 0 lone pairs, so its 5 domains are all σ bonds.
-  const steric = Math.min(6, Math.max(2, sigmaBonds + lonePairs));
+  // Steric number = σ bonds + lone pairs. Hydrogen (1 σ bond, 0 lone
+  // pairs) reads as 1 → pure s orbital. The upper clamp keeps hypervalent
+  // atoms honest: PCl₅ (5 σ bonds, 0 lone pairs) reads as sp³d, SF₆ as sp³d².
+  const steric = Math.min(6, sigmaBonds + lonePairs);
   return assignBySteric(steric);
 }
