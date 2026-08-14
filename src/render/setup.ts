@@ -58,7 +58,6 @@ export function initScene(container: HTMLElement): SceneContext {
   controls.zoomSpeed = 1.2;
   controls.panSpeed = 0.8;
 
-  let autoRotate = false;
   // Auto-rotate stops on first user interaction
   controls.addEventListener('start', () => {
     if (autoRotate) {
@@ -116,8 +115,6 @@ export function initScene(container: HTMLElement): SceneContext {
   const teardown = () => {
     window.removeEventListener('resize', handleResize);
   };
-
-  let autoRotate = false;
 
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup,
