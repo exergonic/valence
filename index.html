@@ -72,20 +72,13 @@
                 <input type="checkbox" id="ctrl-show-orb" checked />
                 <span>Orbitals</span>
               </label>
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-show-labels" checked />
-                <span>Atom Labels</span>
-              </label>
-            </div>
-            <div class="ctrl-section">
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-show-orbital-labels" />
-                <span>Orbital Labels</span>
-              </label>
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-show-hyb-labels" />
-                <span>Hybridization Labels</span>
-              </label>
+              <span class="ctrl-label">Labels</span>
+              <select id="ctrl-label-mode" class="label-mode-select">
+                <option value="atom">Element Symbols</option>
+                <option value="orbital">Orbital Types (σ/π/lp)</option>
+                <option value="hybrid">Hybridization (sp², sp³)</option>
+                <option value="off">Off</option>
+              </select>
             </div>
             <div class="ctrl-section">
               <label class="ctrl-slider">

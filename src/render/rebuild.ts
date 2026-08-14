@@ -58,23 +58,36 @@ export function rebuildDisplay(ctx: SceneContext) {
     filterOrbitalsByPreset(ctx.orbitalGroup, preset);
   }
 
-  // Hybridization labels
-  if (ctx.display.showHybridizationLabels && ctx.classifications) {
-    renderHybridizationLabels(ctx.hybridizationLabelGroup, ctx.currentMolecule, ctx.classifications);
-    ctx.hybridizationLabelGroup.visible = true;
-  } else {
+  // Labels — one dropdown controls which (if any) label layer is visible
+  const labelMode = ctx.display.labelMode;
+  if (labelMode === 'atom') {
+    // Element symbol labels (C, N, O...) — rendered into labelGroup
+    renderLabels(ctx.labelGroup, ctx.currentMolecule);
+    ctx.labelGroup.visible = true;
+    ctx.orbitalLabelGroup.visible = false;
     ctx.hybridizationLabelGroup.visible = false;
-  }
-
-  // Orbital labels
-  if (ctx.display.showOrbitalLabels && ctx.classifications) {
+  } else if (labelMode === 'orbital' && ctx.classifications) {
+    // σ/π/lp orbital labels
     renderOrbitalLabels(ctx.orbitalLabelGroup, ctx.currentMolecule, ctx.classifications);
     ctx.orbitalLabelGroup.visible = true;
-  } else {
+    ctx.labelGroup.visible = false;
+    ctx.hybridizationLabelGroup.visible = false;
+    document.getElementById('orbital-legend')!.classList.remove('hidden');
+  } else if (labelMode === 'hybrid' && ctx.classifications) {
+    // Hybridization labels (sp², sp³)
+    renderHybridizationLabels(ctx.hybridizationLabelGroup, ctx.currentMolecule, ctx.classifications);
+    ctx.hybridizationLabelGroup.visible = true;
+    ctx.labelGroup.visible = false;
     ctx.orbitalLabelGroup.visible = false;
+  } else {
+    // Off
+    ctx.labelGroup.visible = false;
+    ctx.orbitalLabelGroup.visible = false;
+    ctx.hybridizationLabelGroup.visible = false;
   }
-
-  renderLabels(ctx.labelGroup, ctx.currentMolecule);
+  if (labelMode !== 'orbital') {
+    document.getElementById('orbital-legend')!.classList.add('hidden');
+  }
 }
 
 // Show only orbitals matching the active preset.

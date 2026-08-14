@@ -42,11 +42,11 @@ export function setupControls(ctx: SceneContext) {
     ctx.orbitalGroup.visible = orbToggle.checked;
   });
 
-  // Atom Labels (C, N, O element symbols)
-  const labelsToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-labels')!;
-  ctx.labelGroup.visible = labelsToggle.checked;
-  labelsToggle.addEventListener('change', () => {
-    ctx.labelGroup.visible = labelsToggle.checked;
+  // Labels dropdown — one control for all label modes
+  const labelModeSelect = panel.querySelector<HTMLSelectElement>('#ctrl-label-mode')!;
+  labelModeSelect.addEventListener('change', () => {
+    ctx.display.labelMode = labelModeSelect.value as 'atom' | 'orbital' | 'hybrid' | 'off';
+    ctx.rerender();
   });
 
   // Atom Scale — drives the ball-and-stick spheres and the bond cylinders.
@@ -72,21 +72,6 @@ export function setupControls(ctx: SceneContext) {
   const forceLocal = panel.querySelector<HTMLInputElement>('#ctrl-force-fallback')!;
   forceLocal.addEventListener('change', () => {
     // The render button reads this on click; no immediate action needed.
-  });
-
-  // Orbital labels toggle
-  const orbitalLabelsToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-orbital-labels')!;
-  orbitalLabelsToggle.addEventListener('change', () => {
-    ctx.display.showOrbitalLabels = orbitalLabelsToggle.checked;
-    document.getElementById('orbital-legend')!.classList.toggle('hidden', !orbitalLabelsToggle.checked);
-    ctx.rerender();
-  });
-
-  // Hybridization labels toggle
-  const hybLabelsToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-hyb-labels')!;
-  hybLabelsToggle.addEventListener('change', () => {
-    ctx.display.showHybridizationLabels = hybLabelsToggle.checked;
-    ctx.rerender();
   });
 
   // ── Style tab ──

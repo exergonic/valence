@@ -15,12 +15,10 @@ export interface ColorSettings {
 export interface DisplaySettings {
   atomScale: number;
   bondScale: number;
-  showLabels: boolean;
+  labelMode: 'atom' | 'orbital' | 'hybrid' | 'off';
   orbitalPreset: 'glass' | 'glossy' | 'matte' | 'metallic';
   bgColor: string;
   colors: ColorSettings;
-  showOrbitalLabels: boolean;
-  showHybridizationLabels: boolean;
   viewPreset: 'all' | 'sigma-only' | 'pi-only' | 'lone-pairs-only';
 }
 
@@ -101,9 +99,9 @@ export function initScene(container: HTMLElement): SceneContext {
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup,
     display: {
-      atomScale: 1, bondScale: 1, showLabels: true, orbitalPreset: 'metallic', bgColor: '#1a1a2e',
+      atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', bgColor: '#1a1a2e',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
-      showOrbitalLabels: false, showHybridizationLabels: false, viewPreset: 'all',
+      viewPreset: 'all',
     },
     classifications: null,
     rerender: () => {},
