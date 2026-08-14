@@ -5,14 +5,19 @@ import { renderBonds } from './bonds';
 import { renderOrbitals } from './orbitals';
 import { renderLabels } from './labels';
 import { hsvToHex } from './color-schemes';
+import { classifyMolecule } from '../chem/classify';
 
-// Remove every mesh from a group, disposing GPU resources.  The molecule,
-// orbital, and label groups are rebuilt wholesale whenever a molecule loads
-// or a display setting changes.
+// Remove every mesh from a group (recursively into nested groups),
+// disposing GPU resources. The molecule, orbital, and label groups are
+// rebuilt wholesale whenever a molecule loads or a display setting
+// changes.
 function clearGroup(g: THREE.Group) {
   while (g.children.length > 0) {
     const child = g.children[0];
     g.remove(child);
+    if (child instanceof THREE.Group) {
+      clearGroup(child);
+    }
     if (child instanceof THREE.Mesh) {
       child.geometry.dispose();
       if (Array.isArray(child.material)) {
@@ -25,7 +30,7 @@ function clearGroup(g: THREE.Group) {
 }
 
 // Rebuild all molecule meshes from ctx.currentMolecule without touching the
-// camera.  Used for display settings (atom size, orbital style, colors).
+// camera. Used for display settings (atom size, orbital style, colors).
 export function rebuildDisplay(ctx: SceneContext) {
   if (!ctx.currentMolecule) return;
   clearGroup(ctx.moleculeGroup);
@@ -42,13 +47,16 @@ export function rebuildDisplay(ctx: SceneContext) {
   };
   renderAtoms(ctx.moleculeGroup, atoms, ctx.display);
   renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
-  renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme);
+  renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.classifications);
   renderLabels(ctx.labelGroup, ctx.currentMolecule);
   ctx.labelGroup.visible = ctx.display.showLabels;
 }
 
 // Full build: rebuildDisplay plus frame the camera on the new molecule.
 export function buildScene(ctx: SceneContext) {
+  // Cache the per-molecule classification here so renderOrbitals can
+  // read it instead of recomputing on every display-setting change.
+  ctx.classifications = ctx.currentMolecule ? classifyMolecule(ctx.currentMolecule) : null;
   rebuildDisplay(ctx);
 
   const center = new THREE.Vector3();

@@ -66,7 +66,7 @@ function setupExamples(ctx: SceneContext) {
 
 async function main() {
   const scene = initScene(document.getElementById('canvas-container')!);
-  mountJsmePanel(document.getElementById('jsme-panel')!, scene);
+  mountJsmePanel(scene);
   setupControls(scene);
   setupSplitter();
   setupExamples(scene);

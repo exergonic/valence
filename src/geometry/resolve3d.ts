@@ -58,6 +58,7 @@ export async function fetch3D(smiles: string): Promise<{ sdf: string; info: PubC
     const resp = await fetch(`${PUBCHEM_URL}/${encoded}/SDF?record_type=3d`);
     if (resp.ok) {
       const text = await resp.text();
+      // parseMolBlock handles both V2000 and V3000 (converting the latter).
       if (text.includes('V2000') || text.includes('V3000')) {
         const meta = parsePubChemMeta(text);
         return { sdf: text, info: { source: 'pubchem', ...meta } };

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
 import type { Molecule } from '../mol-parser';
+import type { AtomClassification } from '../chem/classify';
 
 export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complementary' | 'cool' | 'warm' | 'highcontrast' | 'custom';
 
@@ -30,7 +31,11 @@ export interface SceneContext {
   labelGroup: THREE.Group;
   display: DisplaySettings;
   currentMolecule?: Molecule;
+  /** Cached per-molecule classification (set by buildScene; read by renderOrbitals). */
+  classifications: AtomClassification[] | null;
   rerender: () => void;
+  /** Remove the window resize listener — call before re-initializing the scene (HMR/Tauri reload). */
+  teardown: () => void;
 }
 
 export function initScene(container: HTMLElement): SceneContext {
@@ -80,12 +85,18 @@ export function initScene(container: HTMLElement): SceneContext {
   };
   window.addEventListener('resize', handleResize);
 
+  const teardown = () => {
+    window.removeEventListener('resize', handleResize);
+  };
+
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup,
     display: {
       atomScale: 1, bondScale: 1, showLabels: true, orbitalPreset: 'metallic', bgColor: '#1a1a2e',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
     },
+    classifications: null,
     rerender: () => {},  // placeholder — mountJsmePanel installs the real rebuild
+    teardown,
   };
 }

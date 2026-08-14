@@ -4,7 +4,15 @@ import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 
 export function setupControls(ctx: SceneContext) {
   const panel = document.getElementById('controls-panel')!;
-  const rerender = () => setTimeout(() => ctx.rerender(), 10);
+  let rafScheduled = false;
+  const rerender = () => {
+    if (rafScheduled) return;
+    rafScheduled = true;
+    requestAnimationFrame(() => {
+      rafScheduled = false;
+      ctx.rerender();
+    });
+  };
 
   // Show Atoms & Bonds
   const molToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-mol')!;
@@ -19,14 +27,19 @@ export function setupControls(ctx: SceneContext) {
     ctx.orbitalGroup.visible = orbToggle.checked;
   });
 
-  // Atom Scale
+  // Atom Scale — drives the ball-and-stick spheres and the bond cylinders.
+  // Orbital lobes intentionally do NOT scale here: their size is the
+  // covalent radius (orbits.ts atomScale = getCovalentRadius + 0.2),
+  // which sets the lobe length so lobes overlap bonds at the right
+  // atomic centers. Making them track this slider would decouple the
+  // lobes from the bond endpoints.
   const atomScale = panel.querySelector<HTMLInputElement>('#ctrl-atom-scale')!;
   atomScale.addEventListener('input', () => {
     ctx.display.atomScale = parseFloat(atomScale.value);
     rerender();
   });
 
-  // Bond Scale
+  // Bond Scale — drives only the cylinders; atoms and lobes are independent.
   const bondScale = panel.querySelector<HTMLInputElement>('#ctrl-bond-scale')!;
   bondScale.addEventListener('input', () => {
     ctx.display.bondScale = parseFloat(bondScale.value);

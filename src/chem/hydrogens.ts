@@ -1,4 +1,6 @@
 import type { Molecule } from '../mol-parser';
+import { idealHybridVectors } from '../utils/ideal-vectors';
+import { vecNormalize, crossProduct, rotateRodrigues } from '../utils/vec3';
 
 // σ bonds an element usually forms in neutral compounds (octet rule) —
 // what's left over after counting bond orders gets filled with hydrogens.
@@ -19,6 +21,19 @@ const BOND_VALENCE: Record<string, number> = {
 
 const BOND_LENGTH = 1.0;
 
+/**
+ * Place missing hydrogens using ideal VSEPR geometry.
+ *
+ * For tetrahedral centers (4 σ bonds total), the four ideal tetrahedral
+ * vertices are rotated so the existing bonds align with their matching
+ * vertices; the remaining vertices point to the H positions. This gives
+ * a proper 3D starting geometry instead of the old planar 120° fallback.
+ *
+ * For other coordination numbers (linear, trigonal, etc.), the same
+ * ideal-vector matching applies. When the existing bonds are degenerate
+ * (collinear), the rotation is skipped and H's land on whatever ideal
+ * vertices remain.
+ */
 export function fillMissingHydrogens(molecule: Molecule): Molecule {
   const atoms = [...molecule.atoms];
   const bonds = [...molecule.bonds];
@@ -39,50 +54,69 @@ export function fillMissingHydrogens(molecule: Molecule): Molecule {
     const missing = Math.max(0, valence - bondOrderSum[i]);
     if (missing === 0) continue;
 
-    const neighborAngles: number[] = [];
+    // Existing bond directions from this atom.
+    const existingDirs: [number, number, number][] = [];
     for (const bond of bonds) {
       const ni = bond.atom1Index === i ? bond.atom2Index :
                  bond.atom2Index === i ? bond.atom1Index : -1;
       if (ni >= 0) {
         const n = atoms[ni];
-        neighborAngles.push(Math.atan2(n.y - atom.y, n.x - atom.x));
+        existingDirs.push([n.x - atom.x, n.y - atom.y, n.z - atom.z]);
       }
     }
 
-    // 2D fallback: project ideal VSEPR angles onto the xy-plane.
-    // Linear (coordination 2) → opposite direction (180°).
-    // Trigonal (coordination 3) → 120° evenly spaced.
-    // Tetrahedral (coordination 4) → approximated as 120° offsets in
-    // the plane because the true 109.5° cones have uneven z-components
-    // that require full 3D placement (handled by the embedder instead).
-    const totalCoordination = neighborAngles.length + missing;
-    for (let j = 0; j < missing; j++) {
-      let angle: number;
+    const totalCoordination = existingDirs.length + missing;
+    const idealDirs = idealHybridVectors(totalCoordination);
 
-      if (neighborAngles.length > 0) {
-        const avgAngle = neighborAngles.reduce((s, a) => s + a, 0) / neighborAngles.length;
-
-        if (totalCoordination === 2) {
-          angle = avgAngle + Math.PI;
-        } else if (totalCoordination === 3) {
-          const offset = (2 * Math.PI / 3) * (j + 1);
-          angle = avgAngle + offset;
-        } else {
-          const offset = (2 * Math.PI / 3) * (j - 1);
-          angle = avgAngle + Math.PI + offset;
+    // Match each existing bond to its closest ideal vertex, then use
+    // the remaining vertices for H placement.
+    const used = new Set<number>();
+    for (const dir of existingDirs) {
+      const d = vecNormalize(dir);
+      let bestDot = -Infinity;
+      let bestIdx = -1;
+      for (let k = 0; k < idealDirs.length; k++) {
+        if (used.has(k)) continue;
+        const dot = d[0] * idealDirs[k][0] + d[1] * idealDirs[k][1] + d[2] * idealDirs[k][2];
+        if (dot > bestDot) {
+          bestDot = dot;
+          bestIdx = k;
         }
-      } else {
-        angle = (2 * Math.PI * j) / missing;
       }
+      if (bestIdx >= 0) used.add(bestIdx);
+    }
 
-      const hx = atom.x + BOND_LENGTH * Math.cos(angle);
-      const hy = atom.y + BOND_LENGTH * Math.sin(angle);
+    const hVerts = idealDirs.filter((_, k) => !used.has(k));
+
+    // If the existing bonds span a non-degenerate axis, rotate the ideal
+    // frame so the first existing bond aligns with its matched vertex.
+    // This orients the H's in 3D rather than leaving them in the xy-plane.
+    let rotationAxis: [number, number, number] | null = null;
+    let cosA = 1, sinA = 0;
+    if (existingDirs.length > 0 && hVerts.length > 0) {
+      const d = vecNormalize(existingDirs[0]);
+      const target = idealDirs[used.size > 0 ? [...used][0] : 0];
+      const dot = d[0] * target[0] + d[1] * target[1] + d[2] * target[2];
+      if (dot < 0.999 && dot > -0.999) {
+        rotationAxis = vecNormalize(crossProduct(target, d));
+        cosA = dot;
+        sinA = Math.sqrt(1 - dot * dot);
+      }
+    }
+
+    for (let j = 0; j < missing; j++) {
+      let v = hVerts[j % hVerts.length];
+      if (rotationAxis && (existingDirs.length > 0)) {
+        v = rotateRodrigues(v, rotationAxis, cosA, sinA);
+      }
+      const len = Math.hypot(v[0], v[1], v[2]) || 1;
+      const ux = v[0] / len, uy = v[1] / len, uz = v[2] / len;
 
       atoms.push({
         element: 'H',
-        x: hx,
-        y: hy,
-        z: atom.z,
+        x: atom.x + BOND_LENGTH * ux,
+        y: atom.y + BOND_LENGTH * uy,
+        z: atom.z + BOND_LENGTH * uz,
       });
 
       bonds.push({

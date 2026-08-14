@@ -1,6 +1,18 @@
 import type { Atom, Bond, Molecule } from './types';
+import { convertV3000ToV2000 } from './v3000-convert';
 
 export function parseMolBlock(molBlock: string): Molecule {
+  // V3000 SDFs are not handled by the V2000 parser below — convert
+  // them up front so every caller (examples, PubChem, CIR) gets a
+  // uniform format.
+  if (molBlock.includes('V3000')) {
+    const converted = convertV3000ToV2000(molBlock);
+    if (converted) return parseV2000(converted);
+  }
+  return parseV2000(molBlock);
+}
+
+function parseV2000(molBlock: string): Molecule {
   const lines = molBlock.split('\n');
 
   // The counts line is the one carrying the V2000 marker. Its index

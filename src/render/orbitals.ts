@@ -3,7 +3,7 @@ import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
 import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
 import { getElementColor, getCovalentRadius } from './chem-data';
-import { classifyMolecule } from '../chem/classify';
+import type { AtomClassification } from '../chem/classify';
 import { getLonePairDirections } from '../utils/lone-pairs';
 import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
 
@@ -12,8 +12,9 @@ export function renderOrbitals(
   molecule: Molecule,
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
   colorScheme: { scheme: ColorScheme; sigma: number; pi: number; lonePair: number } = { scheme: 'element', sigma: 0xcccccc, pi: 0x4488ff, lonePair: 0xffaa44 },
+  classifications: AtomClassification[] | null = null,
 ): void {
-  const classifications = classifyMolecule(molecule);
+  const cached = classifications ?? [];
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
   for (const bond of molecule.bonds) {
@@ -24,7 +25,7 @@ export function renderOrbitals(
   for (let i = 0; i < n; i++) {
     const atom = molecule.atoms[i];
     const atomPos: [number, number, number] = [atom.x, atom.y, atom.z];
-    const info = classifications[i];
+    const info = cached[i];
 
     // Hydrogen: 1s sphere in distinct color
     if (atom.element === 'H') {
@@ -85,7 +86,7 @@ export function renderOrbitals(
         // No conjugating neighbor — pick arbitrary perpendiculars (e.g. ethyne).
         const perp = vecNormalize(findPerpendicular(axis));
         const perp2 = vecNormalize(crossProduct(axis, perp));
-        addPiOrbital(group, atomPos, [perp, perp2], colorScheme.pi, undefined, undefined, i, atom.element);
+        addPiOrbital(group, atomPos, [perp, perp2], colorScheme.pi, preset, atomScale, i, atom.element);
       }
     } else if (info.piDirection) {
       addPiOrbital(group, atomPos, [info.piDirection], colorScheme.pi, preset, atomScale, i, atom.element);

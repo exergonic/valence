@@ -70,7 +70,7 @@ function setStatus(info: PubChemInfo) {
   }
 }
 
-export function mountJsmePanel(_container: HTMLElement, ctx: SceneContext) {
+export function mountJsmePanel(ctx: SceneContext) {
   const renderBtn = document.getElementById('render-btn')! as HTMLButtonElement;
   ctx.rerender = () => rebuildDisplay(ctx);
 

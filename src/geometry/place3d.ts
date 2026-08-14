@@ -1,90 +1,28 @@
 import type { Molecule } from '../mol-parser';
 import { optimizeTorsions } from './torsions';
+import { vecDot, crossProduct, vecNormalize, rotateRodrigues } from '../utils/vec3';
+import { idealHybridVectors } from '../utils/ideal-vectors';
 
 const BOND_LENGTH = 1.0;
 
-const TETRA_VECTORS: [number, number, number][] = [
-  [0, 0, 1],
-  [2 * Math.SQRT2 / 3, 0, -1 / 3],
-  [-Math.SQRT2 / 3, Math.sqrt(6) / 3, -1 / 3],
-  [-Math.SQRT2 / 3, -Math.sqrt(6) / 3, -1 / 3],
-];
 
-const TRIG_VECTORS: [number, number, number][] = [
-  [1, 0, 0],
-  [-0.5, Math.sqrt(3) / 2, 0],
-  [-0.5, -Math.sqrt(3) / 2, 0],
-];
-
-const LINEAR_VECTORS: [number, number, number][] = [
-  [1, 0, 0],
-  [-1, 0, 0],
-];
-
-// Trigonal bipyramidal (sp³d): two axial poles + an equatorial
-// trigonal plane. 5-coordinate centers (PCl5, the phosphoranes) fell
-// through to TETRA before, wrapping the 5th substituent onto the 1st
-// — two atoms exactly coincident, which the MMFF refinement then
-// turned into NaN coordinates (the 2026-08-12 PCl5 report).
-const TRIG_BIPYRAMIDAL_VECTORS: [number, number, number][] = [
-  [0, 0, 1],
-  [0, 0, -1],
-  [1, 0, 0],
-  [-0.5, Math.sqrt(3) / 2, 0],
-  [-0.5, -Math.sqrt(3) / 2, 0],
-];
-
-// Octahedral (sp³d²): ±x ±y ±z.
-const OCTAHEDRAL_VECTORS: [number, number, number][] = [
-  [1, 0, 0],
-  [-1, 0, 0],
-  [0, 1, 0],
-  [0, -1, 0],
-  [0, 0, 1],
-  [0, 0, -1],
-];
 
 function alignVectors(from: [number, number, number], to: [number, number, number]): (v: [number, number, number]) => [number, number, number] {
-  const dot = from[0] * to[0] + from[1] * to[1] + from[2] * to[2];
+  const dot = vecDot(from, to);
   if (Math.abs(dot - 1) < 1e-6) return (v) => v;
   if (Math.abs(dot + 1) < 1e-6) return (v) => [-v[0], -v[1], -v[2]];
 
-  const axis: [number, number, number] = [
-    from[1] * to[2] - from[2] * to[1],
-    from[2] * to[0] - from[0] * to[2],
-    from[0] * to[1] - from[1] * to[0],
-  ];
-  const len = Math.sqrt(axis[0] ** 2 + axis[1] ** 2 + axis[2] ** 2);
-  const naxis: [number, number, number] = [axis[0] / len, axis[1] / len, axis[2] / len];
+  // Rotation axis (from × to), normalized, plus the cos/sin of the
+  // angle between them. The closure applies the shared Rodrigues
+  // rotation to each ideal vector.
+  const naxis = vecNormalize(crossProduct(from, to));
   const cosA = dot;
   const sinA = Math.sqrt(1 - dot * dot);
 
-  return (v) => {
-    const dotV = v[0] * naxis[0] + v[1] * naxis[1] + v[2] * naxis[2];
-    const cross: [number, number, number] = [
-      naxis[1] * v[2] - naxis[2] * v[1],
-      naxis[2] * v[0] - naxis[0] * v[2],
-      naxis[0] * v[1] - naxis[1] * v[0],
-    ];
-    return [
-      v[0] * cosA + cross[0] * sinA + naxis[0] * dotV * (1 - cosA),
-      v[1] * cosA + cross[1] * sinA + naxis[1] * dotV * (1 - cosA),
-      v[2] * cosA + cross[2] * sinA + naxis[2] * dotV * (1 - cosA),
-    ];
-  };
+  return (v) => rotateRodrigues(v, naxis, cosA, sinA);
 }
 
-// Ideal hybrid-orbital directions: linear (sp), trigonal (sp²),
-// tetrahedral (sp³), trigonal bipyramidal (sp³d), octahedral (sp³d²).
-// The embedder walks the molecular graph placing each neighbor along
-// the next unused ideal vector of its parent atom.
-function idealHybridVectors(count: number): [number, number, number][] {
-  if (count <= 2) return LINEAR_VECTORS;
-  if (count === 3) return TRIG_VECTORS;
-  if (count === 5) return TRIG_BIPYRAMIDAL_VECTORS;
-  if (count >= 6) return OCTAHEDRAL_VECTORS;
-  return TETRA_VECTORS;
-}
+
 
 /**
  * Ring bonds: a bond (a, b) is in a ring when a still reaches b after
