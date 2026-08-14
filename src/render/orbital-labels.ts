@@ -55,15 +55,15 @@ export function renderOrbitalLabels(
       }
     }
 
-    // Pi orbital labels — above the atom, slightly offset
-    if (info.hasPi && info.piDirection) {
+    // Pi orbital labels — above the atom, slightly offset (skip hydrogens)
+    if (info.hasPi && info.piDirection && atom.element !== 'H') {
       const label = makeLabelSprite('π', '#ffaa44');
       label.position.set(atom.x, atom.y + 0.6, atom.z);
       group.add(label);
     }
 
-    // Lone pair labels — below the atom
-    if (info.lonePairs > 0) {
+    // Lone pair labels — below the atom (skip hydrogens)
+    if (info.lonePairs > 0 && atom.element !== 'H') {
       const label = makeLabelSprite('lp', '#ffdd44');
       label.position.set(atom.x, atom.y - 0.6, atom.z);
       group.add(label);
