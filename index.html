@@ -179,6 +179,16 @@
                 <span id="clipboard-feedback" class="hidden">Copied!</span>
               </span>
             </div>
+            <div class="ctrl-section">
+              <span class="ctrl-label">View</span>
+              <div class="view-row">
+                <button id="ctrl-save-view" class="export-btn">Save View (.json)</button>
+                <button id="ctrl-load-view" class="export-btn">Load View</button>
+                <input type="file" id="ctrl-load-view-input" accept=".json,application/json" />
+                <button id="ctrl-share-link" class="export-btn">Copy Share Link</button>
+                <span id="share-feedback" class="hidden">Link copied!</span>
+              </div>
+            </div>
           </div>
           <div id="tab-measure" class="tab-content">
             <div class="ctrl-section">
@@ -190,6 +200,14 @@
               <div id="measure-points"></div>
               <div id="measure-result"></div>
               <button id="ctrl-measure-clear" class="export-btn measure-clear hidden">Clear</button>
+            </div>
+            <div class="ctrl-section">
+              <span class="ctrl-label">Annotations</span>
+              <div class="export-row">
+                <button id="ctrl-add-annotation" class="export-btn">Add Annotation</button>
+                <button id="ctrl-clear-annotations" class="export-btn">Clear All</button>
+              </div>
+              <p class="measure-hint">Add a text callout to the canvas. Drag to position, type to edit.</p>
             </div>
           </div>
         </div>

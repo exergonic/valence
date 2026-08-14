@@ -624,6 +624,97 @@ html, body {
 
 #clipboard-feedback.hidden { display: none; }
 
+/* ── View Save/Load/Share ── */
+
+.view-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.view-row .export-btn {
+  width: 100%;
+}
+
+#ctrl-load-view-input {
+  display: none;
+}
+
+#share-feedback {
+  font-size: 10px;
+  color: #4488ff;
+}
+
+#share-feedback.hidden { display: none; }
+
+/* ── Annotations ── */
+
+#annotations-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  overflow: hidden;
+}
+
+.annotation {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  background: rgba(30, 30, 40, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  padding: 6px 8px;
+  min-width: 140px;
+  max-width: 240px;
+  cursor: grab;
+  user-select: none;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.annotation:active {
+  cursor: grabbing;
+}
+
+.annotation-text {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  color: #eee;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1.4;
+  min-height: 20px;
+  cursor: text;
+  user-select: text;
+}
+
+.annotation-text::placeholder {
+  color: #777;
+}
+
+.annotation-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+
+.annotation-close:hover {
+  color: #fff;
+}
+
 /* ── Measure ── */
 
 .measure-hint {

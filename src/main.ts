@@ -3,6 +3,8 @@ import { initScene, buildScene } from './render';
 import { mountJsmePanel } from './ui/jsme-panel';
 import { setupControls } from './ui/controls';
 import { setupTooltip } from './ui/tooltip';
+import { setupAnnotations } from './ui/annotations';
+import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, applyViewState } from './ui/view-state';
 import { parseMolBlock } from './mol-parser';
 import { EXAMPLES } from './ui/examples';
 
@@ -86,7 +88,7 @@ function setupExamples(ctx: SceneContext) {
 function setupKeyboardShortcuts(ctx: SceneContext) {
   document.addEventListener('keydown', (e) => {
     // Don't capture when typing in an input
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement) return;
+    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
 
     if (e.key === 'Enter') {
       // Trigger render
@@ -139,11 +141,52 @@ function setupMeasureMode(ctx: SceneContext) {
   });
 }
 
+function setupViewStateUI(ctx: SceneContext, annotations: ReturnType<typeof setupAnnotations>) {
+  const saveBtn = document.getElementById('ctrl-save-view')!;
+  saveBtn.addEventListener('click', () => {
+    if (!ctx.currentMolecule) return;
+    saveViewToFile(ctx, annotations.getAnnotations());
+  });
+
+  const loadBtn = document.getElementById('ctrl-load-view')!;
+  const fileInput = document.getElementById('ctrl-load-view-input') as HTMLInputElement;
+  loadBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    try {
+      await loadViewFromFile(ctx, file, annotations);
+    } catch (err) {
+      console.error('Failed to load view:', err);
+    } finally {
+      fileInput.value = '';
+    }
+  });
+
+  const shareBtn = document.getElementById('ctrl-share-link')!;
+  const shareFeedback = document.getElementById('share-feedback')!;
+  shareBtn.addEventListener('click', async () => {
+    if (!ctx.currentMolecule) return;
+    const link = buildShareLink(ctx, annotations.getAnnotations());
+    await navigator.clipboard.writeText(link);
+    shareFeedback.classList.remove('hidden');
+    setTimeout(() => shareFeedback.classList.add('hidden'), 2000);
+  });
+}
+
+function setupAnnotationsUI(annotations: ReturnType<typeof setupAnnotations>) {
+  const addBtn = document.getElementById('ctrl-add-annotation')!;
+  addBtn.addEventListener('click', () => annotations.add(50, 40));
+  const clearBtn = document.getElementById('ctrl-clear-annotations')!;
+  clearBtn.addEventListener('click', () => annotations.clear());
+}
+
 // Need THREE for raycaster
 import * as THREE from 'three';
 
 async function main() {
   const scene = initScene(document.getElementById('canvas-container')!);
+  const annotations = setupAnnotations(document.getElementById('canvas-container')!);
   mountJsmePanel(scene);
   setupControls(scene);
   setupSplitter();
@@ -155,6 +198,18 @@ async function main() {
   );
   setupKeyboardShortcuts(scene);
   setupMeasureMode(scene);
+  setupViewStateUI(scene, annotations);
+  setupAnnotationsUI(annotations);
+
+  // Restore a shared view from the URL hash, if present (#view=<base64url>)
+  const state = parseShareLink(window.location.hash);
+  if (state) {
+    try {
+      applyViewState(scene, state, annotations);
+    } catch (err) {
+      console.error('Failed to restore shared view:', err);
+    }
+  }
 }
 
 main();
