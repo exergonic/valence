@@ -21,6 +21,7 @@ export interface ViewState {
     viewPreset: string;
     spaceFilling: boolean;
     autoRotate: boolean;
+    highlightPiSystems: boolean;
   };
   annotations: Annotation[];
 }
@@ -52,6 +53,7 @@ export function serializeView(ctx: SceneContext, annotations: Annotation[]): Vie
       viewPreset: ctx.display.viewPreset,
       spaceFilling: ctx.display.spaceFilling,
       autoRotate: ctx.display.autoRotate,
+      highlightPiSystems: ctx.display.highlightPiSystems,
     },
     annotations: annotations.map((a) => ({ ...a })),
   };
@@ -81,6 +83,7 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
   ctx.display.viewPreset = d.viewPreset as any;
   ctx.display.spaceFilling = d.spaceFilling;
   ctx.setAutoRotate(d.autoRotate);
+  ctx.display.highlightPiSystems = d.highlightPiSystems;
 
   // Rebuild the scene from the restored molecule, then apply the saved camera.
   buildScene(ctx);

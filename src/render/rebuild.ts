@@ -5,6 +5,7 @@ import { renderBonds } from './bonds';
 import { renderOrbitals } from './orbitals';
 import { renderLabels } from './labels';
 import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
+import { renderPiSystems } from './pi-systems';
 import { hsvToHex } from './color-schemes';
 import { classifyMolecule } from '../chem/classify';
 
@@ -39,6 +40,7 @@ export function rebuildDisplay(ctx: SceneContext) {
   clearGroup(ctx.labelGroup);
   clearGroup(ctx.orbitalLabelGroup);
   clearGroup(ctx.hybridizationLabelGroup);
+  clearGroup(ctx.piSystemGroup);
 
   const { atoms, bonds } = ctx.currentMolecule;
   const c = ctx.display.colors;
@@ -90,6 +92,14 @@ export function rebuildDisplay(ctx: SceneContext) {
   }
   if (labelMode !== 'orbital') {
     document.getElementById('orbital-legend')!.classList.add('hidden');
+  }
+
+  // π system highlighting — render translucent tubes connecting parallel p orbitals
+  if (ctx.display.highlightPiSystems && ctx.classifications && !ctx.display.spaceFilling) {
+    renderPiSystems(ctx.piSystemGroup, ctx.currentMolecule, ctx.classifications);
+    ctx.piSystemGroup.visible = true;
+  } else {
+    ctx.piSystemGroup.visible = false;
   }
 }
 

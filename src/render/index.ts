@@ -5,4 +5,5 @@ export { renderBonds } from './bonds';
 export { renderOrbitals } from './orbitals';
 export { renderLabels } from './labels';
 export { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
+export { renderPiSystems } from './pi-systems';
 export { rebuildDisplay, buildScene } from './rebuild';

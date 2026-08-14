@@ -22,6 +22,7 @@ export interface DisplaySettings {
   viewPreset: 'all' | 'sigma-only' | 'pi-only' | 'lone-pairs-only';
   spaceFilling: boolean;
   autoRotate: boolean;
+  highlightPiSystems: boolean;
 }
 
 export interface SceneContext {
@@ -34,6 +35,7 @@ export interface SceneContext {
   labelGroup: THREE.Group;
   orbitalLabelGroup: THREE.Group;
   hybridizationLabelGroup: THREE.Group;
+  piSystemGroup: THREE.Group;
   display: DisplaySettings;
   currentMolecule?: Molecule;
   classifications: AtomClassification[] | null;
@@ -86,6 +88,9 @@ export function initScene(container: HTMLElement): SceneContext {
   const hybridizationLabelGroup = new THREE.Group();
   hybridizationLabelGroup.visible = false;
   scene.add(hybridizationLabelGroup);
+  const piSystemGroup = new THREE.Group();
+  piSystemGroup.visible = false;
+  scene.add(piSystemGroup);
 
   let autoRotate = false;
 
@@ -97,6 +102,7 @@ export function initScene(container: HTMLElement): SceneContext {
       labelGroup.rotation.y += 0.005;
       orbitalLabelGroup.rotation.y += 0.005;
       hybridizationLabelGroup.rotation.y += 0.005;
+      piSystemGroup.rotation.y += 0.005;
     }
     controls.update();
     renderer.render(scene, camera);
@@ -117,13 +123,14 @@ export function initScene(container: HTMLElement): SceneContext {
   };
 
   return {
-    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup,
+    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup, piSystemGroup,
     display: {
       atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', bgColor: '#1a1a2e',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
       viewPreset: 'all',
       spaceFilling: false,
       autoRotate: false,
+      highlightPiSystems: false,
     },
     classifications: null,
     rerender: () => {},

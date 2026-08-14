@@ -87,6 +87,13 @@ export function setupControls(ctx: SceneContext) {
     ctx.setAutoRotate(autoRotateToggle.checked);
   });
 
+  // π system highlighting toggle
+  const highlightPiToggle = panel.querySelector<HTMLInputElement>('#ctrl-highlight-pi')!;
+  highlightPiToggle.addEventListener('change', () => {
+    ctx.display.highlightPiSystems = highlightPiToggle.checked;
+    ctx.rerender();
+  });
+
   // ── Style tab ──
 
   // Pedagogical view presets (All / σ-only / π-only / LP-only)
