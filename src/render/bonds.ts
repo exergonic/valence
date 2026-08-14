@@ -23,6 +23,7 @@ export function renderBonds(group: THREE.Group, atoms: Atom[], bonds: Bond[], di
 
     mesh.position.copy(mid);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    mesh.userData = { atom1Index: bond.atom1Index, atom2Index: bond.atom2Index, lobeType: 'bond' };
 
     group.add(mesh);
   }

@@ -5,13 +5,15 @@ import type { DisplaySettings } from './setup';
 
 export function renderAtoms(group: THREE.Group, atoms: Atom[], display?: DisplaySettings) {
   const scale = display?.atomScale ?? 1;
-  for (const atom of atoms) {
+  for (let i = 0; i < atoms.length; i++) {
+    const atom = atoms[i];
     const color = getElementColor(atom.element);
     const radius = getVisualRadius(atom.element) * scale;
     const geo = new THREE.SphereGeometry(radius, 24, 24);
     const mat = new THREE.MeshPhongMaterial({ color });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(atom.x, atom.y, atom.z);
+    mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'atom' };
     group.add(mesh);
   }
 }
