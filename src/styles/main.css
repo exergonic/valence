@@ -456,6 +456,67 @@ html, body {
   color: #fff;
 }
 
+/* ── View Presets ── */
+
+.view-preset-btn {
+  flex: 1;
+  padding: 4px 0;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: #bbb;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.view-preset-btn:hover {
+  border-color: rgba(255,255,255,0.35);
+  color: #fff;
+}
+
+.view-preset-btn.active {
+  background: #4488ff;
+  border-color: #4488ff;
+  color: #fff;
+}
+
+/* ── Orbital Labels Legend ── */
+
+#orbital-legend {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  gap: 12px;
+  padding: 6px 10px;
+  background: rgba(22, 22, 28, 0.92);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  font-size: 11px;
+  color: #aaa;
+  backdrop-filter: blur(6px);
+  z-index: 10;
+}
+
+#orbital-legend.hidden { display: none; }
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legend-dot.sigma { background: #88bbff; }
+.legend-dot.pi { background: #ffaa44; }
+.legend-dot.lone-pair { background: #ffdd44; }
+
 /* ── Background ── */
 
 .bg-row {

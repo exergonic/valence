@@ -67,7 +67,33 @@ export function setupControls(ctx: SceneContext) {
     // The render button reads this on click; no immediate action needed.
   });
 
+  // Orbital labels toggle
+  const orbitalLabelsToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-orbital-labels')!;
+  orbitalLabelsToggle.addEventListener('change', () => {
+    ctx.display.showOrbitalLabels = orbitalLabelsToggle.checked;
+    document.getElementById('orbital-legend')!.classList.toggle('hidden', !orbitalLabelsToggle.checked);
+    ctx.rerender();
+  });
+
+  // Hybridization labels toggle
+  const hybLabelsToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-hyb-labels')!;
+  hybLabelsToggle.addEventListener('change', () => {
+    ctx.display.showHybridizationLabels = hybLabelsToggle.checked;
+    ctx.rerender();
+  });
+
   // ── Style tab ──
+
+  // Pedagogical view presets (All / σ-only / π-only / LP-only)
+  const viewPresetBtns = panel.querySelectorAll<HTMLButtonElement>('.view-preset-btn');
+  viewPresetBtns.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      viewPresetBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      ctx.display.viewPreset = btn.dataset.preset as 'all' | 'sigma-only' | 'pi-only' | 'lone-pairs-only';
+      ctx.rerender();
+    });
+  });
 
   // Orbital Presets (only .preset-btn, not .bg-btn)
   const presetBtns = panel.querySelectorAll<HTMLButtonElement>('.preset-btn');

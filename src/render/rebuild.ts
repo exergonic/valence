@@ -4,6 +4,7 @@ import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderOrbitals } from './orbitals';
 import { renderLabels } from './labels';
+import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
 import { hsvToHex } from './color-schemes';
 import { classifyMolecule } from '../chem/classify';
 
@@ -36,6 +37,8 @@ export function rebuildDisplay(ctx: SceneContext) {
   clearGroup(ctx.moleculeGroup);
   clearGroup(ctx.orbitalGroup);
   clearGroup(ctx.labelGroup);
+  clearGroup(ctx.orbitalLabelGroup);
+  clearGroup(ctx.hybridizationLabelGroup);
 
   const { atoms, bonds } = ctx.currentMolecule;
   const c = ctx.display.colors;
@@ -48,8 +51,49 @@ export function rebuildDisplay(ctx: SceneContext) {
   renderAtoms(ctx.moleculeGroup, atoms, ctx.display);
   renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
   renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.classifications);
+
+  // Pedagogical view presets
+  const preset = ctx.display.viewPreset;
+  if (preset !== 'all') {
+    filterOrbitalsByPreset(ctx.orbitalGroup, preset);
+  }
+
+  // Hybridization labels
+  if (ctx.display.showHybridizationLabels && ctx.classifications) {
+    renderHybridizationLabels(ctx.hybridizationLabelGroup, ctx.currentMolecule, ctx.classifications);
+    ctx.hybridizationLabelGroup.visible = true;
+  } else {
+    ctx.hybridizationLabelGroup.visible = false;
+  }
+
+  // Orbital labels
+  if (ctx.display.showOrbitalLabels && ctx.classifications) {
+    renderOrbitalLabels(ctx.orbitalLabelGroup, ctx.currentMolecule, ctx.classifications);
+    ctx.orbitalLabelGroup.visible = true;
+  } else {
+    ctx.orbitalLabelGroup.visible = false;
+  }
+
   renderLabels(ctx.labelGroup, ctx.currentMolecule);
-  ctx.labelGroup.visible = ctx.display.showLabels;
+}
+
+// Show only orbitals matching the active preset.
+// sigma-only → hide π and lone pair lobes
+// pi-only → hide σ bonds and lone pairs
+// lone-pairs-only → hide σ bonds and π orbitals
+function filterOrbitalsByPreset(group: THREE.Group, preset: string) {
+  for (const child of group.children) {
+    const lt = (child as any).userData?.lobeType;
+    if (!lt) continue;
+
+    if (preset === 'sigma-only') {
+      child.visible = (lt === 'sigma');
+    } else if (preset === 'pi-only') {
+      child.visible = (lt === 'pi');
+    } else if (preset === 'lone-pairs-only') {
+      child.visible = (lt === 'lone_pair');
+    }
+  }
 }
 
 // Full build: rebuildDisplay plus frame the camera on the new molecule.

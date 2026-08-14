@@ -78,6 +78,16 @@
               </label>
             </div>
             <div class="ctrl-section">
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-orbital-labels" />
+                <span>Orbital Labels</span>
+              </label>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-hyb-labels" />
+                <span>Hybridization Labels</span>
+              </label>
+            </div>
+            <div class="ctrl-section">
               <label class="ctrl-slider">
                 <span>Atom Size</span>
                 <input type="range" id="ctrl-atom-scale" min="0.2" max="2.5" step="0.05" />
@@ -95,6 +105,17 @@
             </div>
           </div>
           <div id="tab-style" class="tab-content">
+            <div class="ctrl-section">
+              <span class="ctrl-label">View Preset</span>
+              <div class="preset-row">
+                <button class="view-preset-btn active" data-preset="all">All</button>
+                <button class="view-preset-btn" data-preset="sigma-only">σ</button>
+              </div>
+              <div class="preset-row">
+                <button class="view-preset-btn" data-preset="pi-only">π</button>
+                <button class="view-preset-btn" data-preset="lone-pairs-only">LP</button>
+              </div>
+            </div>
             <div class="ctrl-section">
               <span class="ctrl-label">Style</span>
               <div class="preset-row">
@@ -174,6 +195,13 @@
         <div id="canvas-actions">
           <button id="reset-view-btn" title="Reset view (R)">⟲</button>
           <button id="help-btn" title="Help (?)">?</button>
+        </div>
+
+        <!-- Orbital labels legend -->
+        <div id="orbital-legend" class="hidden">
+          <span class="legend-item"><span class="legend-dot sigma"></span> σ</span>
+          <span class="legend-item"><span class="legend-dot pi"></span> π</span>
+          <span class="legend-item"><span class="legend-dot lone-pair"></span> Lone pair</span>
         </div>
 
         <!-- Loading overlay -->
