@@ -1,7 +1,8 @@
 import type { Molecule } from '../mol-parser';
 import { assignHybridization } from './hybridize';
 import { computePiDirection, getPiDirectionFromNeighbor, sigmaPlaneNormal, MIN_PROMOTION_ALIGNMENT } from './pi';
-import { vecDot } from '../utils/vec3';
+import { vecDot, crossProduct } from '../utils/vec3';
+import * as THREE from 'three';
 
 // Result for one atom after running the full VSEPR + conjugation pipeline.
 // The renderer uses this to decide which lobes to draw and where.
@@ -10,7 +11,8 @@ export interface AtomClassification {
   hybridization: string;   // display label: 'sp', 'sp²', 'sp³'
   lonePairs: number;       // σ lone pairs (lobes drawn in σ positions)
   hasPi: boolean;          // whether a p orbital should be rendered
-  piDirection: [number, number, number] | null;  // which way the p orbital points
+  piDirection: [number, number, number] | null;  // primary p-orbital direction
+  piDirection2: [number, number, number] | null; // second p-orbital direction (sp only)
 }
 
 // Takes a molecule with 3D coordinates and classifies every heavy atom.
@@ -114,6 +116,21 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
       atomPos, bondVectors, hybrid, conjugated,
     );
 
+    // For sp atoms with π bonds, compute the second p-orbital direction
+    // (perpendicular to the first and to the bond axis). Triple-bonded sp
+    // atoms have two perpendicular π systems (ethyne, N₂).
+    let piDirection2: [number, number, number] | null = null;
+    if (piDirection && hybrid.hybridization === 'sp' && bondVectors.length >= 1 && piBondsPerAtom[atomIdx] >= 2) {
+      const bondAxis = [
+        bondVectors[0][0],
+        bondVectors[0][1],
+        bondVectors[0][2],
+      ] as [number, number, number];
+      const p2 = crossProduct(bondAxis, piDirection);
+      const p2n = new THREE.Vector3(p2[0], p2[1], p2[2]).normalize();
+      piDirection2 = [p2n.x, p2n.y, p2n.z];
+    }
+
     // Step 6: pick the display label.
     // Conjugation turns sp³ into sp² (one σ lone pair became p).
     let hybridLabel = hybrid.hybridization === 's' ? 's'
@@ -130,6 +147,7 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
       lonePairs,
       hasPi,
       piDirection,
+      piDirection2,
     });
   }
 
@@ -137,8 +155,6 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
   // Both sp atoms in a triple bond must use the same p-orbital orientation
   // so their two π systems overlap correctly (one p from each atom forms
   // a π bond; the second pair of perpendicular p's forms the other π bond).
-  // Independent computation can give different results (one used neighbor
-  // conjugation, the other fell back to findPerpendicular on the bond axis).
   for (const bond of molecule.bonds) {
     if (bond.order !== 3) continue;
     const a = result[bond.atom1Index];
@@ -147,6 +163,7 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
     if (Math.abs(vecDot(a.piDirection, b.piDirection)) >= 0.99) continue;
     // Unify: use the first atom's direction for both.
     b.piDirection = a.piDirection;
+    b.piDirection2 = a.piDirection2;
   }
 
   return result;

@@ -33,7 +33,7 @@ export function detectPiSystems(
   const n = molecule.atoms.length;
   const piAtoms = new Set<number>();
   for (let i = 0; i < n; i++) {
-    if (classifications[i]?.hasPi && classifications[i]?.piDirection) {
+    if (classifications[i]?.hasPi) {
       piAtoms.add(i);
     }
   }
@@ -49,78 +49,77 @@ export function detectPiSystems(
     }
   }
 
-  // Find connected components via BFS
-  const visited = new Set<number>();
-  const systems: PiSystem[] = [];
+  // Collect all p-orbital directions for each atom
+  const atomDirections: [number, number, number][][] = [];
+  for (let i = 0; i < n; i++) {
+    const dirs: [number, number, number][] = [];
+    const c = classifications[i];
+    if (c?.piDirection) dirs.push(c.piDirection);
+    if (c?.piDirection2) dirs.push(c.piDirection2);
+    atomDirections.push(dirs);
+  }
 
-  for (const startAtom of piAtoms) {
-    if (visited.has(startAtom)) continue;
-
-    // BFS to find this connected component
-    const component: number[] = [];
-    const queue = [startAtom];
-    visited.add(startAtom);
-    while (queue.length > 0) {
-      const curr = queue.shift()!;
-      component.push(curr);
-      for (const nb of adj.get(curr) || []) {
-        if (!visited.has(nb)) {
-          visited.add(nb);
-          queue.push(nb);
-        }
-      }
-    }
-
-    // Group by p-orbital direction (parallel detection)
-    // Use Union-Find to cluster atoms with parallel p orbitals
-    const parent = new Array(component.length).fill(0).map((_, i) => i);
-
-    function find(x: number): number {
-      while (parent[x] !== x) {
-        parent[x] = parent[parent[x]];
-        x = parent[x];
-      }
-      return x;
-    }
-    function union(a: number, b: number): void {
-      const ra = find(a);
-      const rb = find(b);
-      if (ra !== rb) parent[ra] = rb;
-    }
-
-    // Only merge atoms that are adjacent AND have parallel p orbitals
-    for (let i = 0; i < component.length; i++) {
-      for (let j = i + 1; j < component.length; j++) {
-        const ai = component[i];
-        const aj = component[j];
-        // Only consider adjacent atoms for same π system
-        if (!adj.get(ai)?.includes(aj)) continue;
-        const di = classifications[ai].piDirection!;
-        const dj = classifications[aj].piDirection!;
-        const dot = Math.abs(di[0] * dj[0] + di[1] * dj[1] + di[2] * dj[2]);
+  // Group directions into "direction classes": two directions are in the
+  // same class if they are parallel (|dot| > 0.9). Each class represents
+  // one π system orientation.
+  const directionClasses: [number, number, number][] = [];
+  for (let i = 0; i < n; i++) {
+    for (const dir of atomDirections[i]) {
+      let found = false;
+      for (const cls of directionClasses) {
+        const dot = Math.abs(dir[0] * cls[0] + dir[1] * cls[1] + dir[2] * cls[2]);
         if (dot > 0.9) {
-          union(i, j);
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        directionClasses.push([...dir]);
+      }
+    }
+  }
+
+  // For each direction class, find the connected set of atoms that have
+  // a p orbital in that direction. Each connected set with ≥ 2 atoms is
+  // a π system.
+  const systems: PiSystem[] = [];
+  for (let dc = 0; dc < directionClasses.length; dc++) {
+    const dir = directionClasses[dc];
+    const atomsWithDir: number[] = [];
+    for (let i = 0; i < n; i++) {
+      if (!piAtoms.has(i)) continue;
+      for (const ad of atomDirections[i]) {
+        const dot = Math.abs(ad[0] * dir[0] + ad[1] * dir[1] + ad[2] * dir[2]);
+        if (dot > 0.9) {
+          atomsWithDir.push(i);
+          break;
         }
       }
     }
 
-    // Group by cluster
-    const clusters = new Map<number, number[]>();
-    for (let i = 0; i < component.length; i++) {
-      const root = find(i);
-      if (!clusters.has(root)) clusters.set(root, []);
-      clusters.get(root)!.push(component[i]);
-    }
-
-    // Each cluster with ≥ 2 atoms is a π system
-    let colorIdx = 0;
-    for (const [, atomIndices] of clusters) {
-      if (atomIndices.length >= 2) {
+    // Find connected components among atomsWithDir
+    const visited = new Set<number>();
+    const atomSet = new Set(atomsWithDir);
+    for (const start of atomsWithDir) {
+      if (visited.has(start)) continue;
+      const component: number[] = [];
+      const queue = [start];
+      visited.add(start);
+      while (queue.length > 0) {
+        const curr = queue.shift()!;
+        component.push(curr);
+        for (const nb of adj.get(curr) || []) {
+          if (atomSet.has(nb) && !visited.has(nb)) {
+            visited.add(nb);
+            queue.push(nb);
+          }
+        }
+      }
+      if (component.length >= 2) {
         systems.push({
-          atomIndices,
-          color: PI_SYSTEM_COLORS[colorIdx % PI_SYSTEM_COLORS.length],
+          atomIndices: component,
+          color: PI_SYSTEM_COLORS[dc % PI_SYSTEM_COLORS.length],
         });
-        colorIdx++;
       }
     }
   }
