@@ -4,9 +4,8 @@ import type { Molecule } from '../mol-parser';
 
 // A π system: a set of connected atoms whose p orbitals are parallel and
 // overlap to form a delocalized π system (e.g., benzene's 6 π electrons,
-// butadiene's 4). Distinct π systems in the same molecule (e.g., the two
-// perpendicular π bonds of an alkyne, or non-coplanar ring systems) get
-// different colors.
+// butadiene's 4). Distinct π systems in the same molecule (e.g., two
+// non-coplanar ring systems) get different colors.
 export interface PiSystem {
   atomIndices: number[];
   color: number;
@@ -129,9 +128,12 @@ export function detectPiSystems(
   return systems;
 }
 
-// Render a translucent tube through the center of each π system.
-// The tube connects the participating atoms' positions, giving a visual
-// indication of the delocalized π electron cloud spanning the system.
+// Render π systems as continuous electron-density clouds above and below
+// the molecular plane — like merged p-orbital lobes spanning the atoms.
+//
+// Each π system is rendered as two "slabs" (above and below the plane),
+// following the spine of atom centers, tapering at the ends. The gap
+// between the slabs at the molecular plane represents the p-orbital node.
 export function renderPiSystems(
   group: THREE.Group,
   molecule: Molecule,
@@ -139,39 +141,92 @@ export function renderPiSystems(
 ): void {
   const systems = detectPiSystems(molecule, classifications);
   for (const system of systems) {
-    const points = system.atomIndices.map((i) => {
+    const atomPositions = system.atomIndices.map((i) => {
       const a = molecule.atoms[i];
       return new THREE.Vector3(a.x, a.y, a.z);
     });
-    if (points.length < 2) continue;
 
-    // Create a smooth curve through the atom centers
-    const curve = new THREE.CatmullRomCurve3(points);
-    const tubeGeo = new THREE.TubeGeometry(curve, 40, 0.06, 8, false);
-    const tubeMat = new THREE.MeshPhongMaterial({
+    // Average p-orbital direction for this system
+    const piDir = new THREE.Vector3();
+    for (const idx of system.atomIndices) {
+      const d = classifications[idx].piDirection!;
+      piDir.set(d[0], d[1], d[2]);
+    }
+    piDir.normalize();
+
+    // Spine through atom centers
+    const spine = new THREE.CatmullRomCurve3(atomPositions);
+
+    // Build the cloud geometry (two slabs above and below the plane)
+    const cloudGeo = buildCloudGeometry(spine, piDir);
+    const cloudMat = new THREE.MeshPhongMaterial({
       color: system.color,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.45,
       depthWrite: false,
+      side: THREE.DoubleSide,
     });
-    const tube = new THREE.Mesh(tubeGeo, tubeMat);
-    tube.userData = { lobeType: 'pi-system' };
-    group.add(tube);
+    const cloud = new THREE.Mesh(cloudGeo, cloudMat);
+    cloud.userData = { lobeType: 'pi-system' };
+    group.add(cloud);
+  }
+}
 
-    // Add a small sphere at each atom center for visual emphasis
-    for (const idx of system.atomIndices) {
-      const a = molecule.atoms[idx];
-      const sphereGeo = new THREE.SphereGeometry(0.08, 12, 12);
-      const sphereMat = new THREE.MeshPhongMaterial({
-        color: system.color,
-        transparent: true,
-        opacity: 0.8,
-        depthWrite: false,
-      });
-      const sphere = new THREE.Mesh(sphereGeo, sphereMat);
-      sphere.position.set(a.x, a.y, a.z);
-      sphere.userData = { lobeType: 'pi-system' };
-      group.add(sphere);
+// Build a π-cloud geometry: two slabs above and below the molecular plane,
+// following the spine curve, tapering at the ends.
+function buildCloudGeometry(spine: THREE.Curve<THREE.Vector3>, piDir: THREE.Vector3): THREE.BufferGeometry {
+  const N = 40;        // samples along spine
+  const M = 8;         // samples across width
+  const height = 0.45; // distance above/below the plane
+  const halfWidth = 0.35; // in-plane half-width of the cloud
+
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  // Build above and below ribbons
+  for (let layer = 0; layer < 2; layer++) {
+    const h = layer === 0 ? height : -height;
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const center = spine.getPoint(t);
+      const tangent = spine.getTangent(t).normalize();
+      // In-plane direction perpendicular to spine
+      const binormal = new THREE.Vector3().crossVectors(tangent, piDir).normalize();
+
+      // Taper width at ends for smooth cloud shape
+      const taper = Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
+
+      for (let j = 0; j <= M; j++) {
+        const s = (j / M - 0.5) * 2 * halfWidth * taper;
+        const v = center.clone()
+          .addScaledVector(binormal, s)
+          .addScaledVector(piDir, h);
+        positions.push(v.x, v.y, v.z);
+      }
     }
   }
+
+  // Build triangle indices
+  const vertsPerRing = M + 1;
+  for (let layer = 0; layer < 2; layer++) {
+    for (let i = 0; i < N; i++) {
+      for (let j = 0; j < M; j++) {
+        const a = layer * (N + 1) * vertsPerRing + i * vertsPerRing + j;
+        const b = a + 1;
+        const c = a + vertsPerRing;
+        const d = c + 1;
+        if (layer === 0) {
+          indices.push(a, c, b, b, c, d);
+        } else {
+          indices.push(a, b, c, b, d, c);
+        }
+      }
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  geo.computeVertexNormals();
+  return geo;
 }
