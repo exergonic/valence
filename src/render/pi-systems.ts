@@ -125,12 +125,10 @@ export function detectPiSystems(
   return systems;
 }
 
-// Render π systems as continuous electron-density clouds above and below
-// the molecular plane — like merged p-orbital lobes spanning the atoms.
-//
-// Each π system is rendered as two "slabs" (above and below the plane),
-// following the spine of atom centers, tapering at the ends. The gap
-// between the slabs at the molecular plane represents the p-orbital node.
+// Render π systems as full electron-density clouds — the textbook style
+// where the π cloud is a thick, rounded surface above and below the
+// molecular plane, spanning all participating atoms. Each cloud is a
+// single merged lobe (top + bottom) with a smooth, rounded profile.
 export function renderPiSystems(
   group: THREE.Group,
   molecule: Molecule,
@@ -143,24 +141,22 @@ export function renderPiSystems(
       return new THREE.Vector3(a.x, a.y, a.z);
     });
 
-    // Use the system's shared p-orbital direction (not a specific atom's)
     const piDir = new THREE.Vector3(
       system.direction[0],
       system.direction[1],
       system.direction[2],
     ).normalize();
 
-    // Spine through atom centers
     const spine = new THREE.CatmullRomCurve3(atomPositions);
-
-    // Build the cloud geometry (two slabs above and below the plane)
     const cloudGeo = buildCloudGeometry(spine, piDir);
     const cloudMat = new THREE.MeshPhongMaterial({
       color: system.color,
       transparent: true,
-      opacity: 0.45,
+      opacity: 0.4,
       depthWrite: false,
       side: THREE.DoubleSide,
+      shininess: 80,
+      specular: 0x444444,
     });
     const cloud = new THREE.Mesh(cloudGeo, cloudMat);
     cloud.userData = { lobeType: 'pi-system' };
@@ -168,46 +164,58 @@ export function renderPiSystems(
   }
 }
 
-// Build a π-cloud geometry: two slabs above and below the molecular plane,
-// following the spine curve, tapering at the ends.
+// Build a full π-cloud geometry: two thick, rounded lobes (above and
+// below the molecular plane) that span the spine of atom centers.
+//
+// Each lobe is a surface of revolution around the spine — a half-ellipse
+// profile swept along the curve. The lobes are fat at each atom center
+// and taper smoothly between them, giving the cloud a "bumpy" appearance
+// that mirrors the underlying p-orbital contributions.
 function buildCloudGeometry(spine: THREE.Curve<THREE.Vector3>, piDir: THREE.Vector3): THREE.BufferGeometry {
-  const N = 40;        // samples along spine
-  const M = 8;         // samples across width
-  const height = 0.45; // distance above/below the plane
-  const halfWidth = 0.35; // in-plane half-width of the cloud
+  const N = 48;           // samples along spine
+  const M = 16;           // angular samples around each lobe cross-section
+  const lobeHeight = 0.7; // how far above/below the plane the cloud extends
+  const lobeWidth = 0.55;  // in-plane half-width of the cloud at atom centers
 
   const positions: number[] = [];
   const indices: number[] = [];
 
-  // Build above and below ribbons
+  // Build two lobes (top and bottom)
   for (let layer = 0; layer < 2; layer++) {
-    const h = layer === 0 ? height : -height;
+    const sign = layer === 0 ? 1 : -1;
+    const baseOffset = layer * (N + 1) * (M + 1);
+
     for (let i = 0; i <= N; i++) {
       const t = i / N;
       const center = spine.getPoint(t);
       const tangent = spine.getTangent(t).normalize();
-      // In-plane direction perpendicular to spine
       const binormal = new THREE.Vector3().crossVectors(tangent, piDir).normalize();
 
-      // Taper width at ends for smooth cloud shape
-      const taper = Math.sin(Math.PI * Math.min(1, Math.max(0, t)));
+      // Cloud thickness profile: fat at atom centers (t=0,1 and near
+      // atom positions along the spine), tapering smoothly. Use a
+      // raised-cosine envelope so the cloud is thickest at each atom
+      // and thinnest between them.
+      const envelope = 0.5 + 0.5 * Math.cos(2 * Math.PI * t - Math.PI);
+      const width = lobeWidth * (0.4 + 0.6 * envelope);
+      const height = lobeHeight * (0.4 + 0.6 * envelope) * sign;
 
       for (let j = 0; j <= M; j++) {
-        const s = (j / M - 0.5) * 2 * halfWidth * taper;
+        const angle = (j / M) * Math.PI; // 0 → π (half ellipse)
+        const w = Math.sin(angle) * width;     // in-plane spread
+        const h = Math.cos(angle) * height;   // out-of-plane height
+
         const v = center.clone()
-          .addScaledVector(binormal, s)
+          .addScaledVector(binormal, w)
           .addScaledVector(piDir, h);
         positions.push(v.x, v.y, v.z);
       }
     }
-  }
 
-  // Build triangle indices
-  const vertsPerRing = M + 1;
-  for (let layer = 0; layer < 2; layer++) {
+    // Triangle indices for this lobe's ribbon
+    const vertsPerRing = M + 1;
     for (let i = 0; i < N; i++) {
       for (let j = 0; j < M; j++) {
-        const a = layer * (N + 1) * vertsPerRing + i * vertsPerRing + j;
+        const a = baseOffset + i * vertsPerRing + j;
         const b = a + 1;
         const c = a + vertsPerRing;
         const d = c + 1;
