@@ -164,23 +164,24 @@ export function renderPiSystems(
   }
 }
 
-// Build a full π-cloud geometry: two thick, rounded lobes (above and
-// below the molecular plane) that span the spine of atom centers.
-//
-// Each lobe is a surface of revolution around the spine — a half-ellipse
-// profile swept along the curve. The lobes are fat at each atom center
-// and taper smoothly between them, giving the cloud a "bumpy" appearance
-// that mirrors the underlying p-orbital contributions.
+// Build a π-cloud geometry: two separate rounded lobes — one above, one
+// below the molecular plane — each connecting the corresponding p-orbital
+// lobes of adjacent atoms. The gap at the molecular plane is the p-orbital
+// node. Each lobe is a half-ellipse cross-section (sitting entirely on one
+// side of the plane) swept along the spine.
 function buildCloudGeometry(spine: THREE.Curve<THREE.Vector3>, piDir: THREE.Vector3): THREE.BufferGeometry {
   const N = 48;           // samples along spine
-  const M = 16;           // angular samples around each lobe cross-section
-  const lobeHeight = 0.7; // how far above/below the plane the cloud extends
-  const lobeWidth = 0.55;  // in-plane half-width of the cloud at atom centers
+  const M = 20;           // angular samples around the half-ellipse cross-section
+  const lobeHeight = 0.65; // how far above/below the plane the cloud extends
+  const lobeWidth = 0.50;  // in-plane half-width at each cross-section
 
   const positions: number[] = [];
   const indices: number[] = [];
 
-  // Build two lobes (top and bottom)
+  // Build two separate lobes — top (+piDir) and bottom (−piDir).
+  // Each lobe is a half-ellipse that starts at the molecular plane,
+  // bulges outward, and returns to the plane. The nodal plane (the
+  // gap between lobes) is never filled.
   for (let layer = 0; layer < 2; layer++) {
     const sign = layer === 0 ? 1 : -1;
     const baseOffset = layer * (N + 1) * (M + 1);
@@ -191,18 +192,18 @@ function buildCloudGeometry(spine: THREE.Curve<THREE.Vector3>, piDir: THREE.Vect
       const tangent = spine.getTangent(t).normalize();
       const binormal = new THREE.Vector3().crossVectors(tangent, piDir).normalize();
 
-      // Cloud thickness profile: fat at atom centers (t=0,1 and near
-      // atom positions along the spine), tapering smoothly. Use a
-      // raised-cosine envelope so the cloud is thickest at each atom
-      // and thinnest between them.
-      const envelope = 0.5 + 0.5 * Math.cos(2 * Math.PI * t - Math.PI);
-      const width = lobeWidth * (0.4 + 0.6 * envelope);
-      const height = lobeHeight * (0.4 + 0.6 * envelope) * sign;
+      // Thickness profile: fattest at atom centers, thinner between them.
+      // The raised-cosine envelope gives a smooth bumpy shape.
+      const envelope = 0.4 + 0.6 * (0.5 + 0.5 * Math.cos(2 * Math.PI * t - Math.PI));
+      const width = lobeWidth * envelope;
+      const height = lobeHeight * envelope;
 
       for (let j = 0; j <= M; j++) {
-        const angle = (j / M) * Math.PI; // 0 → π (half ellipse)
-        const w = Math.sin(angle) * width;     // in-plane spread
-        const h = Math.cos(angle) * height;   // out-of-plane height
+        // Half-ellipse from θ=0 (right edge at plane) to θ=π (left edge
+        // at plane). The lobe sits entirely on one side of the plane.
+        const theta = (j / M) * Math.PI;
+        const w = Math.cos(theta) * width;      // in-plane: +w → −w
+        const h = Math.sin(theta) * height * sign; // out-of-plane: 0 → max → 0
 
         const v = center.clone()
           .addScaledVector(binormal, w)
@@ -211,7 +212,7 @@ function buildCloudGeometry(spine: THREE.Curve<THREE.Vector3>, piDir: THREE.Vect
       }
     }
 
-    // Triangle indices for this lobe's ribbon
+    // Triangle indices for this lobe
     const vertsPerRing = M + 1;
     for (let i = 0; i < N; i++) {
       for (let j = 0; j < M; j++) {
