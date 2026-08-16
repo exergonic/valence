@@ -4,11 +4,12 @@ import type { Molecule } from '../mol-parser';
 
 // A π system: a set of connected atoms whose p orbitals are parallel and
 // overlap to form a delocalized π system (e.g., benzene's 6 π electrons,
-// butadiene's 4). Distinct π systems in the same molecule (e.g., two
-// non-coplanar ring systems) get different colors.
+// butadiene's 4). Distinct π systems in the same molecule (e.g., the two
+// perpendicular π bonds of an alkyne) get different colors.
 export interface PiSystem {
   atomIndices: number[];
   color: number;
+  direction: [number, number, number]; // the p-orbital direction shared by this system
 }
 
 const PI_SYSTEM_COLORS = [0xff66aa, 0x66ffaa, 0x66aaff, 0xffaa66, 0xaa66ff];
@@ -16,38 +17,28 @@ const PI_SYSTEM_COLORS = [0xff66aa, 0x66ffaa, 0x66aaff, 0xffaa66, 0xaa66ff];
 // Detect π systems in a molecule.
 //
 // Algorithm:
-// 1. Find connected components of π atoms (atoms with hasPi === true)
-//    connected through any σ bond.
-// 2. Within each component, group atoms whose p orbitals are parallel
-//    (|dot product| > 0.9). Each such group is one π system.
+// 1. Collect every p-orbital direction from every atom (piDirection and
+//    piDirection2). An sp atom contributes two perpendicular directions;
+//    an sp² atom contributes one.
+// 2. Group these directions into parallel classes (|dot| > 0.9). Each
+//    class is one π system orientation.
+// 3. For each direction class, find the set of atoms that have a p orbital
+//    in that direction. Find connected components among those atoms
+//    (connected through bonds). Each component with ≥ 2 adjacent atoms
+//    is a π system.
 //
 // This correctly handles:
-// - Benzene → 1 π system (6 atoms, all p's parallel)
-// - Butadiene → 1 π system (4 atoms)
-// - But-1-en-3-yne → 1 π system (all 4 carbons, all p's coplanar)
-// - Two isolated alkenes → 2 π systems (different colors)
+// - Ethyne → 2 π systems (both sp carbons, two perpendicular p's each)
+// - N₂ → 2 π systems (same as ethyne)
+// - Benzene → 1 π system (6 sp² carbons, all p's parallel)
+// - But-1-en-3-yne → 2 π systems:
+//     System 1: all 4 carbons (alkene p ∥ alkyne p₁)
+//     System 2: the 2 alkyne carbons (alkyne p₂, perpendicular to p₁)
 export function detectPiSystems(
   molecule: Molecule,
   classifications: AtomClassification[],
 ): PiSystem[] {
   const n = molecule.atoms.length;
-  const piAtoms = new Set<number>();
-  for (let i = 0; i < n; i++) {
-    if (classifications[i]?.hasPi) {
-      piAtoms.add(i);
-    }
-  }
-
-  // Build adjacency among π atoms (connected through any bond)
-  const adj: Map<number, number[]> = new Map();
-  for (const bond of molecule.bonds) {
-    if (piAtoms.has(bond.atom1Index) && piAtoms.has(bond.atom2Index)) {
-      if (!adj.has(bond.atom1Index)) adj.set(bond.atom1Index, []);
-      if (!adj.has(bond.atom2Index)) adj.set(bond.atom2Index, []);
-      adj.get(bond.atom1Index)!.push(bond.atom2Index);
-      adj.get(bond.atom2Index)!.push(bond.atom1Index);
-    }
-  }
 
   // Collect all p-orbital directions for each atom
   const atomDirections: [number, number, number][][] = [];
@@ -59,9 +50,8 @@ export function detectPiSystems(
     atomDirections.push(dirs);
   }
 
-  // Group directions into "direction classes": two directions are in the
-  // same class if they are parallel (|dot| > 0.9). Each class represents
-  // one π system orientation.
+  // Group directions into parallel classes: two directions are in the
+  // same class if they are parallel (|dot| > 0.9).
   const directionClasses: [number, number, number][] = [];
   for (let i = 0; i < n; i++) {
     for (const dir of atomDirections[i]) {
@@ -79,19 +69,27 @@ export function detectPiSystems(
     }
   }
 
-  // For each direction class, find the connected set of atoms that have
-  // a p orbital in that direction. Each connected set with ≥ 2 atoms is
-  // a π system.
+  // Build adjacency among all atoms (for connectivity check)
+  const adj: Map<number, number[]> = new Map();
+  for (const bond of molecule.bonds) {
+    if (!adj.has(bond.atom1Index)) adj.set(bond.atom1Index, []);
+    if (!adj.has(bond.atom2Index)) adj.set(bond.atom2Index, []);
+    adj.get(bond.atom1Index)!.push(bond.atom2Index);
+    adj.get(bond.atom2Index)!.push(bond.atom1Index);
+  }
+
+  // For each direction class, find connected sets of atoms that have
+  // a p orbital in that direction. Each connected set with ≥ 2 atoms
+  // is a π system.
   const systems: PiSystem[] = [];
   for (let dc = 0; dc < directionClasses.length; dc++) {
     const dir = directionClasses[dc];
-    const atomsWithDir: number[] = [];
+    const atomsWithDir = new Set<number>();
     for (let i = 0; i < n; i++) {
-      if (!piAtoms.has(i)) continue;
       for (const ad of atomDirections[i]) {
         const dot = Math.abs(ad[0] * dir[0] + ad[1] * dir[1] + ad[2] * dir[2]);
         if (dot > 0.9) {
-          atomsWithDir.push(i);
+          atomsWithDir.add(i);
           break;
         }
       }
@@ -99,7 +97,6 @@ export function detectPiSystems(
 
     // Find connected components among atomsWithDir
     const visited = new Set<number>();
-    const atomSet = new Set(atomsWithDir);
     for (const start of atomsWithDir) {
       if (visited.has(start)) continue;
       const component: number[] = [];
@@ -109,7 +106,7 @@ export function detectPiSystems(
         const curr = queue.shift()!;
         component.push(curr);
         for (const nb of adj.get(curr) || []) {
-          if (atomSet.has(nb) && !visited.has(nb)) {
+          if (atomsWithDir.has(nb) && !visited.has(nb)) {
             visited.add(nb);
             queue.push(nb);
           }
@@ -119,6 +116,7 @@ export function detectPiSystems(
         systems.push({
           atomIndices: component,
           color: PI_SYSTEM_COLORS[dc % PI_SYSTEM_COLORS.length],
+          direction: dir,
         });
       }
     }
@@ -145,13 +143,12 @@ export function renderPiSystems(
       return new THREE.Vector3(a.x, a.y, a.z);
     });
 
-    // Average p-orbital direction for this system
-    const piDir = new THREE.Vector3();
-    for (const idx of system.atomIndices) {
-      const d = classifications[idx].piDirection!;
-      piDir.set(d[0], d[1], d[2]);
-    }
-    piDir.normalize();
+    // Use the system's shared p-orbital direction (not a specific atom's)
+    const piDir = new THREE.Vector3(
+      system.direction[0],
+      system.direction[1],
+      system.direction[2],
+    ).normalize();
 
     // Spine through atom centers
     const spine = new THREE.CatmullRomCurve3(atomPositions);
