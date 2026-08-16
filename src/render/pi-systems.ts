@@ -123,11 +123,28 @@ export function renderPiSystems(
       system.direction[2],
     ).normalize();
 
-    // Compute lobe tip positions for each atom (mirrors orbitals.ts)
+    // Build adjacency restricted to atoms in this system
+    const atomSet = new Set(system.atomIndices);
+    const adj = new Map<number, number[]>();
+    for (const bond of molecule.bonds) {
+      if (atomSet.has(bond.atom1Index) && atomSet.has(bond.atom2Index)) {
+        if (!adj.has(bond.atom1Index)) adj.set(bond.atom1Index, []);
+        if (!adj.has(bond.atom2Index)) adj.set(bond.atom2Index, []);
+        adj.get(bond.atom1Index)!.push(bond.atom2Index);
+        adj.get(bond.atom2Index)!.push(bond.atom1Index);
+      }
+    }
+
+    // Order atoms by walking the bond graph from a terminal atom (one
+    // with only 1 neighbor in the system). For rings (no terminal atoms),
+    // start at any atom and walk until we revisit.
+    const ordered = orderAlongBonds(system.atomIndices, adj);
+
+    // Compute lobe tip positions for each atom in bond order
     const positiveTips: THREE.Vector3[] = [];
     const negativeTips: THREE.Vector3[] = [];
 
-    for (const idx of system.atomIndices) {
+    for (const idx of ordered) {
       const atom = molecule.atoms[idx];
       const atomScale = getCovalentRadius(atom.element) + 0.2;
       const lobeExtent = PI_LENGTH * atomScale;
@@ -140,11 +157,6 @@ export function renderPiSystems(
     // Need at least 2 tips to draw a tube
     if (positiveTips.length < 2) continue;
 
-    // Order tips along the spine (by projecting onto the first-to-last
-    // direction so the tube follows the molecular chain)
-    const orderedPos = orderTips(positiveTips);
-    const orderedNeg = orderTips(negativeTips);
-
     const tubeMat = new THREE.MeshPhongMaterial({
       color: system.color,
       transparent: true,
@@ -153,15 +165,15 @@ export function renderPiSystems(
       side: THREE.DoubleSide,
     });
 
-    // Tube connecting positive lobe tips
-    const posCurve = new THREE.CatmullRomCurve3(orderedPos);
+    // Tube connecting positive lobe tips (above the nodal plane)
+    const posCurve = new THREE.CatmullRomCurve3(positiveTips, false);
     const posTube = new THREE.TubeGeometry(posCurve, 32, 0.08, 8, false);
     const posMesh = new THREE.Mesh(posTube, tubeMat);
     posMesh.userData = { lobeType: 'pi-system' };
     group.add(posMesh);
 
-    // Tube connecting negative lobe tips
-    const negCurve = new THREE.CatmullRomCurve3(orderedNeg);
+    // Tube connecting negative lobe tips (below the nodal plane)
+    const negCurve = new THREE.CatmullRomCurve3(negativeTips, false);
     const negTube = new THREE.TubeGeometry(negCurve, 32, 0.08, 8, false);
     const negMesh = new THREE.Mesh(negTube, tubeMat.clone());
     negMesh.userData = { lobeType: 'pi-system' };
@@ -169,17 +181,35 @@ export function renderPiSystems(
   }
 }
 
-// Order tip positions along the molecular chain by projecting onto the
-// vector from the first to last tip. This ensures the tube follows the
-// spine of the molecule rather than jumping between non-adjacent atoms.
-function orderTips(tips: THREE.Vector3[]): THREE.Vector3[] {
-  if (tips.length <= 2) return tips;
-  const first = tips[0];
-  const last = tips[tips.length - 1];
-  const axis = new THREE.Vector3().subVectors(last, first).normalize();
-  return [...tips].sort((a, b) => {
-    const pa = new THREE.Vector3().subVectors(a, first).dot(axis);
-    const pb = new THREE.Vector3().subVectors(b, first).dot(axis);
-    return pa - pb;
-  });
+// Order atom indices by walking the bond graph. Starts from a terminal
+// atom (only 1 neighbor in the system) if one exists; for rings, starts
+// at any atom and walks until it revisits. Returns atoms in bond-chain
+// order so the tube traces the molecule's connectivity, not a geometric
+// shortcut across a ring.
+function orderAlongBonds(atoms: number[], adj: Map<number, number[]>): number[] {
+  if (atoms.length <= 2) return [...atoms];
+
+  // Find a terminal atom (degree 1 in the subgraph)
+  let start = atoms[0];
+  for (const a of atoms) {
+    if ((adj.get(a) || []).length <= 1) { start = a; break; }
+  }
+
+  const visited = new Set<number>([start]);
+  const order: number[] = [start];
+  let current = start;
+
+  while (order.length < atoms.length) {
+    const neighbors = adj.get(current) || [];
+    let next: number | null = null;
+    for (const nb of neighbors) {
+      if (!visited.has(nb)) { next = nb; break; }
+    }
+    if (next === null) break; // ring closed or disconnected
+    visited.add(next);
+    order.push(next);
+    current = next;
+  }
+
+  return order;
 }
