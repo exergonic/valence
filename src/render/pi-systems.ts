@@ -138,7 +138,7 @@ export function renderPiSystems(
     // Order atoms by walking the bond graph from a terminal atom (one
     // with only 1 neighbor in the system). For rings (no terminal atoms),
     // start at any atom and walk until we revisit.
-    const ordered = orderAlongBonds(system.atomIndices, adj);
+    const { order: ordered, closed } = orderAlongBonds(system.atomIndices, adj);
 
     // Compute lobe tip positions for each atom in bond order
     const positiveTips: THREE.Vector3[] = [];
@@ -166,33 +166,33 @@ export function renderPiSystems(
     });
 
     // Tube connecting positive lobe tips (above the nodal plane)
-    const posCurve = new THREE.CatmullRomCurve3(positiveTips, false);
-    const posTube = new THREE.TubeGeometry(posCurve, 32, 0.08, 8, false);
+    const posCurve = new THREE.CatmullRomCurve3(positiveTips, closed);
+    const posTube = new THREE.TubeGeometry(posCurve, 32, 0.08, 8, closed);
     const posMesh = new THREE.Mesh(posTube, tubeMat);
     posMesh.userData = { lobeType: 'pi-system' };
     group.add(posMesh);
 
     // Tube connecting negative lobe tips (below the nodal plane)
-    const negCurve = new THREE.CatmullRomCurve3(negativeTips, false);
-    const negTube = new THREE.TubeGeometry(negCurve, 32, 0.08, 8, false);
+    const negCurve = new THREE.CatmullRomCurve3(negativeTips, closed);
+    const negTube = new THREE.TubeGeometry(negCurve, 32, 0.08, 8, closed);
     const negMesh = new THREE.Mesh(negTube, tubeMat.clone());
     negMesh.userData = { lobeType: 'pi-system' };
     group.add(negMesh);
   }
 }
 
-// Order atom indices by walking the bond graph. Starts from a terminal
-// atom (only 1 neighbor in the system) if one exists; for rings, starts
-// at any atom and walks until it revisits. Returns atoms in bond-chain
-// order so the tube traces the molecule's connectivity, not a geometric
-// shortcut across a ring.
-function orderAlongBonds(atoms: number[], adj: Map<number, number[]>): number[] {
-  if (atoms.length <= 2) return [...atoms];
+// Order atoms by walking the bond graph. Starts from a terminal
+// atom (only 1 neighbor in the system) if one exists; for rings,
+// starts at any atom and walks until it revisits. Returns atoms
+// in bond-chain order plus whether the chain is a closed ring.
+function orderAlongBonds(atoms: number[], adj: Map<number, number[]>): { order: number[]; closed: boolean } {
+  if (atoms.length <= 2) return { order: [...atoms], closed: false };
 
   // Find a terminal atom (degree 1 in the subgraph)
   let start = atoms[0];
+  let hasTerminal = false;
   for (const a of atoms) {
-    if ((adj.get(a) || []).length <= 1) { start = a; break; }
+    if ((adj.get(a) || []).length <= 1) { start = a; hasTerminal = true; break; }
   }
 
   const visited = new Set<number>([start]);
@@ -211,5 +211,12 @@ function orderAlongBonds(atoms: number[], adj: Map<number, number[]>): number[] 
     current = next;
   }
 
-  return order;
+  // Ring: no terminal atoms, all atoms visited, and the last atom
+  // connects back to the start — so the tube should be closed.
+  const closed =
+    !hasTerminal &&
+    order.length === atoms.length &&
+    (adj.get(current) || []).includes(start);
+
+  return { order, closed };
 }
