@@ -105,11 +105,16 @@ export function detectPiSystems(
   return systems;
 }
 
-// Render π system highlights by connecting the tips of the p-orbital
-// lobes. For each atom in a π system, the p-orbital lobe extends from
-// the atom center along ±direction by PI_LENGTH * atomScale. We connect
-// the positive tips with a tube and the negative tips with a tube —
-// two tubes per π system, one above and one below the molecular plane.
+// Render π system highlights as one tube per π BOND: for every bond whose
+// two atoms are in the same detected system (bonded AND with parallel p
+// orbitals), connect the positive lobe tips above the nodal plane and the
+// negative tips below it.
+//
+// This is deliberately simpler than threading a single curve through all the
+// atoms — a simple ring gets one tube per ring bond, and a fused system
+// (naphthalene) gets one tube per bond INCLUDING the shared fusion bond,
+// which no single curve through the atoms can traverse without special
+// ordering. The per-bond rule needs no ordering at all.
 export function renderPiSystems(
   group: THREE.Group,
   molecule: Molecule,
@@ -122,101 +127,45 @@ export function renderPiSystems(
       system.direction[1],
       system.direction[2],
     ).normalize();
-
-    // Build adjacency restricted to atoms in this system
     const atomSet = new Set(system.atomIndices);
-    const adj = new Map<number, number[]>();
-    for (const bond of molecule.bonds) {
-      if (atomSet.has(bond.atom1Index) && atomSet.has(bond.atom2Index)) {
-        if (!adj.has(bond.atom1Index)) adj.set(bond.atom1Index, []);
-        if (!adj.has(bond.atom2Index)) adj.set(bond.atom2Index, []);
-        adj.get(bond.atom1Index)!.push(bond.atom2Index);
-        adj.get(bond.atom2Index)!.push(bond.atom1Index);
-      }
-    }
 
-    // Order atoms by walking the bond graph from a terminal atom (one
-    // with only 1 neighbor in the system). For rings (no terminal atoms),
-    // start at any atom and walk until we revisit.
-    const { order: ordered, closed } = orderAlongBonds(system.atomIndices, adj);
-
-    // Compute lobe tip positions for each atom in bond order
-    const positiveTips: THREE.Vector3[] = [];
-    const negativeTips: THREE.Vector3[] = [];
-
-    for (const idx of ordered) {
+    // Lobe tip along/against piDir for any atom in the system.
+    const tip = (idx: number, sign: 1 | -1): THREE.Vector3 => {
       const atom = molecule.atoms[idx];
-      const atomScale = getCovalentRadius(atom.element) + 0.2;
-      const lobeExtent = PI_LENGTH * atomScale;
+      const extent = PI_LENGTH * (getCovalentRadius(atom.element) + 0.2);
       const center = new THREE.Vector3(atom.x, atom.y, atom.z);
+      return center.clone().addScaledVector(piDir, sign * extent);
+    };
 
-      positiveTips.push(center.clone().addScaledVector(piDir, lobeExtent));
-      negativeTips.push(center.clone().addScaledVector(piDir, -lobeExtent));
-    }
-
-    // Need at least 2 tips to draw a tube
-    if (positiveTips.length < 2) continue;
-
-    const tubeMat = new THREE.MeshPhongMaterial({
+    const posMat = new THREE.MeshPhongMaterial({
       color: system.color,
       transparent: true,
       opacity: 0.5,
       depthWrite: false,
       side: THREE.DoubleSide,
     });
+    const negMat = posMat.clone();
 
-    // Tube connecting positive lobe tips (above the nodal plane)
-    const posCurve = new THREE.CatmullRomCurve3(positiveTips, closed);
-    const posTube = new THREE.TubeGeometry(posCurve, 32, 0.08, 8, closed);
-    const posMesh = new THREE.Mesh(posTube, tubeMat);
-    posMesh.userData = { lobeType: 'pi-system' };
-    group.add(posMesh);
-
-    // Tube connecting negative lobe tips (below the nodal plane)
-    const negCurve = new THREE.CatmullRomCurve3(negativeTips, closed);
-    const negTube = new THREE.TubeGeometry(negCurve, 32, 0.08, 8, closed);
-    const negMesh = new THREE.Mesh(negTube, tubeMat.clone());
-    negMesh.userData = { lobeType: 'pi-system' };
-    group.add(negMesh);
+    // The whole highlight: one tube per π bond within this system.
+    for (const bond of molecule.bonds) {
+      if (!atomSet.has(bond.atom1Index) || !atomSet.has(bond.atom2Index)) continue;
+      const a = bond.atom1Index;
+      const b = bond.atom2Index;
+      group.add(makeBondTube(tip(a, 1), tip(b, 1), posMat));
+      group.add(makeBondTube(tip(a, -1), tip(b, -1), negMat));
+    }
   }
 }
 
-// Order atoms by walking the bond graph. Starts from a terminal
-// atom (only 1 neighbor in the system) if one exists; for rings,
-// starts at any atom and walks until it revisits. Returns atoms
-// in bond-chain order plus whether the chain is a closed ring.
-function orderAlongBonds(atoms: number[], adj: Map<number, number[]>): { order: number[]; closed: boolean } {
-  if (atoms.length <= 2) return { order: [...atoms], closed: false };
-
-  // Find a terminal atom (degree 1 in the subgraph)
-  let start = atoms[0];
-  let hasTerminal = false;
-  for (const a of atoms) {
-    if ((adj.get(a) || []).length <= 1) { start = a; hasTerminal = true; break; }
-  }
-
-  const visited = new Set<number>([start]);
-  const order: number[] = [start];
-  let current = start;
-
-  while (order.length < atoms.length) {
-    const neighbors = adj.get(current) || [];
-    let next: number | null = null;
-    for (const nb of neighbors) {
-      if (!visited.has(nb)) { next = nb; break; }
-    }
-    if (next === null) break; // ring closed or disconnected
-    visited.add(next);
-    order.push(next);
-    current = next;
-  }
-
-  // Ring: no terminal atoms, all atoms visited, and the last atom
-  // connects back to the start — so the tube should be closed.
-  const closed =
-    !hasTerminal &&
-    order.length === atoms.length &&
-    (adj.get(current) || []).includes(start);
-
-  return { order, closed };
+/** A straight tube between two lobe tips — the highlight for one π bond. */
+function makeBondTube(
+  from: THREE.Vector3,
+  to: THREE.Vector3,
+  material: THREE.MeshPhongMaterial,
+): THREE.Mesh {
+  const curve = new THREE.LineCurve3(from, to);
+  const geometry = new THREE.TubeGeometry(curve, 1, 0.08, 8, false);
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.userData = { lobeType: 'pi-system' };
+  return mesh;
 }
