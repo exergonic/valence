@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
 import type { Molecule } from '../mol-parser';
 import type { AtomClassification } from '../chem/classify';
+import { updateLabels } from './labels';
 
 export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complementary' | 'cool' | 'warm' | 'highcontrast' | 'custom';
 
@@ -105,6 +106,8 @@ export function initScene(container: HTMLElement): SceneContext {
       piSystemGroup.rotation.y += 0.005;
     }
     controls.update();
+    // Distance-fade + forward-push the atom labels against the (moved) camera.
+    updateLabels(labelGroup, camera);
     renderer.render(scene, camera);
   }
   animate();
