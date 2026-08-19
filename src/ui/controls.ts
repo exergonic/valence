@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { SceneContext, ColorScheme } from '../render';
 import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
+import { kekulizeSmiles } from '../chem/kekulize-smiles';
 
 export function setupControls(ctx: SceneContext) {
   const panel = document.getElementById('controls-panel')!;
@@ -208,12 +209,16 @@ export function setupControls(ctx: SceneContext) {
     downloadFile(xyz, 'molecule.xyz', 'chemical/x-xyz');
   });
 
-  // Copy SMILES
+  // Copy SMILES — run through the Kekulizer so the exported string matches
+  // what is actually rendered/fetched (JSME's raw output can be aromatic
+  // lower-case, e.g. "c1ccc1" for cyclobutadiene, which other tools resolve
+  // to the wrong compound).
   const copySmilesBtn = document.getElementById('ctrl-copy-smiles')!;
   const clipboardFeedback = document.getElementById('clipboard-feedback')!;
   copySmilesBtn.addEventListener('click', async () => {
-    const smiles = window.jsmeApplet?.smiles();
-    if (!smiles) return;
+    const raw = window.jsmeApplet?.smiles();
+    if (!raw) return;
+    const smiles = kekulizeSmiles(raw);
     await navigator.clipboard.writeText(smiles);
     clipboardFeedback.classList.remove('hidden');
     setTimeout(() => clipboardFeedback.classList.add('hidden'), 2000);

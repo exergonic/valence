@@ -1,6 +1,7 @@
 import type { SceneContext } from '../render';
 import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
+import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
@@ -67,7 +68,11 @@ export function mountJsmePanel(ctx: SceneContext) {
 
     try {
       const t0 = performance.now();
-      const smiles = applet.smiles();
+      // JSME's smiles() emits aromatic lower-case SMILES (e.g. "c1ccc1" for
+      // cyclobutadiene), which PubChem canonicalizes to the wrong compound.
+      // Rewrite monocyclic aromatic rings into explicit Kekulé bonds before
+      // the structure is sent; non-aromatic SMILES pass through unchanged.
+      const smiles = kekulizeSmiles(applet.smiles());
       const molBlock = applet.molFile();
       const t1 = performance.now();
       let molecule = parseMolBlock(molBlock);
@@ -75,11 +80,12 @@ export function mountJsmePanel(ctx: SceneContext) {
       if (molecule.atoms.length === 0) return;
 
       const forceLocal = (document.getElementById('ctrl-force-fallback') as HTMLInputElement | null)?.checked ?? false;
-      const result = forceLocal ? null : await fetch3D(smiles);
+      const result = forceLocal ? null : await fetch3D(smiles, molecule);
       const t3 = performance.now();
       if (result) {
-        const fetched = parseMolBlock(result.sdf);
-        if (fetched.atoms.length > 0) molecule = fetched;
+        // fetch3D validates the returned structure against the sketch and
+        // returns the parsed molecule — no re-parse here.
+        molecule = result.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         updateMoleculeInfo({ ...result.info, formula, weight: `${weight}` });
       } else {

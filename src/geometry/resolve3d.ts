@@ -1,3 +1,7 @@
+import type { Molecule } from '../mol-parser';
+import { parseMolBlock } from '../mol-parser';
+import { structuresMatch } from './validate-structure';
+
 export interface PubChemInfo {
   source: 'pubchem' | 'cir' | 'fallback' | 'local';
   cid?: string;
@@ -6,6 +10,15 @@ export interface PubChemInfo {
   weight?: string;
   /** Generic-parameter warnings for the local MMFF94 path (see parameter-warnings.ts). */
   warnings?: string[];
+}
+
+/** A successfully fetched and validated 3D structure. */
+export interface Fetch3DResult {
+  /** Raw SDF text as returned by the service. */
+  sdf: string;
+  /** The parsed molecule (guaranteed to match the drawn reference). */
+  molecule: Molecule;
+  info: PubChemInfo;
 }
 
 const PUBCHEM_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles';
@@ -51,30 +64,51 @@ function parsePubChemMeta(sdf: string): Partial<PubChemInfo> {
   return info;
 }
 
-export async function fetch3D(smiles: string): Promise<{ sdf: string; info: PubChemInfo } | null> {
+/**
+ * Try one 3D structure service, then reject any structure whose heavy-atom
+ * graph doesn't match the sketched molecule (see validate-structure.ts).
+ * The guard exists because the services resolve the query SMILES by their
+ * own rules: JSME emits aromatic lower-case SMILES (e.g. "c1ccc1" for a
+ * drawn cyclobutadiene), and PubChem/CIR both resolve that antiaromatic
+ * 4-ring form to the saturated ring (cyclobutane, CID 9250) — without the
+ * check the app would render the wrong compound while reporting "PubChem 3D".
+ */
+async function fetchValidated(
+  url: string,
+  reference: Molecule,
+  makeInfo: (sdf: string) => PubChemInfo,
+): Promise<Fetch3DResult | null> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return null;
+    const text = await resp.text();
+    // parseMolBlock handles both V2000 and V3000 (converting the latter).
+    if (!text.includes('V2000') && !text.includes('V3000')) return null;
+    const molecule = parseMolBlock(text);
+    if (molecule.atoms.length === 0) return null;
+    if (!structuresMatch(molecule, reference)) return null;
+    return { sdf: text, molecule, info: makeInfo(text) };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetch3D(smiles: string, reference: Molecule): Promise<Fetch3DResult | null> {
   const encoded = encodeURIComponent(smiles);
 
-  try {
-    const resp = await fetch(`${PUBCHEM_URL}/${encoded}/SDF?record_type=3d`);
-    if (resp.ok) {
-      const text = await resp.text();
-      // parseMolBlock handles both V2000 and V3000 (converting the latter).
-      if (text.includes('V2000') || text.includes('V3000')) {
-        const meta = parsePubChemMeta(text);
-        return { sdf: text, info: { source: 'pubchem', ...meta } };
-      }
-    }
-  } catch { }
+  const pubchem = await fetchValidated(
+    `${PUBCHEM_URL}/${encoded}/SDF?record_type=3d`,
+    reference,
+    (sdf) => ({ source: 'pubchem' as const, ...parsePubChemMeta(sdf) }),
+  );
+  if (pubchem) return pubchem;
 
-  try {
-    const resp = await fetch(`${CIR_URL}/${encoded}/file?format=sdf&get3d=True`);
-    if (resp.ok) {
-      const text = await resp.text();
-      if (text.includes('V2000') || text.includes('V3000')) {
-        return { sdf: text, info: { source: 'cir' } };
-      }
-    }
-  } catch { }
+  const cir = await fetchValidated(
+    `${CIR_URL}/${encoded}/file?format=sdf&get3d=True`,
+    reference,
+    () => ({ source: 'cir' as const }),
+  );
+  if (cir) return cir;
 
   return null;
 }
