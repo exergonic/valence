@@ -44,6 +44,22 @@ Built specifically for the classroom, Valence embraces a purely geometric and al
 
 ---
 
+## 📸 Gallery
+
+A few stills from recent feature work — hybridization and frontier-orbital teaching views, delocalized π-system detection, and fused-ring π systems. Captured directly from the app; click any image to enlarge.
+
+<div align="center">
+
+| | |
+| :-: | :-: |
+| **Frontier-orbital teaching view**<br/>alkene π system with electrophile σ*<br/><img src="./doc/gallery/teaching-frontier-orbitals.jpg" alt="Frontier-orbital teaching view: an alkene π system interacting with an electrophile σ* orbital — hybridization teaching" width="380"/> | **π-system detection**<br/>conjugated diene highlighted<br/><img src="./doc/gallery/pi-system-butadiene.jpg" alt="π-system detection: a conjugated diene with the delocalized π system highlighted" width="380"/> |
+| **Aromatic π system**<br/>benzene p-orbitals<br/><img src="./doc/gallery/pi-system-benzene.jpg" alt="Aromatic π system: benzene with p-orbital lobes rendered above and below the ring plane" width="380"/> | **Fused-ring π systems**<br/>multi-ring delocalization<br/><img src="./doc/gallery/pi-system-fused-rings.jpg" alt="Fused-ring π system: delocalized π orbitals across fused rings" width="380"/> |
+| **Fused-ring π system**<br/>anthracene<br/><img src="./doc/gallery/pi-system-anthracene.jpg" alt="Fused-ring π system: anthracene with its full π network highlighted" width="380"/> | |
+
+</div>
+
+---
+
 ## 🚀 Quick Start
 
 To run the development server locally:
