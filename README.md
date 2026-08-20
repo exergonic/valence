@@ -66,10 +66,10 @@ To run the development server locally:
 
 ```bash
 # Install dependencies
-npm install
+bun install
 
 # Start the dev server
-npm run dev
+bun run dev
 ```
 Open `http://localhost:5173`, draw a molecule in the JSME panel, and click **Render Molecule**.
 
@@ -77,15 +77,15 @@ Open `http://localhost:5173`, draw a molecule in the JSME panel, and click **Ren
 
 | Task | Command |
 |------|---------|
-| Start dev server | `npm run dev` |
-| Build for web | `npm run build` |
-| Preview web build | `npm run preview` |
-| Run test suite | `npm test` |
-| Test watch mode | `npm run test:watch` |
-| Desktop dev (Tauri) | `npm run tauri:dev` |
-| Desktop build (Tauri) | `npm run tauri:build` |
-| Run linter | `npm run lint` |
-| Typecheck | `npx tsc --noEmit` |
+| Start dev server | `bun run dev` |
+| Build for web | `bun run build` |
+| Preview web build | `bun run preview` |
+| Run test suite | `bun run test` |
+| Test watch mode | `bun run test:watch` |
+| Desktop dev (Tauri) | `bun run tauri:dev` |
+| Desktop build (Tauri) | `bun run tauri:build` |
+| Run linter | `bun run lint` |
+| Typecheck | `bunx tsc --noEmit` |
 
 ---
 
@@ -129,5 +129,5 @@ The MMFF94 engine is consumed from `vendor/mmff94-ts-0.1.0-alpha.1.tgz` (a commi
 
 If you use Valence in your curriculum or presentations, please cite:
 
-> **Valence v0.7.0 — Valence Bond Visualization (2026).**
+> **Valence v0.8.0 — Valence Bond Visualization (2026).**
 > McCann, B. W. *https://github.com/exergonic/valence*

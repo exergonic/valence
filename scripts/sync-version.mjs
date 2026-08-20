@@ -72,4 +72,19 @@ if (lock !== lockBefore) {
   console.log('  Cargo.lock — no change');
 }
 
+// 5. README.md — citation line
+const readmePath = join(root, 'README.md');
+let readme = readFileSync(readmePath, 'utf8');
+const readmeBefore = readme;
+readme = readme.replace(
+  /(Valence )v\d+\.\d+\.\d+( —)/g,
+  `$1v${version}$2`,
+);
+if (readme !== readmeBefore) {
+  writeFileSync(readmePath, readme, 'utf8');
+  console.log('  README.md ✓');
+} else {
+  console.log('  README.md — no change');
+}
+
 console.log(`\nAll files synced to v${version}.`);

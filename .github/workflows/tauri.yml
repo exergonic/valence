@@ -11,30 +11,76 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
         with:
-          node-version: 22
-          cache: npm
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Install npm dependencies
-        run: npm ci
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
 
       - name: Build Tauri application
-        run: npm run tauri build
+        run: bun run tauri build
+
+      - name: Generate release notes
+        id: notes
+        shell: bash
+        run: |
+          PREV=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREV" ]; then
+            RANGE=""
+            TITLE="Initial release"
+          else
+            RANGE="$PREV..HEAD"
+            TITLE="Changes since $PREV"
+          fi
+          echo "## Valence ${{ github.ref_name }}" > /tmp/body.md
+          echo "" >> /tmp/body.md
+          echo "Download the MSI installer for Windows below." >> /tmp/body.md
+          echo "" >> /tmp/body.md
+          echo "### $TITLE" >> /tmp/body.md
+          echo "" >> /tmp/body.md
+          # Conventional-commit grouped changelog
+          for prefix in "feat" "fix" "docs" "style" "refactor" "perf" "chore" "revert"; do
+            label=""
+            case $prefix in
+              feat)     label="Features" ;;
+              fix)      label="Fixes" ;;
+              docs)     label="Docs" ;;
+              style)    label="Style" ;;
+              refactor) label="Refactor" ;;
+              perf)     label="Performance" ;;
+              chore)    label="Chore" ;;
+              revert)   label="Reverts" ;;
+            esac
+            lines=$(git log $RANGE --pretty=format:"- %s (%h)" --grep="^$prefix" 2>/dev/null || true)
+            if [ -n "$lines" ]; then
+              echo "#### $label" >> /tmp/body.md
+              echo "$lines" >> /tmp/body.md
+              echo "" >> /tmp/body.md
+            fi
+          done
+          # Anything not matching a known prefix goes under Other
+          other=$(git log $RANGE --pretty=format:"- %s (%h)" 2>/dev/null | grep -v "^- \(feat\|fix\|docs\|style\|refactor\|perf\|chore\|revert\)" || true)
+          if [ -n "$other" ]; then
+            echo "#### Other" >> /tmp/body.md
+            echo "$other" >> /tmp/body.md
+            echo "" >> /tmp/body.md
+          fi
+          echo "" >> /tmp/body.md
+          echo "[Full commit log](https://github.com/exergonic/valence/commits/${{ github.ref_name }})" >> /tmp/body.md
+          # softprops/action-gh-release reads body_path
+          echo "body_path=/tmp/body.md" >> "$GITHUB_OUTPUT"
+          cat /tmp/body.md
 
       - name: Upload MSI installer
         uses: softprops/action-gh-release@v2
         with:
           files: src-tauri/target/release/bundle/msi/*.msi
-          body: |
-            ## Valence ${{ github.ref_name }}
-
-            Download the MSI installer for Windows below.
-
-            ### Changes
-            See the [commit log](https://github.com/exergonic/valence/commits/${{ github.ref_name }}) for details.
+          body_path: ${{ steps.notes.outputs.body_path }}
