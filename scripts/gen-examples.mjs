@@ -1,5 +1,5 @@
 import { parseMolBlock } from './src/mol-parser/parse-mol.js';
-import { fillMissingHydrogens } from './src/chem/hydrogens.js';
+import { fillMissingHydrogens } from './src/chem/fill-hydrogens.js';
 import { place3D } from './src/geometry/place3d.js';
 import { computeFormula } from './src/geometry/resolve3d.js';
 

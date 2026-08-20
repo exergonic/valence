@@ -20,7 +20,7 @@
 import { optimize_lbfgs } from 'mmff94-ts';
 import type { Molecule as MMFFMolecule } from 'mmff94-ts';
 import type { Molecule } from '../mol-parser';
-import { fillMissingHydrogens } from '../chem/hydrogens';
+import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { place3D, hasRingBonds } from './place3d';
 
 /** Deterministic ±0.5 hash of the atom index (reproducible tests). */

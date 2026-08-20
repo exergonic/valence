@@ -4,7 +4,7 @@ import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
 import { classifyMolecule } from '../src/chem/classify';
-import { fillMissingHydrogens } from '../src/chem/hydrogens';
+import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 import { assign_atom_types } from 'mmff94-ts';
 import type { Molecule as MMFFMolecule } from 'mmff94-ts';
 

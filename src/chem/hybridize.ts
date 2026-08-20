@@ -1,6 +1,6 @@
 // Valence electrons by element (group number): the most electrons an atom
 // can put into bonding.  Used to count lone pairs below.
-// Distinct from BOND_VALENCE (hydrogens.ts, σ bonds usually formed) and the
+// Distinct from BOND_VALENCE (fill-hydrogens.ts, σ bonds usually formed) and the
 // neutral-valence table in kekulize-smiles.ts (aromatic ring atoms).
 const VALENCE_ELECTRONS: Record<string, number> = {
   H: 1, He: 0, Li: 1, Be: 2, B: 3,

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { place3D } from '../src/geometry/place3d';
-import { fillMissingHydrogens } from '../src/chem/hydrogens';
+import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 

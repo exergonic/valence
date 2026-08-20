@@ -1,5 +1,5 @@
 // Ideal hybrid-orbital directions shared by the embedder (place3d.ts)
-// and the hydrogen filler (hydrogens.ts). Unit vectors pointing toward
+// and the hydrogen filler (fill-hydrogens.ts). Unit vectors pointing toward
 // each coordination site for a given steric number.
 
 export const LINEAR_VECTORS: [number, number, number][] = [

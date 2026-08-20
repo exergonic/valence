@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fillMissingHydrogens } from '../src/chem/hydrogens';
+import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 
 describe('fillMissingHydrogens', () => {
   it('should add 3 hydrogens to a terminal carbon', () => {

@@ -1,6 +1,6 @@
 import type { Molecule } from '../mol-parser';
 import { assignHybridization } from './hybridize';
-import { computePiDirection, getPiDirectionFromNeighbor, sigmaPlaneNormal, MIN_PROMOTION_ALIGNMENT } from './pi';
+import { computePiDirection, getPiDirectionFromNeighbor, sigmaPlaneNormal, MIN_PROMOTION_ALIGNMENT } from './orient-pi';
 import { vecDot, crossProduct } from '../utils/vec3';
 import * as THREE from 'three';
 
