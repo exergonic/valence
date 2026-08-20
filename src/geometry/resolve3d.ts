@@ -3,7 +3,7 @@ import { parseMolBlock } from '../mol-parser';
 import { structuresMatch } from './validate-structure';
 
 export interface PubChemInfo {
-  source: 'pubchem' | 'cir' | 'fallback' | 'local';
+  source: 'pubchem' | 'cir' | 'local';
   cid?: string;
   name?: string;
   formula?: string;

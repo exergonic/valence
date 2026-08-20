@@ -272,7 +272,6 @@ html, body {
 
 #mol-source.pubchem { background: rgba(68, 136, 255, 0.2); color: #4488ff; }
 #mol-source.cir { background: rgba(255, 136, 68, 0.2); color: #ff8844; }
-#mol-source.fallback { background: rgba(255, 136, 68, 0.2); color: #ff8844; }
 #mol-source.local { background: rgba(100, 200, 100, 0.2); color: #66cc66; }
 
 #mol-link {

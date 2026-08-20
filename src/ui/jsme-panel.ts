@@ -38,7 +38,7 @@ function updateMoleculeInfo(info: PubChemInfo) {
   weightEl.textContent = info.weight ? ` · MW ${info.weight}` : '';
   sourceEl.textContent = info.source === 'pubchem' ? 'PubChem 3D' :
     info.source === 'cir' ? 'CIR' :
-    info.source === 'local' ? 'Local MMFF94' : 'Fallback';
+    'Local MMFF94';
   sourceEl.className = info.source;
 
   if (info.cid) {
@@ -95,7 +95,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         if (local) molecule = local;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         updateMoleculeInfo({
-          source: forceLocal ? 'local' : 'fallback',
+          source: 'local',
           formula,
           weight: `${weight}`,
           warnings: parameterGapWarnings(molecule),
