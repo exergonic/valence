@@ -22,6 +22,7 @@ export interface Fetch3DResult {
 }
 
 const PUBCHEM_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles';
+const PUBCHEM_CID_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid';
 const CIR_URL = 'https://cactus.nci.nih.gov/chemical/structure';
 
 export const ATOMIC_MASS: Record<string, number> = {
@@ -65,6 +66,24 @@ function parsePubChemMeta(sdf: string): Partial<PubChemInfo> {
 }
 
 /**
+ * PubChem display name (Title) for a CID. The 3D SDF response carries the
+ * CID but never a name, so we ask for the title separately once the CID is
+ * known. Fail-soft: a slow, missing, or unparseable property response just
+ * leaves the name unset rather than failing the whole lookup.
+ */
+async function fetchPubChemTitle(cid: string): Promise<string | undefined> {
+  try {
+    const resp = await fetch(`${PUBCHEM_CID_URL}/${cid}/property/Title/JSON`);
+    if (!resp.ok) return undefined;
+    const body = JSON.parse(await resp.text()) as
+      { PropertyTable?: { Properties?: { Title?: string }[] } };
+    return body.PropertyTable?.Properties?.[0]?.Title || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Try one 3D structure service, then reject any structure whose heavy-atom
  * graph doesn't match the sketched molecule (see validate-structure.ts).
  * The guard exists because the services resolve the query SMILES by their
@@ -101,7 +120,14 @@ export async function fetch3D(smiles: string, reference: Molecule): Promise<Fetc
     reference,
     (sdf) => ({ source: 'pubchem' as const, ...parsePubChemMeta(sdf) }),
   );
-  if (pubchem) return pubchem;
+  if (pubchem) {
+    // The structure is validated — trust the CID parsed from its own SDF and
+    // fill in the display name (the SDF has no name field).
+    if (pubchem.info.cid) {
+      pubchem.info.name = await fetchPubChemTitle(pubchem.info.cid);
+    }
+    return pubchem;
+  }
 
   const cir = await fetchValidated(
     `${CIR_URL}/${encoded}/file?format=sdf&get3d=True`,
