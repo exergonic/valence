@@ -82,6 +82,8 @@ function setupExamples(ctx: SceneContext) {
     sourceEl.className = 'pubchem';
     document.getElementById('mol-link')!.style.display = 'none';
     document.getElementById('mol-warnings')!.classList.add('hidden');
+    // Examples are loaded from disk, not PubChem — no record to show.
+    document.getElementById('mol-data')!.classList.add('hidden');
 
     // Reset to the placeholder so the dropdown never reads as the molecule's
     // permanent label and the same example can be picked again.

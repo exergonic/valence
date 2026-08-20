@@ -5,11 +5,20 @@ import { structuresMatch } from './validate-structure';
 export interface PubChemInfo {
   source: 'pubchem' | 'cir' | 'local';
   cid?: string;
-  name?: string;
-  formula?: string;
+  name?: string; // Title from the PubChem property record
+  formula?: string; // computed from the parsed molecule (all sources)
   weight?: string;
   /** Generic-parameter warnings for the local MMFF94 path (see parameter-warnings.ts). */
   warnings?: string[];
+  /** Curated PubChem record (source === 'pubchem'): the properties we pulled. */
+  pubchem?: {
+    formula?: string;
+    weight?: string;
+    iupacName?: string;
+    smiles?: string;
+    inchi?: string;
+    inchikey?: string;
+  };
 }
 
 /** A successfully fetched and validated 3D structure. */
@@ -24,6 +33,10 @@ export interface Fetch3DResult {
 const PUBCHEM_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/smiles';
 const PUBCHEM_CID_URL = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid';
 const CIR_URL = 'https://cactus.nci.nih.gov/chemical/structure';
+
+// Everything we want from PubChem's property endpoint, one request — the 3D
+// SDF we download carries only the CID, so this fills in the curated record.
+const PUBCHEM_PROPERTIES = 'Title,MolecularFormula,MolecularWeight,IUPACName,SMILES,InChI,InChIKey';
 
 export const ATOMIC_MASS: Record<string, number> = {
   H: 1.008, He: 4.003,
@@ -65,19 +78,43 @@ function parsePubChemMeta(sdf: string): Partial<PubChemInfo> {
   return info;
 }
 
+interface PubChemPropertyRow {
+  Title?: string;
+  MolecularFormula?: string;
+  MolecularWeight?: string;
+  IUPACName?: string;
+  SMILES?: string;
+  InChI?: string;
+  InChIKey?: string;
+}
+
 /**
- * PubChem display name (Title) for a CID. The 3D SDF response carries the
- * CID but never a name, so we ask for the title separately once the CID is
- * known. Fail-soft: a slow, missing, or unparseable property response just
- * leaves the name unset rather than failing the whole lookup.
+ * Pull the curated PubChem record for a CID — display name (Title), formula,
+ * molecular weight, IUPAC name, SMILES, InChI, and InChI key. The 3D SDF we
+ * download for the structure carries only the CID, so this one property
+ * request fills in everything else once the CID is known. Fail-soft: a slow,
+ * missing, or unparseable response just returns nothing rather than failing
+ * the whole lookup.
  */
-async function fetchPubChemTitle(cid: string): Promise<string | undefined> {
+async function fetchPubChemRecord(cid: string): Promise<{ name?: string; pubchem: NonNullable<PubChemInfo['pubchem']> } | undefined> {
   try {
-    const resp = await fetch(`${PUBCHEM_CID_URL}/${cid}/property/Title/JSON`);
+    const resp = await fetch(`${PUBCHEM_CID_URL}/${cid}/property/${PUBCHEM_PROPERTIES}/JSON`);
     if (!resp.ok) return undefined;
     const body = JSON.parse(await resp.text()) as
-      { PropertyTable?: { Properties?: { Title?: string }[] } };
-    return body.PropertyTable?.Properties?.[0]?.Title || undefined;
+      { PropertyTable?: { Properties?: PubChemPropertyRow[] } };
+    const p = body.PropertyTable?.Properties?.[0];
+    if (!p) return undefined;
+    return {
+      name: p.Title,
+      pubchem: {
+        formula: p.MolecularFormula,
+        weight: p.MolecularWeight,
+        iupacName: p.IUPACName,
+        smiles: p.SMILES,
+        inchi: p.InChI,
+        inchikey: p.InChIKey,
+      },
+    };
   } catch {
     return undefined;
   }
@@ -122,9 +159,13 @@ export async function fetch3D(smiles: string, reference: Molecule): Promise<Fetc
   );
   if (pubchem) {
     // The structure is validated — trust the CID parsed from its own SDF and
-    // fill in the display name (the SDF has no name field).
+    // fill in the curated property record (the SDF itself carries no name).
     if (pubchem.info.cid) {
-      pubchem.info.name = await fetchPubChemTitle(pubchem.info.cid);
+      const record = await fetchPubChemRecord(pubchem.info.cid);
+      if (record) {
+        pubchem.info.name = record.name;
+        pubchem.info.pubchem = record.pubchem;
+      }
     }
     return pubchem;
   }

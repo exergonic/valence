@@ -7,15 +7,15 @@ import {
 } from './fixtures';
 
 // Route the two fetch legs (PubChem then CIR) to canned SDF bodies, or 404
-// when a leg is "missing"; the optional titleJson feeds PubChem's
-// property/Title endpoint. Returns the mock so tests can assert call count.
-function mockFetch(pubchemBody: string | null, cirBody: string | null, titleJson: string | null = null) {
+// when a leg is "missing"; the optional recordJson feeds PubChem's
+// property endpoint. Returns the mock so tests can assert call count.
+function mockFetch(pubchemBody: string | null, cirBody: string | null, recordJson: string | null = null) {
   const fn = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes('/property/Title/JSON')) {
-      return titleJson === null
+    if (url.includes('/property/')) {
+      return recordJson === null
         ? new Response('', { status: 404 })
-        : new Response(titleJson, { status: 200 });
+        : new Response(recordJson, { status: 200 });
     }
     if (url.includes('pubchem.ncbi.nlm.nih.gov')) {
       return pubchemBody === null
@@ -42,31 +42,40 @@ describe('fetch3D validation guard', () => {
     const fn = mockFetch(
       PUBCHEM_CYCLOBUTADIENE_SDF,
       null,
-      '{"PropertyTable":{"Properties":[{"CID":"136879","Title":"Cyclobutadiene"}]}}',
+      '{"PropertyTable":{"Properties":[{"CID":"136879","Title":"Cyclobutadiene","MolecularFormula":"C4H4","MolecularWeight":"52.07","IUPACName":"cyclobuta-1,3-diene","SMILES":"C1=CC=C1","InChI":"InChI=1S/C4H4/c1-2-4-3-1/h1-4H","InChIKey":"HXJUTPCZVOIRPF-UHFFFAOYSA-N"}]}}',
     );
     const result = await fetch3D('C1=CC=C1', drawnCyclobutadiene);
 
     expect(result).not.toBeNull();
     expect(result!.info.source).toBe('pubchem');
     expect(result!.info.cid).toBe('136879');
-    // The display title is fetched from the property endpoint once the CID
-    // is known — the 3D SDF itself carries no name.
+    // The curated record comes from the property endpoint once the CID is
+    // known — the 3D SDF itself carries neither the name nor these fields.
     expect(result!.info.name).toBe('Cyclobutadiene');
-    // One SDF request + one title request.
+    expect(result!.info.pubchem).toMatchObject({
+      formula: 'C4H4',
+      weight: '52.07',
+      iupacName: 'cyclobuta-1,3-diene',
+      smiles: 'C1=CC=C1',
+      inchi: 'InChI=1S/C4H4/c1-2-4-3-1/h1-4H',
+      inchikey: 'HXJUTPCZVOIRPF-UHFFFAOYSA-N',
+    });
+    // One SDF request + one property request.
     expect(fn.mock.calls.length).toBe(2);
     // The returned molecule is the parsed (8-atom) diene, not the sketch.
     expect(result!.molecule.atoms).toHaveLength(8);
     expect(result!.molecule.bonds.some((b) => b.order === 2)).toBe(true);
   });
 
-  it('accepts the structure even when the title lookup fails (name stays unset)', async () => {
+  it('accepts the structure even when the property lookup fails (record unset)', async () => {
     const fn = mockFetch(PUBCHEM_CYCLOBUTADIENE_SDF, null);
     const result = await fetch3D('C1=CC=C1', drawnCyclobutadiene);
 
     expect(result).not.toBeNull();
     expect(result!.info.cid).toBe('136879');
     expect(result!.info.name).toBeUndefined();
-    expect(fn.mock.calls.length).toBe(2); // SDF + failed title attempt
+    expect(result!.info.pubchem).toBeUndefined();
+    expect(fn.mock.calls.length).toBe(2); // SDF + failed property attempt
   });
 
   it('rejects a mismatched PubChem structure and tries (then accepts) CIR', async () => {

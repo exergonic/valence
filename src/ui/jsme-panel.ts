@@ -52,6 +52,37 @@ function updateMoleculeInfo(info: PubChemInfo) {
   const warningsEl = document.getElementById('mol-warnings')!;
   warningsEl.classList.toggle('hidden', !(info.warnings && info.warnings.length > 0));
   warningsEl.textContent = info.warnings?.join('\n') ?? '';
+
+  // Collapsible PubChem record — only populated on successful PubChem lookups.
+  const dataDetails = document.getElementById('mol-data')!;
+  const rowsEl = document.getElementById('mol-data-rows')!;
+  if (info.source === 'pubchem' && info.pubchem && info.cid) {
+    const p = info.pubchem;
+    const rows: [string, string][] = [
+      ['CID', info.cid],
+      ['IUPAC name', p.iupacName],
+      ['Molecular formula', p.formula],
+      ['Molecular weight', p.weight],
+      ['SMILES', p.smiles],
+      ['InChI', p.inchi],
+      ['InChI key', p.inchikey],
+    ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
+
+    rowsEl.replaceChildren(...rows.map(([key, value]) => {
+      const row = document.createElement('div');
+      row.className = 'data-row';
+      const dt = document.createElement('dt');
+      dt.textContent = key;
+      const dd = document.createElement('dd');
+      dd.textContent = value;
+      row.append(dt, dd);
+      return row;
+    }));
+    document.getElementById('mol-data-cid')!.textContent = `#${info.cid}`;
+    dataDetails.classList.remove('hidden');
+  } else {
+    dataDetails.classList.add('hidden');
+  }
 }
 
 export function mountJsmePanel(ctx: SceneContext) {
