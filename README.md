@@ -111,7 +111,7 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 | Directory / File | Purpose |
 |------------------|---------|
 | `src/mol-parser/` | Custom fixed-width MOL block parser (~40 lines, zero external dependencies). |
-| `src/chem/` | Chemistry engine: `hybridize.ts` (domain-count hybridization, sp → sp³d²), `classify.ts` + `pi.ts` (lone pairs, π directionality, the conjugation promotion gate), `hydrogens.ts` (implicit-H filling), `valence.ts`, `kekulize-smiles.ts` (aromatic SMILES → explicit Kekulé bonds for the PubChem query). |
+| `src/chem/` | Chemistry engine: `hybridize.ts` (domain-count hybridization, sp → sp³d²), `classify.ts` + `pi.ts` (lone pairs, π directionality, the conjugation promotion gate), `hydrogens.ts` (implicit-H filling), `kekulize-smiles.ts` (aromatic SMILES → explicit Kekulé bonds for the PubChem query). |
 | `src/geometry/` | 3D coordinate acquisition: `resolve3d.ts` (PubChem → CIR, each result validated), `validate-structure.ts` (heavy-atom bond-graph mismatch guard), `place3d.ts` + `torsions.ts` (graph-walk embedder), `mmff-refine.ts` + `local-geometry.ts` (MMFF94 refinement in a Web Worker), `parameter-warnings.ts` (generic-parameter feedback). |
 | `src/render/` | Core Three.js logic: atoms, bonds, lighting, orbital lobes (`lobes.ts` LatheGeometry profiles), `rebuild.ts` state-driven rebuild. |
 | `src/ui/` | Control panel, JSME panel wiring, the examples list (`examples.ts`), tooltip. |

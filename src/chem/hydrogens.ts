@@ -4,7 +4,7 @@ import { vecNormalize, crossProduct, rotateRodrigues } from '../utils/vec3';
 
 // σ bonds an element usually forms in neutral compounds (octet rule) —
 // what's left over after counting bond orders gets filled with hydrogens.
-// NOT the same as VALENCE_ELECTRONS (valence.ts): N, O, S form 3, 2, 2
+// NOT the same as VALENCE_ELECTRONS (hybridize.ts): N, O, S form 3, 2, 2
 // bonds here despite having 5, 6, 6 valence electrons.
 const BOND_VALENCE: Record<string, number> = {
   H: 1,
