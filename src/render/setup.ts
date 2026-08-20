@@ -48,7 +48,7 @@ export interface SceneContext {
 
 export function initScene(container: HTMLElement): SceneContext {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1a1a2e);
+  scene.background = new THREE.Color(0xffffff);
   const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
   camera.position.z = 5;
 
@@ -128,7 +128,7 @@ export function initScene(container: HTMLElement): SceneContext {
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup, piSystemGroup,
     display: {
-      atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', bgColor: '#1a1a2e',
+      atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', bgColor: '#ffffff',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
       viewPreset: 'all',
       spaceFilling: false,
