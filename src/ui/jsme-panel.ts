@@ -56,19 +56,29 @@ function updateMoleculeInfo(info: PubChemInfo) {
   // Collapsible PubChem record — only populated on successful PubChem lookups.
   const dataDetails = document.getElementById('mol-data')!;
   const rowsEl = document.getElementById('mol-data-rows')!;
-  if (info.source === 'pubchem' && info.pubchem && info.cid) {
-    const p = info.pubchem;
-    const rows: [string, string][] = [
-      ['CID', info.cid],
-      ['IUPAC name', p.iupacName],
-      ['Molecular formula', p.formula],
-      ['Molecular weight', p.weight],
-      ['SMILES', p.smiles],
-      ['InChI', p.inchi],
-      ['InChI key', p.inchikey],
-    ].filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
+  if (info.source === 'pubchem' && info.cid && (info.pubchem || info.mmff94)) {
+    const rows: Array<[string, string | undefined]> = [];
+    if (info.pubchem) {
+      const p = info.pubchem;
+      rows.push(
+        ['CID', info.cid],
+        ['IUPAC name', p.iupacName],
+        ['Molecular formula', p.formula],
+        ['Molecular weight', p.weight],
+        ['SMILES', p.smiles],
+        ['InChI', p.inchi],
+        ['InChI key', p.inchikey],
+      );
+    }
+    if (info.mmff94) {
+      rows.push(
+        ['MMFF94 energy (kcal/mol)', info.mmff94.energy],
+        ['MMFF94 partial charges', info.mmff94.partialCharges],
+      );
+    }
+    const populated = rows.filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
 
-    rowsEl.replaceChildren(...rows.map(([key, value]) => {
+    rowsEl.replaceChildren(...populated.map(([key, value]) => {
       const row = document.createElement('div');
       row.className = 'data-row';
       const dt = document.createElement('dt');

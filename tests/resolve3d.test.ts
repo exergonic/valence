@@ -60,6 +60,11 @@ describe('fetch3D validation guard', () => {
       inchi: 'InChI=1S/C4H4/c1-2-4-3-1/h1-4H',
       inchikey: 'HXJUTPCZVOIRPF-UHFFFAOYSA-N',
     });
+    // The MMFF94 fields ride in with the 3D SDF itself.
+    expect(result!.info.mmff94).toMatchObject({
+      energy: '34.2918',
+      partialCharges: '0.18, -0.18, 0.18, -0.18, 0.02, -0.02, 0.02, -0.02',
+    });
     // One SDF request + one property request.
     expect(fn.mock.calls.length).toBe(2);
     // The returned molecule is the parsed (8-atom) diene, not the sketch.
@@ -75,6 +80,8 @@ describe('fetch3D validation guard', () => {
     expect(result!.info.cid).toBe('136879');
     expect(result!.info.name).toBeUndefined();
     expect(result!.info.pubchem).toBeUndefined();
+    // The SDF-embedded MMFF94 data still lands even without the property call.
+    expect(result!.info.mmff94?.energy).toBe('34.2918');
     expect(fn.mock.calls.length).toBe(2); // SDF + failed property attempt
   });
 

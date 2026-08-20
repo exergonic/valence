@@ -19,6 +19,11 @@ export interface PubChemInfo {
     inchi?: string;
     inchikey?: string;
   };
+  /** MMFF94 data parsed from the 3D SDF the structure came in (kcal/mol). */
+  mmff94?: {
+    energy?: string;
+    partialCharges?: string; // comma-joined per-atom charges
+  };
 }
 
 /** A successfully fetched and validated 3D structure. */
@@ -66,14 +71,44 @@ export function computeFormula(atoms: string[]): { formula: string; weight: numb
   return { formula, weight: Math.round(weight * 100) / 100 };
 }
 
-/** Parse the PubChem compound CID embedded after M END in the SDF */
+/** Parse the PubChem metadata blocks after M END in the SDF: the compound
+ * CID plus the MMFF94 fields the 3D record embeds (energy and per-atom
+ * partial charges). */
 function parsePubChemMeta(sdf: string): Partial<PubChemInfo> {
   const info: Partial<PubChemInfo> = {};
   const lines = sdf.split('\n');
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith('> <PUBCHEM_COMPOUND_CID>')) {
-      info.cid = lines[i + 1]?.trim();
+  let block: 'cid' | 'energy' | 'charges' | null = null;
+  let chargeCount = 0;
+  const charges: string[] = [];
+  const mmff: NonNullable<PubChemInfo['mmff94']> = {};
+
+  for (const line of lines) {
+    if (line.startsWith('> <')) {
+      block = line.startsWith('> <PUBCHEM_COMPOUND_CID>') ? 'cid'
+        : line.startsWith('> <PUBCHEM_MMFF94_ENERGY>') ? 'energy'
+        : line.startsWith('> <PUBCHEM_MMFF94_PARTIAL_CHARGES>') ? 'charges'
+        : null;
+      chargeCount = 0;
+      continue;
     }
+    const content = line.trim();
+    if (block === null || content === '') continue;
+
+    if (block === 'cid' && !info.cid) {
+      info.cid = content;
+    } else if (block === 'energy' && mmff.energy === undefined) {
+      mmff.energy = content;
+    } else if (block === 'charges') {
+      if (chargeCount === 0) {
+        chargeCount = parseInt(content, 10) || 0;
+      } else if (charges.length < chargeCount) {
+        charges.push(content.split(/\s+/)[1] ?? content);
+      }
+    }
+  }
+  if (charges.length > 0) mmff.partialCharges = charges.join(', ');
+  if (mmff.energy !== undefined || mmff.partialCharges !== undefined) {
+    info.mmff94 = mmff;
   }
   return info;
 }

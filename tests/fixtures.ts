@@ -41,6 +41,20 @@ M  END
 > <PUBCHEM_COMPOUND_CID>
 136879
 
+> <PUBCHEM_MMFF94_PARTIAL_CHARGES>
+  8
+  1 0.18
+  2 -0.18
+  3 0.18
+  4 -0.18
+  5 0.02
+  6 -0.02
+  7 0.02
+  8 -0.02
+
+> <PUBCHEM_MMFF94_ENERGY>
+  34.2918
+
 $$$$
 `;
 
