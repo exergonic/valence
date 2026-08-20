@@ -1,7 +1,9 @@
 import * as THREE from 'three';
+import type { LabelPalette } from '../utils/label-colors';
 
 // Small text sprite for orbital/hybridization labels in the 3D scene.
 // No background circle — just crisp text that always faces the camera.
+// Colors come from the LabelPalette that matches the current background.
 export function makeLabelSprite(text: string, color: string = '#ffffff'): THREE.Sprite {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
@@ -29,6 +31,7 @@ export function renderOrbitalLabels(
   group: THREE.Group,
   molecule: any,
   classifications: any[],
+  palette: LabelPalette,
 ): void {
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
@@ -49,7 +52,7 @@ export function renderOrbitalLabels(
         const midX = (atom.x + neighbor.x) / 2;
         const midY = (atom.y + neighbor.y) / 2;
         const midZ = (atom.z + neighbor.z) / 2;
-        const label = makeLabelSprite(`σ(${atom.element}–${neighbor.element})`, '#88bbff');
+        const label = makeLabelSprite(`σ(${atom.element}–${neighbor.element})`, palette.sigma);
         label.position.set(midX, midY + 0.3, midZ);
         group.add(label);
       }
@@ -57,14 +60,14 @@ export function renderOrbitalLabels(
 
     // Pi orbital labels — above the atom, slightly offset
     if (info.hasPi && info.piDirection) {
-      const label = makeLabelSprite('π', '#ffaa44');
+      const label = makeLabelSprite('π', palette.pi);
       label.position.set(atom.x, atom.y + 0.6, atom.z);
       group.add(label);
     }
 
     // Lone pair labels — below the atom
     if (info.lonePairs > 0) {
-      const label = makeLabelSprite('lp', '#ffdd44');
+      const label = makeLabelSprite('lp', palette.lonePair);
       label.position.set(atom.x, atom.y - 0.6, atom.z);
       group.add(label);
     }
@@ -76,13 +79,14 @@ export function renderHybridizationLabels(
   group: THREE.Group,
   molecule: any,
   classifications: any[],
+  palette: LabelPalette,
 ): void {
   for (let i = 0; i < molecule.atoms.length; i++) {
     const atom = molecule.atoms[i];
     const info = classifications[i];
     if (!info || atom.element === 'H') continue;
 
-    const label = makeLabelSprite(info.hybridization, '#aaffaa');
+    const label = makeLabelSprite(info.hybridization, palette.hybrid);
     label.position.set(atom.x, atom.y + 0.8, atom.z);
     group.add(label);
   }

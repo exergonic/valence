@@ -8,6 +8,7 @@ import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels
 import { renderPiSystems } from './pi-systems';
 import { hsvToHex } from './color-schemes';
 import { classifyMolecule } from '../chem/classify';
+import { labelPaletteFor } from '../utils/label-colors';
 
 // Remove every mesh from a group (recursively into nested groups),
 // disposing GPU resources. The molecule, orbital, and label groups are
@@ -65,6 +66,10 @@ export function rebuildDisplay(ctx: SceneContext) {
 
   // Labels — one dropdown controls which (if any) label layer is visible
   const labelMode = ctx.display.labelMode;
+  // Orbital/hybridization labels are plain colored text, so their colors must
+  // track the background: pale tints on the dark presets, darkened hues on
+  // white/gray ones.
+  const labelPalette = labelPaletteFor(ctx.display.bgColor);
   if (labelMode === 'atom') {
     // Element symbol labels (C, N, O...) — rendered into labelGroup
     renderLabels(ctx.labelGroup, ctx.currentMolecule);
@@ -73,14 +78,14 @@ export function rebuildDisplay(ctx: SceneContext) {
     ctx.hybridizationLabelGroup.visible = false;
   } else if (labelMode === 'orbital' && ctx.classifications) {
     // σ/π/lp orbital labels
-    renderOrbitalLabels(ctx.orbitalLabelGroup, ctx.currentMolecule, ctx.classifications);
+    renderOrbitalLabels(ctx.orbitalLabelGroup, ctx.currentMolecule, ctx.classifications, labelPalette);
     ctx.orbitalLabelGroup.visible = true;
     ctx.labelGroup.visible = false;
     ctx.hybridizationLabelGroup.visible = false;
     document.getElementById('orbital-legend')!.classList.remove('hidden');
   } else if (labelMode === 'hybrid' && ctx.classifications) {
     // Hybridization labels (sp², sp³)
-    renderHybridizationLabels(ctx.hybridizationLabelGroup, ctx.currentMolecule, ctx.classifications);
+    renderHybridizationLabels(ctx.hybridizationLabelGroup, ctx.currentMolecule, ctx.classifications, labelPalette);
     ctx.hybridizationLabelGroup.visible = true;
     ctx.labelGroup.visible = false;
     ctx.orbitalLabelGroup.visible = false;
