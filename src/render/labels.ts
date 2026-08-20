@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
-import { labelOpacity } from '../utils/label-fade';
 import { getCovalentRadius } from './chem-data';
 
 // How far each label is pushed toward the camera, as a multiple of the
@@ -40,31 +39,7 @@ function makeTextSprite(text: string): THREE.Sprite {
   return sprite;
 }
 
-/** Farthest atom-to-centroid distance — the fallback length scale. */
-function boundingRadius(molecule: Molecule): number {
-  const n = molecule.atoms.length;
-  if (n === 0) return 1;
-  let cx = 0, cy = 0, cz = 0;
-  for (const a of molecule.atoms) {
-    cx += a.x; cy += a.y; cz += a.z;
-  }
-  cx /= n; cy /= n; cz /= n;
-  let r = 0;
-  for (const a of molecule.atoms) {
-    r = Math.max(r, Math.hypot(a.x - cx, a.y - cy, a.z - cz));
-  }
-  return r;
-}
-
 export function renderLabels(group: THREE.Group, molecule: Molecule): void {
-  // The distance-fade window is owned by buildScene, which measures it from
-  // the framed camera; fall back to a radius-derived window if it was never
-  // set (labels then fade on the old radius heuristic rather than not at all).
-  if (typeof group.userData.fadeNear !== 'number' || typeof group.userData.fadeFar !== 'number') {
-    const r = boundingRadius(molecule);
-    Object.assign(group.userData, { fadeNear: 1.2 * r, fadeFar: 2.4 * r });
-  }
-
   for (let i = 0; i < molecule.atoms.length; i++) {
     const atom = molecule.atoms[i];
     const sprite = makeTextSprite(atom.element);
@@ -81,21 +56,15 @@ export function renderLabels(group: THREE.Group, molecule: Molecule): void {
 }
 
 /**
- * Per-frame label update (called from the render loop): fade opacity by
- * camera distance AND keep each label pushed just in front of its own
- * orbitals.
+ * Per-frame label update (called from the render loop): keep each label
+ * pushed just in front of its own orbitals.
  *
  * The push makes depth testing behave the way it should for a label: its own
  * σ/π/lone-pair lobes sit behind the pushed depth, so they never occlude it,
  * while genuinely foreground geometry (another atom's lobes — the Metal-style
- * opaque ones included — or bonds/atoms) does. The distance fade additionally
- * drops the rear of the molecule out of the picture entirely.
+ * opaque ones included — or bonds/atoms) does.
  */
 export function updateLabels(group: THREE.Group, camera: THREE.PerspectiveCamera): void {
-  const near = group.userData?.fadeNear;
-  const far = group.userData?.fadeFar;
-  if (typeof near !== 'number' || typeof far !== 'number') return;
-
   // Compute the camera in the group's local frame: the label group can be
   // auto-rotating independently of the camera.
   group.updateMatrixWorld(true);
@@ -115,9 +84,5 @@ export function updateLabels(group: THREE.Group, camera: THREE.PerspectiveCamera
     if (dist > 1e-9) toCam.divideScalar(dist);
 
     child.position.copy(base).addScaledVector(toCam, ud.push as number);
-
-    const material = child.material as THREE.SpriteMaterial;
-    const opacity = labelOpacity(dist, near, far);
-    if (material.opacity !== opacity) material.opacity = opacity;
   }
 }

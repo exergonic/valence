@@ -106,7 +106,7 @@ export function initScene(container: HTMLElement): SceneContext {
       piSystemGroup.rotation.y += 0.005;
     }
     controls.update();
-    // Distance-fade + forward-push the atom labels against the (moved) camera.
+    // Forward-push the atom labels against the (moved) camera.
     updateLabels(labelGroup, camera);
     renderer.render(scene, camera);
   }

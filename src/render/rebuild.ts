@@ -8,7 +8,6 @@ import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels
 import { renderPiSystems } from './pi-systems';
 import { hsvToHex } from './color-schemes';
 import { classifyMolecule } from '../chem/classify';
-import { fadeWindow } from '../utils/label-fade';
 
 // Remove every mesh from a group (recursively into nested groups),
 // disposing GPU resources. The molecule, orbital, and label groups are
@@ -145,18 +144,4 @@ export function buildScene(ctx: SceneContext) {
   ctx.camera.lookAt(center);
   ctx.controls.target.set(center.x, center.y, center.z);
   ctx.controls.update();
-
-  // Anchor the label fade to this camera framing: the atom nearest the
-  // camera stays ~fully labeled, the farthest one recedes.
-  if (ctx.currentMolecule) {
-    let nearest = Infinity;
-    let farthest = 0;
-    for (const a of ctx.currentMolecule.atoms) {
-      const d = Math.hypot(a.x - ctx.camera.position.x, a.y - ctx.camera.position.y, a.z - ctx.camera.position.z);
-      if (d < nearest) nearest = d;
-      if (d > farthest) farthest = d;
-    }
-    const { near, far } = fadeWindow(nearest, farthest);
-    Object.assign(ctx.labelGroup.userData, { fadeNear: near, fadeFar: far });
-  }
 }
