@@ -221,42 +221,6 @@ html, body {
   position: relative;
 }
 
-/* ── Examples Bar ── */
-
-#examples-bar {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  z-index: 10;
-}
-
-#examples-bar select {
-  font-size: 12px;
-  background: rgba(30, 30, 35, 0.88);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  padding: 5px 22px 5px 10px;
-  color: #ccc;
-  font-family: inherit;
-  cursor: pointer;
-  backdrop-filter: blur(6px);
-  -webkit-appearance: none;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23888'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-  min-width: 110px;
-}
-
-#examples-bar select:hover {
-  border-color: rgba(255,255,255,0.25);
-}
-
-#examples-bar select option {
-  background: #222;
-  color: #ccc;
-}
-
 /* ── Molecule Info Header (persistent) ── */
 
 #molecule-info {

@@ -38,12 +38,6 @@
       </div>
       <div id="splitter"></div>
       <div id="canvas-container">
-        <div id="examples-bar">
-          <select id="examples-dropdown">
-            <option value="">Examples</option>
-          </select>
-        </div>
-
         <!-- Persistent molecule info header -->
         <div id="molecule-info" class="hidden">
           <span id="mol-formula"></span>
@@ -63,6 +57,12 @@
             <button class="tab-btn" data-tab="measure">Measure</button>
           </div>
           <div id="tab-build" class="tab-content active">
+            <div class="ctrl-section">
+              <span class="ctrl-label">Examples</span>
+              <select id="examples-dropdown" class="label-mode-select">
+                <option value="">Pick an example…</option>
+              </select>
+            </div>
             <div class="ctrl-section">
               <label class="ctrl-toggle">
                 <input type="checkbox" id="ctrl-show-mol" />
@@ -259,7 +259,7 @@
           <li><strong>Hover</strong> orbitals to see their type (σ, π, lone pair)</li>
           <li><strong>Rotate</strong> the view by dragging, <strong>zoom</strong> with scroll</li>
           <li>Press <strong>R</strong> to reset the view</li>
-          <li>Try the <strong>Examples</strong> dropdown for pre-built molecules</li>
+          <li>Try the <strong>Examples</strong> dropdown in the <strong>Build</strong> tab for pre-built molecules</li>
           <li>Use the <strong>Style</strong> tab to change colors and materials</li>
           <li>Use <strong>Measure</strong> tab to click atoms and measure distances/angles/dihedrals</li>
           <li><strong>Export</strong> as PNG, SDF, XYZ, or copy the SMILES</li>
