@@ -245,6 +245,41 @@ html, body {
 
 #molecule-info.hidden { display: none; }
 
+/* ── Render error banner (local geometry pipeline failure) ── */
+
+#render-error {
+  position: absolute;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 14px;
+  background: rgba(58, 18, 18, 0.95);
+  border: 1px solid rgba(255, 110, 110, 0.4);
+  border-radius: 8px;
+  color: #f3c1c1;
+  font-size: 12px;
+  z-index: 20;
+  backdrop-filter: blur(8px);
+  max-width: 80%;
+}
+
+#render-error.hidden { display: none; }
+
+#render-error-close {
+  background: none;
+  border: none;
+  color: #e08a8a;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+#render-error-close:hover { color: #fff; }
+
 /* ── PubChem record dropdown (below the molecule info header) ── */
 
 #mol-data {

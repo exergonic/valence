@@ -24,6 +24,16 @@ function hideLoading() {
   document.getElementById('loading-overlay')!.classList.add('hidden');
 }
 
+function showRenderError(text: string) {
+  const banner = document.getElementById('render-error')!;
+  document.getElementById('render-error-text')!.textContent = text;
+  banner.classList.remove('hidden');
+}
+
+function hideRenderError() {
+  document.getElementById('render-error')!.classList.add('hidden');
+}
+
 function updateMoleculeInfo(info: PubChemInfo) {
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
@@ -98,6 +108,7 @@ function updateMoleculeInfo(info: PubChemInfo) {
 export function mountJsmePanel(ctx: SceneContext) {
   const renderBtn = document.getElementById('render-btn')! as HTMLButtonElement;
   ctx.rerender = () => rebuildDisplay(ctx);
+  document.getElementById('render-error-close')!.onclick = hideRenderError;
 
   renderBtn.onclick = async () => {
     const applet = window.jsmeApplet;
@@ -105,6 +116,7 @@ export function mountJsmePanel(ctx: SceneContext) {
 
     renderBtn.textContent = 'Loading...';
     renderBtn.disabled = true;
+    hideRenderError();
     showLoading('Rendering...');
 
     try {
@@ -133,7 +145,18 @@ export function mountJsmePanel(ctx: SceneContext) {
         showLoading('Refining geometry...');
         const local = await computeLocalGeometry(molecule);
         const t4 = performance.now();
-        if (local) molecule = local;
+        if (!local) {
+          // The local pipeline failed: refuse to render rather than silently
+          // displaying the unrefined 2D sketch as if it were a 3D model.
+          // The 3D view is left unchanged.
+          console.warn('[render] computeLocalGeometry returned null; refusing to render');
+          showRenderError(
+            'Could not generate 3D geometry for this structure — the local MMFF94 pipeline failed. ' +
+            'The 3D view is unchanged.'
+          );
+          return;
+        }
+        molecule = local;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         updateMoleculeInfo({
           source: 'local',
