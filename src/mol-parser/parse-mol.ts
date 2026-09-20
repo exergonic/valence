@@ -35,6 +35,11 @@ function parseV2000(molBlock: string): Molecule {
       x: parseFloat(line.substring(0, 10)),
       y: parseFloat(line.substring(10, 20)),
       z: parseFloat(line.substring(20, 30)),
+      // Atom-line charge code, columns 37-39 (0-indexed 36-39):
+      // 0 = neutral, 1 = +3, 2 = +2, 3 = +1, 4 = doublet radical
+      // (not a charge — left unset), 5 = -1, 6 = -2, 7 = -3.
+      // M CHG property lines parsed below override this per the spec.
+      charge: parseChargeCode(line.length >= 39 ? line.substring(36, 39).trim() : ''),
     });
   }
 
@@ -50,5 +55,36 @@ function parseV2000(molBlock: string): Molecule {
     });
   }
 
+  // Formal charges from M CHG property lines ("M  CHG  2   3   1   7  -1":
+  // atoms 3 and 7 carry +1 and -1). These override the atom-line charge
+  // codes above — this is also how JSME's molFile() encodes a drawn
+  // carbocation, so the local geometry path can see it.
+  const propStart = bondStart + bondCount;
+  for (let i = propStart; i < lines.length; i++) {
+    const m = /^M\s+CHG\s+(\d+)\s*(.*)$/.exec(lines[i]);
+    if (!m) continue;
+    const nums = m[2].trim().split(/\s+/).map(Number);
+    for (let k = 0; k + 1 < nums.length; k += 2) {
+      const idx = nums[k] - 1; // 1-based in the file
+      const charge = nums[k + 1];
+      if (idx >= 0 && idx < atoms.length && Number.isFinite(charge)) {
+        atoms[idx].charge = charge === 0 ? undefined : charge;
+      }
+    }
+  }
+
   return { atoms, bonds };
+}
+
+/** Map a V2000 atom-line charge code to a formal charge (undefined = neutral). */
+function parseChargeCode(code: string): number | undefined {
+  switch (code) {
+    case '1': return 3;
+    case '2': return 2;
+    case '3': return 1;
+    case '5': return -1;
+    case '6': return -2;
+    case '7': return -3;
+    default: return undefined; // '0', '4' (radical), '', or unparsable
+  }
 }

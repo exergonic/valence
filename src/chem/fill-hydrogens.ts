@@ -19,6 +19,25 @@ const BOND_VALENCE: Record<string, number> = {
   Sn: 4, Sb: 3, Te: 2, I: 1,
 };
 
+// Typical bond-order sums for CHARGED atoms (RDKit-style default
+// valences): a carbocation is trivalent, ammonium N⁺ tetravalent,
+// alkoxide O⁻ monovalent, halide X⁻ zerovalent. Charged entries override
+// BOND_VALENCE above; an (element, charge) pair not listed here keeps the
+// neutral target (current behavior) rather than guessing.
+const CHARGED_VALENCE: Record<string, Record<number, number>> = {
+  B:  { '-1': 4 },
+  C:  { '1': 3, '-1': 3 },
+  N:  { '1': 4, '-1': 2 },
+  O:  { '1': 3, '-1': 1 },
+  F:  { '-1': 0 },
+  Si: { '1': 3, '-1': 3 },
+  P:  { '1': 4, '-1': 2 },
+  S:  { '1': 3, '-1': 1 },
+  Cl: { '1': 2, '-1': 0 },
+  Br: { '1': 2, '-1': 0 },
+  I:  { '1': 2, '-1': 0 },
+};
+
 const BOND_LENGTH = 1.0;
 
 /**
@@ -51,7 +70,15 @@ export function fillMissingHydrogens(molecule: Molecule): Molecule {
     const valence = BOND_VALENCE[atom.element];
     if (!valence) continue;
 
-    const missing = Math.max(0, valence - bondOrderSum[i]);
+    // A formal charge changes how many bonds the atom wants: a drawn
+    // carbocation (C⁺, two ring bonds) fills ONE hydrogen, not two —
+    // without this the local path silently neutralizes the ion while
+    // PubChem/CIR (explicit Hs in their SDFs) respect it.
+    const charge = atom.charge ?? 0;
+    const target = charge !== 0
+      ? (CHARGED_VALENCE[atom.element]?.[charge] ?? valence)
+      : valence;
+    const missing = Math.max(0, target - bondOrderSum[i]);
     if (missing === 0) continue;
 
     // Existing bond directions from this atom.

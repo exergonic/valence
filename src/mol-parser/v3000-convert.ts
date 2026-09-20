@@ -54,7 +54,19 @@ export function convertV3000ToV2000(v3000: string): string | null {
       const y = parseFloat(parts[5]);
       const z = parseFloat(parts[6]);
       if (isNaN(x) || isNaN(y) || isNaN(z)) continue;
-      atoms.push({ element, x, y, z });
+      // Formal charge rides in a trailing "CHG=<n>" property, e.g.
+      // "M  V30 3 C 1.0 2.0 0.0 0 CHG=1". Carry it so the local
+      // pipeline (H-fill, MMFF94 typing) sees the same charge the
+      // V2000 parser would read from an M CHG line.
+      let charge: number | undefined;
+      for (const p of parts) {
+        const m = /^CHG=(-?\d+)$/.exec(p);
+        if (m) {
+          const c = parseInt(m[1], 10);
+          if (c !== 0) charge = c;
+        }
+      }
+      atoms.push({ element, x, y, z, charge });
     }
   }
 
@@ -89,5 +101,19 @@ export function convertV3000ToV2000(v3000: string): string | null {
     return `${String(b.atom1Index + 1).padStart(3)}${String(b.atom2Index + 1).padStart(3)}${String(b.order).padStart(3)}  0  0  0  0`;
   });
 
-  return [header.trim(), counts, ...atomLines, ...bondLines, 'M  END', ''].join('\n');
+  // Formal charges as M CHG property lines (up to 8 entries per line,
+  // matching the V2000 convention the parser reads back).
+  const charged = atoms
+    .map((a, i) => ({ idx: i + 1, charge: a.charge }))
+    .filter((e): e is { idx: number; charge: number } => e.charge !== undefined);
+  const chgLines: string[] = [];
+  for (let i = 0; i < charged.length; i += 8) {
+    const chunk = charged.slice(i, i + 8);
+    chgLines.push(
+      `M  CHG${String(chunk.length).padStart(3)}` +
+        chunk.map((e) => `${String(e.idx).padStart(4)}${String(e.charge).padStart(4)}`).join(''),
+    );
+  }
+
+  return [header.trim(), counts, ...atomLines, ...bondLines, ...chgLines, 'M  END', ''].join('\n');
 }
