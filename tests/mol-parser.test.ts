@@ -71,4 +71,78 @@ M  END
     expect(mol.bonds[0]).toEqual({ atom1Index: 0, atom2Index: 1, order: 1 });
     expect(mol.bonds[7]).toEqual({ atom1Index: 7, atom2Index: 0, order: 1 });
   });
+
+  it('leaves charge unset for neutral atoms', () => {
+    const mol = parseMolBlock(mockMol);
+    expect(mol.atoms[0].charge).toBeUndefined();
+    expect(mol.atoms[2].charge).toBeUndefined();
+  });
+
+  it('parses formal charge from an M CHG line (JSME carbocation encoding)', () => {
+    // JSME's molFile() writes a drawn carbocation as "M  CHG  1   <atom>   <charge>".
+    const charged = `JME
+
+  2  1  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.5000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  CHG  1   1   1
+M  END
+`;
+    const mol = parseMolBlock(charged);
+    expect(mol.atoms[0].charge).toBe(1);
+    expect(mol.atoms[1].charge).toBeUndefined();
+  });
+
+  it('parses the V2000 atom-line charge code', () => {
+    // Columns 37-39 of the atom line: 3 = +1, 5 = -1 (0-indexed 36-39).
+    const coded = `
+
+
+  2  1  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C     3  0  0  0  0  0  0  0  0  0  0  0
+    1.5000    0.0000    0.0000 O     5  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+`;
+    const mol = parseMolBlock(coded);
+    expect(mol.atoms[0].charge).toBe(1);
+    expect(mol.atoms[1].charge).toBe(-1);
+  });
+
+  it('lets M CHG override the atom-line charge code', () => {
+    const both = `
+
+
+  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C     3  0  0  0  0  0  0  0  0  0  0  0
+M  CHG  1   1  -1
+M  END
+`;
+    const mol = parseMolBlock(both);
+    expect(mol.atoms[0].charge).toBe(-1);
+  });
+
+  it('carries V3000 CHG= through the converter', () => {
+    const v3000 = `some header
+program line
+comment line
+  0  0  0  0  0  0  0  0  0  0999 V3000
+M  V30 BEGIN CTAB
+M  V30 COUNTS 2 1 0 0 0
+M  V30 BEGIN ATOM
+M  V30 1 C 0.0 0.0 0.0 0 CHG=1
+M  V30 2 C 1.5 0.0 0.0 0
+M  V30 END ATOM
+M  V30 BEGIN BOND
+M  V30 1 1 1 2
+M  V30 END BOND
+M  V30 END CTAB
+M  END
+`;
+    const mol = parseMolBlock(v3000);
+    expect(mol.atoms).toHaveLength(2);
+    expect(mol.atoms[0].charge).toBe(1);
+    expect(mol.atoms[1].charge).toBeUndefined();
+  });
 });

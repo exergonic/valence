@@ -133,6 +133,12 @@ export function refineWithMMFF94(molecule: Molecule): Molecule | null {
     const mmff: MMFFMolecule = {
       atoms: start.atoms.map((a, i) => ({
         index: i, element: a.element, x: a.x, y: a.y, z: a.z,
+        // mmff94-ts derives primary formal charges from the assigned
+        // atom type when formal_charge is absent — pass it only for
+        // genuinely charged atoms, so neutral molecules refine exactly
+        // as before while a drawn ion (carbocation, ammonium, ...)
+        // gets its charged type variants and BCI primary charge.
+        ...(a.charge ? { formal_charge: a.charge } : {}),
       })),
       bonds: start.bonds.map((b) => ({
         atom1: b.atom1Index, atom2: b.atom2Index, bond_order: b.order,
