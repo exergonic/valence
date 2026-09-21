@@ -7,7 +7,7 @@
       "dependencies": {
         "@tauri-apps/api": "^2.11.1",
         "jsme-editor": "^2024.4.29",
-        "mmff94-ts": "file:vendor/mmff94-ts-0.1.0-alpha.1.tgz",
+        "mmff94-ts": "file:vendor/mmff94-ts-0.1.0-alpha.2.tgz",
         "three": "^0.160.0",
       },
       "devDependencies": {
@@ -160,7 +160,7 @@
 
     "meshoptimizer": ["meshoptimizer@0.18.1", "", {}, "sha512-ZhoIoL7TNV4s5B6+rx5mC//fw8/POGyNxS/DZyCJeiZ12ScLfVwRE/GfsxwiTkMYYD5DmK2/JXnEVXqL4rF+Sw=="],
 
-    "mmff94-ts": ["mmff94-ts@vendor/mmff94-ts-0.1.0-alpha.1.tgz", {}, "sha512-gA671dJm9QCmdG1F2C7iOp3lTFXnL6B3DqmIi7kq8KuQtdveZDNF4QnjLQqk8Pc/s8H19Quo+dN12dAv+0qVWg=="],
+    "mmff94-ts": ["mmff94-ts@vendor/mmff94-ts-0.1.0-alpha.2.tgz", {}, "sha512-RReAWG171td0lOic/9PJDn4K3RhEiKlfBbZSddXQh41tH/l4tDDOesD1kiFGWgFqkxV0h6hXzPstgt00ZU/wFg=="],
 
     "nanoid": ["nanoid@3.3.18", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w=="],
 

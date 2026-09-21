@@ -117,7 +117,7 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 | `src/ui/` | Control panel, JSME panel wiring, the examples list (`examples.ts`), tooltip. |
 | `src/utils/` | Vector math (`vec3.ts`) and pure lone-pair direction geometry (`lone-pairs.ts`). |
 
-The MMFF94 engine is consumed from `vendor/mmff94-ts-0.1.0-alpha.1.tgz` (a committed, self-contained bundle of the [mmff94-ts](https://github.com/exergonic/mmff94-ts) library — zero runtime dependencies; Vite embeds it into the worker chunk at build time).
+The MMFF94 engine is consumed from `vendor/mmff94-ts-0.1.0-alpha.2.tgz` (a committed, self-contained bundle of the [mmff94-ts](https://github.com/exergonic/mmff94-ts) library — zero runtime dependencies; Vite embeds it into the worker chunk at build time).
 
 ---
 
