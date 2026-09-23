@@ -1,7 +1,7 @@
 import type { Molecule } from '../mol-parser';
 import { optimizeTorsions } from './torsions';
 import { vecDot, crossProduct, vecNormalize, rotateRodrigues } from '../utils/vec3';
-import { idealHybridVectors } from '../utils/ideal-vectors';
+import { idealVseprVectors } from '../chem/ideal-vsepr-vectors';
 
 const BOND_LENGTH = 1.0;
 
@@ -223,7 +223,7 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   while (queue.length > 0) {
     const curr = queue.shift()!;
     const coordinationNumber = adj[curr].length;
-    const vectors = idealHybridVectors(coordinationNumber);
+    const vectors = idealVseprVectors(coordinationNumber);
 
     const unplaced = adj[curr].filter((ni) => !placed.has(ni));
     if (unplaced.length === 0) continue;

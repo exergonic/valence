@@ -8,7 +8,7 @@ import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels
 import { renderPiSystems } from './pi-systems';
 import { hsvToHex } from './color-schemes';
 import { classifyMolecule } from '../chem/classify';
-import { labelPaletteFor } from '../utils/label-colors';
+import { labelPaletteFor } from './label-colors';
 
 // Remove every mesh from a group (recursively into nested groups),
 // disposing GPU resources. The molecule, orbital, and label groups are

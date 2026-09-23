@@ -1,6 +1,7 @@
-// Ideal hybrid-orbital directions shared by the embedder (place3d.ts)
-// and the hydrogen filler (fill-hydrogens.ts). Unit vectors pointing toward
-// each coordination site for a given steric number.
+// Ideal VSEPR vertex directions — one unit vector per coordination site for
+// a given steric number — shared by the embedder (place3d.ts) and the
+// hydrogen filler (fill-hydrogens.ts). These are the shapes the
+// hybridization engine names: sp → linear … sp³d² → octahedral.
 
 export const LINEAR_VECTORS: [number, number, number][] = [
   [1, 0, 0],
@@ -38,7 +39,7 @@ export const OCTAHEDRAL_VECTORS: [number, number, number][] = [
   [0, 0, -1],
 ];
 
-export function idealHybridVectors(count: number): [number, number, number][] {
+export function idealVseprVectors(count: number): [number, number, number][] {
   if (count <= 2) return LINEAR_VECTORS;
   if (count === 3) return TRIG_VECTORS;
   if (count === 5) return TRIG_BIPYRAMIDAL_VECTORS;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLightBackground, labelPaletteFor, DARK_BG_LABELS, LIGHT_BG_LABELS } from '../src/utils/label-colors';
+import { isLightBackground, labelPaletteFor, DARK_BG_LABELS, LIGHT_BG_LABELS } from '../src/render/label-colors';
 
 // Standard WCAG relative-luminance / contrast helpers, implemented here
 // independently so the test verifies the palette against the spec rather
