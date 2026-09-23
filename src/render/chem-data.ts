@@ -49,17 +49,13 @@ const VDW_RADII: Record<string, number> = {
   Br: 1.85, I: 1.98,
 };
 
-// Visual radii (used only for atom spheres in ball-and-stick display)
-const VISUAL_RADII: Record<string, number> = {
-  H: 0.35, He: 0.30,
-  Li: 0.45, Be: 0.45, B: 0.50,
-  C: 0.55, N: 0.50, O: 0.50, F: 0.42, Ne: 0.40,
-  Na: 0.55, Mg: 0.50, Al: 0.55,
-  Si: 0.65, P: 0.60, S: 0.60, Cl: 0.55, Ar: 0.50,
-  K: 0.70, Ca: 0.60,
-  Fe: 0.55, Cu: 0.55, Zn: 0.50, Mn: 0.55,
-  Br: 0.60, I: 0.65,
-};
+// Visual radii (atom spheres in ball-and-stick display) are the van der Waals
+// radius scaled down.  0.3 is Avogadro's ball-and-stick default
+// (ballandstick/atomScale 0.3, avogadrolibs), so a molecule reads the same
+// size here and there — and the element-to-element proportions match, which
+// hand-picked numbers drifted away from (carbon ran ~8% large, ~11% large
+// relative to hydrogen).
+export const VISUAL_RADIUS_SCALE = 0.3;
 
 export function getElementColor(element: string): number {
   return ELEMENT_COLORS[element] ?? 0xcc88ff;
@@ -70,9 +66,9 @@ export function getCovalentRadius(element: string): number {
   return ELEMENT_RADII[element] ?? 0.7;
 }
 
-/** Visual radius — used for atom sphere display */
+/** Visual radius — used for atom sphere display (0.3 × the van der Waals radius) */
 export function getVisualRadius(element: string): number {
-  return VISUAL_RADII[element] ?? 0.50;
+  return VISUAL_RADIUS_SCALE * getVdwRadius(element);
 }
 
 /** Van der Waals radius — used for space-filling (CPK) display */

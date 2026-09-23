@@ -148,7 +148,7 @@ export function initScene(container: HTMLElement): SceneContext {
   return {
     scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup, piSystemGroup, atomRig,
     display: {
-      atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', atomStyle: 'classic', bgColor: '#ffffff',
+      atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', atomStyle: 'glossy', bgColor: '#ffffff',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
       viewPreset: 'all',
       spaceFilling: false,
