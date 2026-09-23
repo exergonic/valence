@@ -63,11 +63,20 @@
   <body>
     <h1>2D sketcher bench</h1>
     <p class="note">
+      <strong>Run it with the dev server.</strong> In the repo: <code>npm run dev</code>, then open
+      <code>http://localhost:5173/valence/playground/sketchers.html</code>. Opening this file straight
+      from disk cannot work — the page's script is TypeScript, JSME is served from the dev server's
+      <code>/valence/jsme/</code> route, and OpenChemLib is an ES module (blocked over
+      <code>file://</code>). Only Ketcher's iframe has a plain relative path, so it is the one panel
+      that appears when the file is opened directly.
+    </p>
+    <p class="note">
       Dev-only, never built into the app. Three sketchers at the app's real panel size (400 × 443),
       each fed the <em>same</em> Kekulé benzene, each asked for a molfile back — so the bond orders
       that come out are directly comparable. Vendor assets are gitignored: unzip
       <code>ketcher-standalone-3.18.0.zip</code> (epam/ketcher releases) into
-      <code>playground/vendor/ketcher/</code>, and copy <code>dist/openchemlib.js</code> from the
+      <code>playground/vendor/ketcher/</code>, and copy <code>dist/openchemlib.js</code> +
+      <code>dist/openchemlib.d.ts</code> + <code>dist/resources.json</code> from the
       <code>openchemlib</code> npm package to <code>playground/vendor/ocl/</code>.
     </p>
     <p>
