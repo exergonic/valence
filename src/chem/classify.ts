@@ -1,6 +1,6 @@
 import type { Molecule } from '../mol-parser';
 import { assignHybridization } from './hybridize';
-import { computePiDirection, getPiDirectionFromNeighbor, sigmaPlaneNormal, MIN_PROMOTION_ALIGNMENT } from './orient-pi';
+import { computePiDirection, getPiDirectionFromNeighbor, perpendicularToAllBonds } from './orient-pi';
 import { vecDot, crossProduct } from '../utils/vec3';
 import * as THREE from 'three';
 
@@ -91,16 +91,20 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
     // sp² already has an unused p orbital, so no promotion is needed.
     let conjugated = lonePairs > 0 && conjugatingNeighbors > 0 && piBondsPerAtom[atomIdx] === 0;
 
-    // Geometric veto on the promotion: the promoted p must be perpendicular
-    // to this atom's own σ-bond plane (a p orbital's node plane contains
-    // the σ framework).  The neighbor's π direction is borrowed only when
-    // it satisfies that — planar phenol/furan O passes, but thioanisole S
-    // (methyl twisted ~60° out of the ring plane) fails and keeps its σ
-    // lone pairs instead of drawing a fake p lobe parallel to the ring.
+    // Geometric veto on the promotion: a p orbital's node plane contains
+    // the σ framework, so the borrowed π direction must be perpendicular
+    // to EVERY σ bond — not just to the plane of two of them.  On a
+    // three-bond atom that plane is whichever pair the bond list starts
+    // with, and a pyramidal centre passes on one pair while another bond
+    // sticks far out of the node plane (allyl anion: 0.999 on the first
+    // pair, 0.815 on the third bond), promoting a σ lone pair that the
+    // atom's own geometry says is not conjugated.  Planar phenol/furan O
+    // passes, pyramidal carbanions and thioanisole S (methyl twisted ~60°
+    // out of the ring plane) keep their σ lone pairs instead of drawing a
+    // fake p lobe parallel to the ring.
     if (conjugated) {
       const borrowed = getPiDirectionFromNeighbor(atomIdx, neighborsOf, molecule, piBondsPerAtom, atomPos);
-      const sigmaNormal = sigmaPlaneNormal(bondVectors);
-      if (borrowed && sigmaNormal && Math.abs(vecDot(borrowed, sigmaNormal)) < MIN_PROMOTION_ALIGNMENT) {
+      if (borrowed && !perpendicularToAllBonds(borrowed, bondVectors)) {
         conjugated = false;
       }
     }

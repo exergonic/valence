@@ -1,28 +1,38 @@
 import type { Molecule } from '../mol-parser';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../utils/vec3';
 
-// Minimum |cos(angle)| between a promoted lone-pair p orbital and the
-// promoting atom's own σ-plane normal.  A real p orbital must be
-// perpendicular to the σ plane (its node plane contains the σ framework);
-// we allow up to 30° of twist before refusing to call the lone pair
-// conjugated — beyond that the π overlap is weak enough that drawing a
-// parallel p lobe would be misleading (e.g. thioanisole S, methyl ~60°
-// out of the ring plane).
-export const MIN_PROMOTION_ALIGNMENT = Math.cos(Math.PI / 6); // cos 30°
+// Maximum |cos| between a promoted lone-pair p orbital and any single σ
+// bond of the promoting atom.  A real p orbital's node plane contains the
+// whole σ framework, so the borrowed π direction must be perpendicular to
+// every σ bond; each bond may sit up to 30° out of the node plane before
+// we refuse to call the lone pair conjugated — beyond that the π overlap
+// is weak enough that drawing a parallel p lobe would be misleading
+// (e.g. thioanisole S, methyl ~60° out of the ring plane).
+export const MAX_PROMOTION_TILT = Math.sin(Math.PI / 6); // sin 30°
 
-// Normal of the plane spanned by an atom's σ-bond vectors, or null when
-// fewer than 2 bonds leave no plane to measure (e.g. enolate O⁻ with a
-// single σ bond — unverifiable, so promotion is allowed to proceed).
-export function sigmaPlaneNormal(
+// True when `direction` is perpendicular to every σ-bond vector (each
+// bond within MAX_PROMOTION_TILT of the direction's node plane).
+//
+// Every bond has to be tested, not just the plane of two of them.  For a
+// three-bond atom that plane is whichever pair the bond list happens to
+// start with, and the pairs disagree on a pyramidal centre: the allyl
+// anion's carbanion passed the old two-bond test on its first pair
+// (|dot| = 0.999) while its third bond sat 35° out of the node plane
+// (|dot| = 0.815), promoting a σ lone pair that the atom's own geometry
+// says is not conjugated.  No direction is perpendicular to all three
+// bonds of a pyramid, so such centres veto the promotion outright.
+export function perpendicularToAllBonds(
+  direction: [number, number, number],
   neighborVectors: [number, number, number][],
-): [number, number, number] | null {
-  for (let a = 0; a < neighborVectors.length; a++) {
-    for (let b = a + 1; b < neighborVectors.length; b++) {
-      const nrm = vecNormalize(crossProduct(neighborVectors[a], neighborVectors[b]));
-      if (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) return nrm;
-    }
+): boolean {
+  const d = vecNormalize(direction);
+  if (d[0] === 0 && d[1] === 0 && d[2] === 0) return false;
+  for (const v of neighborVectors) {
+    const u = vecNormalize(v);
+    if (u[0] === 0 && u[1] === 0 && u[2] === 0) continue;
+    if (Math.abs(vecDot(d, u)) > MAX_PROMOTION_TILT) return false;
   }
-  return null;
+  return true;
 }
 
 // Computes the p-orbital direction for an atom by looking at a specific

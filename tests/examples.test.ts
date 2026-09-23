@@ -461,6 +461,169 @@ describe('Lone-pair promotion geometry gate', () => {
     // promoted p must be perpendicular to the (planar) σ framework → ±z here
     expect(Math.abs(s.piDirection![2])).toBeGreaterThan(0.999);
   });
+
+  // Allyl anion, the reported MMFF94-refined geometry (2026-09-23): the
+  // terminal CH₂⁻ is a full pyramid — 0.376 Å out of its C–H₂ plane,
+  // bond-angle sum 331.9° against 360° for planar — so its lone pair is a
+  // σ lone pair and must not be promoted onto the C=C π system.  The old
+  // two-bond σ-plane test passed anyway: its first bond pair gave
+  // |dot| = 0.999 while the third bond sat 35° out of the node plane
+  // (|dot| = 0.815), and reordering the bonds flipped the verdict — proof
+  // that the pair plane was not a σ framework.  Every bond is tested now,
+  // and no direction is perpendicular to all three bonds of a pyramid.
+  const ALLYL_ANION_XYZ: [string, number, number, number][] = [
+    ['C', -0.2694, 0.1432, -0.0672],
+    ['C', 1.0516, 0.1415, 0.1475],
+    ['C', 1.8768, -1.0939, 0.2737],
+    ['H', -0.8173, 1.0770, -0.1496],
+    ['H', -0.8338, -0.7790, -0.1652],
+    ['H', 1.5761, 1.0897, 0.2398],
+    ['H', 1.2799, -2.0085, 0.2116],
+    ['H', 2.6447, -1.1209, -0.5045],
+  ];
+
+  const ALLYL_ANION_BONDS = [
+    { atom1Index: 0, atom2Index: 1, order: 2 },
+    { atom1Index: 1, atom2Index: 2, order: 1 },
+    { atom1Index: 0, atom2Index: 3, order: 1 },
+    { atom1Index: 0, atom2Index: 4, order: 1 },
+    { atom1Index: 1, atom2Index: 5, order: 1 },
+    { atom1Index: 2, atom2Index: 6, order: 1 },
+    { atom1Index: 2, atom2Index: 7, order: 1 },
+  ];
+
+  // The drawn anion's charge, restored: the SDF export writes zero charge
+  // columns and no M  CHG (moleculeToSDF in controls.ts), so the exported
+  // file reads as a neutral radical — C3 carries −1 here, as it did in
+  // the app when the classification ran.
+  const pyramidalAllylAnion = (): Molecule => ({
+    atoms: ALLYL_ANION_XYZ.map(([element, x, y, z], i) =>
+      i === 2 ? { element, x, y, z, charge: -1 } : { element, x, y, z }),
+    bonds: ALLYL_ANION_BONDS.map((b) => ({ ...b })),
+  });
+
+  // Same connectivity, trigonal planar (hand-authored, z = 0): the lone
+  // pair is a genuine p conjugated with the C=C — the promotion must
+  // still happen.
+  const planarAllylAnion = (): Molecule => ({
+    atoms: [
+      { element: 'C', x: 0, y: 0, z: 0 },
+      { element: 'C', x: 1.4, y: 0, z: 0 },
+      { element: 'C', charge: -1, x: 2.15, y: 1.299, z: 0 },
+      { element: 'H', x: -0.545, y: 0.944, z: 0 },
+      { element: 'H', x: -0.545, y: -0.944, z: 0 },
+      { element: 'H', x: 1.945, y: -0.944, z: 0 },
+      { element: 'H', x: 3.24, y: 1.299, z: 0 },
+      { element: 'H', x: 1.605, y: 2.243, z: 0 },
+    ],
+    bonds: ALLYL_ANION_BONDS.map((b) => ({ ...b })),
+  });
+
+  it('pyramidal allyl-anion carbanion keeps its σ lone pair — no p on the π system', () => {
+    const cls = classifyMolecule(pyramidalAllylAnion());
+    const c = cls[2];
+    expect(c.element).toBe('C');
+    expect(c.hybridization).toBe('sp³');
+    expect(c.lonePairs).toBe(1);
+    expect(c.hasPi).toBe(false);
+    expect(c.piDirection).toBeNull();
+    // The C=C keeps its p orbitals — only the carbanion's promotion is vetoed.
+    expect(cls[0].hasPi).toBe(true);
+    expect(cls[1].hasPi).toBe(true);
+  });
+
+  it('the carbanion lone pair sits on its own equal-angle axis, not on the π direction', () => {
+    const mol = pyramidalAllylAnion();
+    const cls = classifyMolecule(mol);
+    const atom = cls[2];
+    const center = mol.atoms[2];
+    const bondVecs = mol.bonds
+      .filter((b) => b.atom1Index === 2 || b.atom2Index === 2)
+      .map((b) => {
+        const n = mol.atoms[b.atom1Index === 2 ? b.atom2Index : b.atom1Index];
+        return [n.x - center.x, n.y - center.y, n.z - center.z] as [number, number, number];
+      });
+    const dirs = getLonePairDirections(bondVecs, bondVecs.length + atom.lonePairs, atom.piDirection);
+    expect(dirs).toHaveLength(1);
+    const angleTo = (v: [number, number, number]) =>
+      (Math.acos(Math.max(-1, Math.min(1, vecDot(vecNormalize(dirs[0]), vecNormalize(v))))) * 180) / Math.PI;
+    // Equal angles to all three C–C/C–H bonds: the pyramid's own axis.
+    const angles = bondVecs.map(angleTo);
+    expect(angles[1]).toBeCloseTo(angles[0], 6);
+    expect(angles[2]).toBeCloseTo(angles[0], 6);
+    // More than 30° off the C=C π axis (143.6° measured) — the promoted p
+    // used to be drawn exactly along it.
+    const offAxis = Math.abs(vecDot(vecNormalize(dirs[0]), vecNormalize(cls[1].piDirection!)));
+    expect(offAxis).toBeLessThan(Math.cos(Math.PI / 6));
+    // ...and pointing away from the C–H₂ cluster (the pyramid apex).
+    const centroid: [number, number, number] = [0, 0, 0];
+    for (const b of bondVecs) {
+      const u = vecNormalize(b);
+      centroid[0] += u[0];
+      centroid[1] += u[1];
+      centroid[2] += u[2];
+    }
+    expect(vecDot(dirs[0], centroid)).toBeLessThan(0);
+  });
+
+  it('every σ bond is tested — the verdict no longer depends on bond order', () => {
+    // Bond order decided which pair the old gate measured first.  This
+    // permutation leads with C–H7/C–H8 (plane normal |dot| = 0.494, a
+    // veto) where the original led with C–C2/C–H7 (0.999, a pass) — the
+    // same geometry, opposite verdicts.
+    const permuted = pyramidalAllylAnion();
+    permuted.bonds = [
+      permuted.bonds[5], permuted.bonds[6], permuted.bonds[1], permuted.bonds[0],
+      permuted.bonds[2], permuted.bonds[3], permuted.bonds[4],
+    ];
+    // p-orbital SIGN follows bond order (the Kekulé phase convention), so
+    // compare the classification facts, then the carbanion's veto.
+    const facts = (m: Molecule) =>
+      classifyMolecule(m).map(({ element, hybridization, lonePairs, hasPi }) =>
+        ({ element, hybridization, lonePairs, hasPi }));
+    expect(facts(permuted)).toEqual(facts(pyramidalAllylAnion()));
+    expect(classifyMolecule(permuted)[2].piDirection).toBeNull();
+  });
+
+  it('planar allyl anion control: the lone pair is promoted onto the π system', () => {
+    const cls = classifyMolecule(planarAllylAnion());
+    const c = cls[2];
+    expect(c.hybridization).toBe('sp²');
+    expect(c.lonePairs).toBe(0);
+    expect(c.hasPi).toBe(true);
+    expect(Math.abs(c.piDirection![2])).toBeGreaterThan(0.999);
+    // C1, C2 and the promoted C3 share the p axis → one delocalized π system.
+    const axisDot = (a: [number, number, number], b: [number, number, number]) =>
+      Math.abs(vecDot(vecNormalize(a), vecNormalize(b)));
+    expect(axisDot(cls[0].piDirection!, cls[1].piDirection!)).toBeGreaterThan(0.99);
+    expect(axisDot(cls[1].piDirection!, cls[2].piDirection!)).toBeGreaterThan(0.99);
+  });
+
+  it('planar formate control: the single-bond O⁻ still promotes (its one bond is checked)', () => {
+    // The old gate skipped atoms with fewer than two σ bonds ("no plane to
+    // measure, promotion allowed"); the all-bonds test checks the O⁻'s
+    // single C–O bond, which lies in the carboxylate plane → |dot| ≈ 0 →
+    // the sp² resonance look is unchanged.
+    const formate: Molecule = {
+      atoms: [
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'H', x: 1.1, y: 0, z: 0 },
+        { element: 'O', charge: -1, x: -0.625, y: 1.083, z: 0 },
+        { element: 'O', x: -0.61, y: -1.057, z: 0 },
+      ],
+      bonds: [
+        { atom1Index: 0, atom2Index: 1, order: 1 },
+        { atom1Index: 0, atom2Index: 2, order: 1 },
+        { atom1Index: 0, atom2Index: 3, order: 2 },
+      ],
+    };
+    const o = classifyMolecule(formate)[2];
+    expect(o.element).toBe('O');
+    expect(o.hybridization).toBe('sp²');
+    expect(o.lonePairs).toBe(2);
+    expect(o.hasPi).toBe(true);
+    expect(Math.abs(o.piDirection![2])).toBeGreaterThan(0.999);
+  });
 });
 
 describe('Two-coordinate oxygen — topology, not angle (2026-08-06)', () => {
