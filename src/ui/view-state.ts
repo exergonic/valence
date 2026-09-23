@@ -16,6 +16,7 @@ export interface ViewState {
     bondScale: number;
     labelMode: string;
     orbitalPreset: string;
+    atomStyle: string;
     bgColor: string;
     colors: { scheme: string; sigma: [number, number, number]; pi: [number, number, number]; lonePair: [number, number, number] };
     viewPreset: string;
@@ -43,6 +44,7 @@ export function serializeView(ctx: SceneContext, annotations: Annotation[]): Vie
       bondScale: ctx.display.bondScale,
       labelMode: ctx.display.labelMode,
       orbitalPreset: ctx.display.orbitalPreset,
+      atomStyle: ctx.display.atomStyle,
       bgColor: ctx.display.bgColor,
       colors: {
         scheme: ctx.display.colors.scheme,
@@ -72,6 +74,8 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
   ctx.display.bondScale = d.bondScale;
   ctx.display.labelMode = d.labelMode as any;
   ctx.display.orbitalPreset = d.orbitalPreset as any;
+  // Views saved before atom styles existed fall back to the classic look.
+  ctx.display.atomStyle = (d.atomStyle ?? 'classic') as any;
   ctx.display.bgColor = d.bgColor;
   ctx.scene.background = new THREE.Color(d.bgColor);
   ctx.display.colors = {

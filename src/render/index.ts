@@ -1,6 +1,8 @@
 export { initScene } from './setup';
 export type { SceneContext, DisplaySettings, ColorSettings, ColorScheme } from './setup';
 export { renderAtoms } from './atoms';
+export { applyAtomStyle, atomEnvMap, atomLayer, makeAtomMaterial, ATOM_LAYER } from './atom-styles';
+export type { AtomStyle } from './atom-styles';
 export { renderBonds } from './bonds';
 export { renderOrbitals } from './orbitals';
 export { renderLabels } from './labels';

@@ -518,32 +518,10 @@ html, body {
   margin-top: 4px;
 }
 
-.preset-btn {
-  flex: 1;
-  padding: 4px 0;
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 4px;
-  background: transparent;
-  color: #bbb;
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.12s;
-}
-
-.preset-btn:hover {
-  border-color: rgba(255,255,255,0.35);
-  color: #fff;
-}
-
-.preset-btn.active {
-  background: #4488ff;
-  border-color: #4488ff;
-  color: #fff;
-}
-
 /* ── Label Mode Select ── */
 
-.label-mode-select {
+.label-mode-select,
+.ctrl-select {
   width: 100%;
   padding: 4px 6px;
   border: 1px solid rgba(255,255,255,0.15);
@@ -556,12 +534,14 @@ html, body {
   font-family: inherit;
 }
 
-.label-mode-select:hover {
+.label-mode-select:hover,
+.ctrl-select:hover {
   border-color: rgba(255,255,255,0.35);
   color: #fff;
 }
 
-.label-mode-select option {
+.label-mode-select option,
+.ctrl-select option {
   background: #222;
   color: #ccc;
 }

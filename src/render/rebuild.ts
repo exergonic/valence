@@ -6,6 +6,7 @@ import { renderOrbitals } from './orbitals';
 import { renderLabels } from './labels';
 import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
+import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/assign-orbitals';
 import { labelPaletteFor } from './label-colors';
@@ -36,6 +37,9 @@ function clearGroup(g: THREE.Group) {
 // camera. Used for display settings (atom size, orbital style, colors).
 export function rebuildDisplay(ctx: SceneContext) {
   if (!ctx.currentMolecule) return;
+  // Atom lighting first — the atoms below build their materials from it.
+  // Every rebuild path (dropdown, loaded view, share link) comes through here.
+  applyAtomStyle(ctx, ctx.display.atomStyle);
   clearGroup(ctx.moleculeGroup);
   clearGroup(ctx.orbitalGroup);
   clearGroup(ctx.labelGroup);
@@ -51,7 +55,7 @@ export function rebuildDisplay(ctx: SceneContext) {
     pi: hsvToHex(c.pi[0], c.pi[1], c.pi[2]),
     lonePair: hsvToHex(c.lonePair[0], c.lonePair[1], c.lonePair[2]),
   };
-  renderAtoms(ctx.moleculeGroup, atoms, ctx.display);
+  renderAtoms(ctx.moleculeGroup, atoms, ctx.display, ctx.renderer);
   // In space-filling mode, hide bonds
   if (!ctx.display.spaceFilling) {
     renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);

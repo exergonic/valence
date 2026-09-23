@@ -1,5 +1,5 @@
 import type { SceneContext } from './render';
-import { initScene, buildScene } from './render';
+import { initScene, buildScene, ATOM_LAYER } from './render';
 import { mountJsmePanel } from './ui/jsme-panel';
 import { setupControls } from './ui/controls';
 import { setupTooltip } from './ui/tooltip';
@@ -118,6 +118,8 @@ function setupKeyboardShortcuts(ctx: SceneContext) {
 
 function setupMeasureMode(ctx: SceneContext) {
   const raycaster = new THREE.Raycaster();
+  // Atom meshes of the lit styles sit on the atom layer; picking must see them.
+  raycaster.layers.enable(ATOM_LAYER);
   const mouse = new THREE.Vector2();
   const container = document.getElementById('canvas-container')!;
 

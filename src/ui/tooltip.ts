@@ -1,8 +1,11 @@
 import * as THREE from 'three';
+import { ATOM_LAYER } from '../render';
 
 export function setupTooltip(container: HTMLElement, camera: THREE.Camera, ...groups: THREE.Group[]) {
   const tooltip = document.getElementById('tooltip')!;
   const raycaster = new THREE.Raycaster();
+  // Atom meshes of the lit styles sit on the atom layer; picking must see them.
+  raycaster.layers.enable(ATOM_LAYER);
   const mouse = new THREE.Vector2();
   const allObjects: THREE.Object3D[] = [];
 

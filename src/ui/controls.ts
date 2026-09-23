@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { SceneContext, ColorScheme } from '../render';
+import type { SceneContext, ColorScheme, AtomStyle } from '../render';
 import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 
@@ -108,15 +108,20 @@ export function setupControls(ctx: SceneContext) {
     });
   });
 
-  // Orbital Presets (only .preset-btn, not .bg-btn)
-  const presetBtns = panel.querySelectorAll<HTMLButtonElement>('.preset-btn');
-  presetBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      presetBtns.forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      ctx.display.orbitalPreset = btn.dataset.preset as 'glass' | 'glossy' | 'matte' | 'metallic';
-      rerender();
-    });
+  // Atom and orbital looks.  Both go through buildScene, which applies the
+  // atom lighting before it rebuilds the meshes.
+  const atomStyleSelect = panel.querySelector<HTMLSelectElement>('#ctrl-atom-style')!;
+  atomStyleSelect.value = ctx.display.atomStyle;
+  atomStyleSelect.addEventListener('change', () => {
+    ctx.display.atomStyle = atomStyleSelect.value as AtomStyle;
+    rerender();
+  });
+
+  const orbitalStyleSelect = panel.querySelector<HTMLSelectElement>('#ctrl-orbital-style')!;
+  orbitalStyleSelect.value = ctx.display.orbitalPreset;
+  orbitalStyleSelect.addEventListener('change', () => {
+    ctx.display.orbitalPreset = orbitalStyleSelect.value as 'glass' | 'glossy' | 'matte' | 'metallic';
+    rerender();
   });
 
   // Background presets

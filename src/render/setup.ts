@@ -3,6 +3,7 @@ import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls
 import type { Molecule } from '../mol-parser';
 import type { AtomOrbitals } from '../chem/assign-orbitals';
 import { updateLabels } from './labels';
+import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
 export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complementary' | 'cool' | 'warm' | 'highcontrast' | 'custom';
 
@@ -18,6 +19,7 @@ export interface DisplaySettings {
   bondScale: number;
   labelMode: 'atom' | 'orbital' | 'hybrid' | 'off';
   orbitalPreset: 'glass' | 'glossy' | 'matte' | 'metallic';
+  atomStyle: AtomStyle;
   bgColor: string;
   colors: ColorSettings;
   viewPreset: 'all' | 'sigma-only' | 'pi-only' | 'lone-pairs-only';
@@ -37,6 +39,7 @@ export interface SceneContext {
   orbitalLabelGroup: THREE.Group;
   hybridizationLabelGroup: THREE.Group;
   piSystemGroup: THREE.Group;
+  atomRig: { key: THREE.DirectionalLight; fill: THREE.DirectionalLight; rim: THREE.DirectionalLight };
   display: DisplaySettings;
   currentMolecule?: Molecule;
   atomOrbitals: AtomOrbitals[] | null;
@@ -73,6 +76,23 @@ export function initScene(container: HTMLElement): SceneContext {
   const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
   directionalLight.position.set(1, 1, 1);
   scene.add(directionalLight);
+
+  // Atom-only studio rig, dark until an atom style turns it on.  Layer 1
+  // keeps it off the orbitals and bonds.
+  const atomRig = {
+    key: new THREE.DirectionalLight(0xffffff, 0),
+    fill: new THREE.DirectionalLight(0xffffff, 0),
+    rim: new THREE.DirectionalLight(0xffffff, 0),
+  };
+  atomRig.key.position.set(2, 3, 4);
+  atomRig.fill.position.set(-2, -3, 2);
+  atomRig.rim.position.set(-3, 2, -4);
+  for (const lamp of [atomRig.key, atomRig.fill, atomRig.rim]) {
+    lamp.layers.set(ATOM_LAYER);
+    scene.add(lamp);
+  }
+  // Atom meshes of the lit styles render on layer 1; the camera must see it.
+  camera.layers.enable(ATOM_LAYER);
 
   const moleculeGroup = new THREE.Group();
   moleculeGroup.visible = false;
@@ -126,9 +146,9 @@ export function initScene(container: HTMLElement): SceneContext {
   };
 
   return {
-    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup, piSystemGroup,
+    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup, piSystemGroup, atomRig,
     display: {
-      atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', bgColor: '#ffffff',
+      atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', atomStyle: 'classic', bgColor: '#ffffff',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
       viewPreset: 'all',
       spaceFilling: false,

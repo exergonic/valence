@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Valence — atom look playground</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    background: #ffffff;
+  }
+  canvas { display: block; }
+
+  .pane-label { position: fixed; padding: 12px 16px; pointer-events: none; max-width: 44%; }
+  .pane-label h2 { margin: 0; font-size: 15px; font-weight: 650; letter-spacing: .01em; color: #1a1a1a; }
+  .pane-label p  { margin: 3px 0 0; font-size: 12.5px; line-height: 1.35; color: #6b6b6b; }
+  .tl { top: 0; left: 0; }
+  .tr { top: 0; left: 50%; }
+  .bl { top: 50%; left: 0; }
+  .br { top: 50%; left: 50%; }
+
+  /* hairline cross so the four panes read as a comparison grid */
+  #gridlines { position: fixed; inset: 0; pointer-events: none; }
+  #gridlines::before, #gridlines::after {
+    content: ""; position: absolute; background: #ececec;
+  }
+  #gridlines::before { left: 0; right: 0; top: 50%; height: 1px; }
+  #gridlines::after  { top: 0; bottom: 0; left: 50%; width: 1px; }
+
+  #bar {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 14px; align-items: center; z-index: 10;
+    background: rgba(255,255,255,.94); border: 1px solid #e4e4e4; border-radius: 12px;
+    padding: 9px 14px; box-shadow: 0 3px 14px rgba(0,0,0,.07);
+    font-size: 13px; color: #444;
+  }
+  #bar .group { display: flex; gap: 6px; align-items: center; }
+  #bar button, #bar select {
+    font: inherit; padding: 4px 11px; border: 1px solid #d4d4d4; border-radius: 8px;
+    background: #fff; color: #1a1a1a; cursor: pointer;
+  }
+  #bar button.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  #bar .sep { width: 1px; height: 20px; background: #e4e4e4; }
+  #hint { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); font-size: 12px; color: #9a9a9a; z-index: 10; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="gridlines"></div>
+
+<div class="pane-label tl">
+  <h2>1 · Today — Phong + two lamps</h2>
+  <p>What the app ships now: MeshPhongMaterial, ambient 0.5, one directional light.</p>
+</div>
+<div class="pane-label tr">
+  <h2>2 · Soft studio — image-based light only</h2>
+  <p>RoomEnvironment IBL, roughness 0.55, no lamps. Calm, very legible.</p>
+</div>
+<div class="pane-label bl">
+  <h2>3 · Glossy ceramic — IBL + key light</h2>
+  <p>Clearcoat 0.55, roughness 0.28, ior 1.5. Colour-true, crisp highlight.</p>
+</div>
+<div class="pane-label br">
+  <h2>4 · Showcase — 3-light rig + ACES</h2>
+  <p>Clearcoat 0.7, rim light, env 1.25, tone-mapped. The “wow” look.</p>
+</div>
+
+<div id="hint">drag anywhere to rotate · scroll to zoom · every pane shares the same camera</div>
+
+<div id="bar">
+  <div class="group">
+    <span>show</span>
+    <button id="btn-molecule" class="active">Phenol</button>
+    <button id="btn-elements">Elements</button>
+  </div>
+  <div class="sep"></div>
+  <div class="group">
+    <span>tone map</span>
+    <select id="sel-tone">
+      <option value="aces" selected>ACES Filmic</option>
+      <option value="agx">AgX</option>
+      <option value="none">None</option>
+    </select>
+  </div>
+  <div class="sep"></div>
+  <button id="btn-spin" class="active">Spin</button>
+</div>
+
+<script type="module" src="./atom-look.ts"></script>
+</body>
+</html>
