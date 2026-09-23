@@ -40,7 +40,7 @@ Built specifically for the classroom, Valence embraces a purely geometric and al
 *   **🎨 Advanced Orbital Rendering:** Powered by THREE.js. Utilizes precise `LatheGeometry` lobes to visualize σ, π, p, and lone pair orbitals.
 *   **🧭 p-AO Directionality:** Automatically orientates all π-system p-orbitals perpendicular to the σ plane, forcing parallel alignment across conjugated networks.
 *   **⚡ Generic-Parameter Warnings:** When the local MMFF94 path must use generic parameters (hypervalent centers like PCl₅/SF₆, elements outside the MMFF94 type space), the status popup warns that the refined geometry is approximate — validated against the 761-molecule MMFF94 suite so it never false-fires on covered chemistry.
-*   **📸 Quick Export:** Seamlessly capture and export 2× resolution PNG snapshots of the current viewport for lectures or assignments.
+*   **📸 Quick Export:** Seamlessly capture and export 2× resolution PNG snapshots of the current viewport, or the molecule itself as SDF (formal charges preserved on `M  CHG` lines) or XYZ, for lectures or assignments.
 
 ---
 

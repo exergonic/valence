@@ -341,7 +341,7 @@ function downloadFile(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-function moleculeToSDF(mol: { atoms: any[]; bonds: any[] }): string {
+export function moleculeToSDF(mol: { atoms: any[]; bonds: any[] }): string {
   const lines: string[] = [];
   lines.push('Valence export');
   lines.push('  converter');
@@ -352,6 +352,20 @@ function moleculeToSDF(mol: { atoms: any[]; bonds: any[] }): string {
   }
   for (const b of mol.bonds) {
     lines.push(`${(b.atom1Index + 1).toString().padStart(3)}${(b.atom2Index + 1).toString().padStart(3)}${b.order.toString().padStart(3)}  0  0  0  0`);
+  }
+  // Formal charges ride on M  CHG property lines — the V2000 way, and
+  // exactly what parseMolBlock reads back (it lets M  CHG override the
+  // atom-line charge code, which is also how JSME encodes a drawn ion).
+  // The atom block keeps its zero charge columns: one source of truth,
+  // and its own code covers only -3..+3.  Up to eight index/charge pairs
+  // per line.  Without this a drawn ion exported as a neutral radical.
+  const charged = mol.atoms
+    .map((a, i) => ({ idx: i + 1, charge: a.charge ?? 0 }))
+    .filter((c) => c.charge !== 0);
+  for (let i = 0; i < charged.length; i += 8) {
+    const chunk = charged.slice(i, i + 8);
+    lines.push('M  CHG' + chunk.length.toString().padStart(3)
+      + chunk.map((c) => c.idx.toString().padStart(4) + c.charge.toString().padStart(4)).join(''));
   }
   lines.push('M  END');
   lines.push('$$$$');
