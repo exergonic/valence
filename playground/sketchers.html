@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Valence — 2D sketcher bench</title>
+    <style>
+      body {
+        font: 14px system-ui, -apple-system, sans-serif;
+        margin: 0;
+        padding: 16px;
+        background: #fafafa;
+        color: #222;
+      }
+      h1 { font-size: 18px; margin: 0 0 6px; }
+      .note { color: #666; font-size: 12px; max-width: 1000px; line-height: 1.5; }
+      .note code { background: #ececec; padding: 0 3px; border-radius: 3px; }
+      .bench { display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
+      .panel { width: 400px; }
+      .panel h2 {
+        font-size: 14px;
+        margin: 0 0 6px;
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        align-items: baseline;
+      }
+      .panel h2 .stat { font-weight: 400; color: #777; font-size: 11px; text-align: right; }
+      .host {
+        width: 400px;
+        height: 443px;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        background: #fff;
+        overflow: hidden;
+      }
+      .host iframe { width: 100%; height: 100%; border: 0; display: block; }
+      /* Size the editor from the very start, not only once :defined. Before the
+         element upgrades it is an unknown element (display: inline) with no box,
+         and the component builds its canvas from the size it sees at upgrade.
+         !important beats the fixed 400x600 rule registerCustomElement() injects. */
+      openchemlib-editor {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
+      }
+      .panel footer { margin-top: 6px; font-size: 11px; color: #555; }
+      .out {
+        white-space: pre-wrap;
+        word-break: break-all;
+        max-height: 110px;
+        overflow: auto;
+        background: #f0f0f0;
+        border-radius: 3px;
+        padding: 4px;
+        margin-top: 4px;
+        display: none;
+      }
+      .out.show { display: block; }
+      .verdict { font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>2D sketcher bench</h1>
+    <p class="note">
+      Dev-only, never built into the app. Three sketchers at the app's real panel size (400 × 443),
+      each fed the <em>same</em> Kekulé benzene, each asked for a molfile back — so the bond orders
+      that come out are directly comparable. Vendor assets are gitignored: unzip
+      <code>ketcher-standalone-3.18.0.zip</code> (epam/ketcher releases) into
+      <code>playground/vendor/ketcher/</code>, and copy <code>dist/openchemlib.js</code> from the
+      <code>openchemlib</code> npm package to <code>playground/vendor/ocl/</code>.
+    </p>
+    <p>
+      <button id="load">Load benzene into all three</button>
+      <span id="bench-status" class="note"></span>
+    </p>
+    <div class="bench">
+      <section class="panel">
+        <h2>JSME (current) <span class="stat" data-stat="jsme">waiting…</span></h2>
+        <div class="host" id="host-jsme"></div>
+        <footer>
+          <button data-export="jsme">Export molfile</button>
+          <span class="verdict" data-verdict="jsme"></span>
+          <div class="out" data-out="jsme"></div>
+        </footer>
+      </section>
+
+      <section class="panel">
+        <h2>Ketcher (standalone, iframe) <span class="stat" data-stat="ketcher">waiting…</span></h2>
+        <div class="host"><iframe id="host-ketcher" src="./vendor/ketcher/index.html"></iframe></div>
+        <footer>
+          <button data-export="ketcher">Export molfile</button>
+          <span class="verdict" data-verdict="ketcher"></span>
+          <div class="out" data-out="ketcher"></div>
+        </footer>
+      </section>
+
+      <section class="panel">
+        <h2>OpenChemLib (web component) <span class="stat" data-stat="ocl">waiting…</span></h2>
+        <div class="host" id="host-ocl"><openchemlib-editor></openchemlib-editor></div>
+        <footer>
+          <button data-export="ocl">Export molfile</button>
+          <span class="verdict" data-verdict="ocl"></span>
+          <div class="out" data-out="ocl"></div>
+        </footer>
+      </section>
+    </div>
+
+    <script>
+      // JSME calls this global when its applet is ready; the bench awaits the event.
+      // Same constructor arguments as the app itself (index.html), so the JSME panel
+      // looks exactly like the one being judged.
+      window.jsmeOnLoad = function () {
+        window.jsmeApplet = new JSApplet.JSME('host-jsme', '100%', '100%', {
+          options: 'newlook,star',
+          guicolor: '#f5f5f5',
+        });
+        window.jsmeApplet.setMenuScale(1.5);
+        window.jsmeApplet.setMolecularAreaScale(2.0);
+        window.dispatchEvent(new Event('jsme-ready'));
+      };
+    </script>
+    <script src="../jsme/jsme.nocache.js"></script>
+    <script type="module" src="./sketchers.ts"></script>
+  </body>
+</html>

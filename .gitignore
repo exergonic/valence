@@ -5,5 +5,9 @@ dist/
 
 AGENTS.md
 
+# Dev-only bench assets (Ketcher standalone build, OpenChemLib bundle) —
+# see playground/sketchers.html for how to fetch them.
+playground/vendor/
+
 src-tauri/target/
 src-tauri/gen/
