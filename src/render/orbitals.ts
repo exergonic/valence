@@ -4,7 +4,7 @@ import type { ColorScheme } from './setup';
 import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
 import { getElementColor, getCovalentRadius } from './chem-data';
 import type { AtomClassification } from '../chem/classify';
-import { getLonePairDirections } from '../utils/lone-pairs';
+import { getLonePairDirections } from '../chem/orient-lone-pairs';
 import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
 
 export function renderOrbitals(

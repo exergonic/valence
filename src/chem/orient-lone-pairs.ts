@@ -1,11 +1,11 @@
 import {
   vecSub, vecNormalize, vecDot, crossProduct, findPerpendicular, rotateRodrigues, rotateToward,
-} from './vec3';
+} from '../utils/vec3';
 
 // Direction(s) for the σ lone-pair lobes of an atom, given its σ-bond
 // directions and the total number of hybrid orbitals (σ bonds + lone
-// pairs).  Pure geometry, no Three.js — kept out of render/ so it can be
-// unit-tested like the hybridization logic.
+// pairs).  The σ/π direction-placement logic, next to orient-pi.ts; pure
+// geometry, no Three.js, so it unit-tests like the hybridization rules.
 export function getLonePairDirections(
   sigmaDirs: [number, number, number][],
   total: number,

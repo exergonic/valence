@@ -4,7 +4,7 @@ import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
 import { classifyMolecule } from '../src/chem/classify';
-import { getLonePairDirections } from '../src/utils/lone-pairs';
+import { getLonePairDirections } from '../src/chem/orient-lone-pairs';
 
 interface AtomExpectation {
   element: string;

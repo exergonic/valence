@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getLonePairDirections } from '../src/utils/lone-pairs';
+import { getLonePairDirections } from '../src/chem/orient-lone-pairs';
 import { vecDot, vecNormalize } from '../src/utils/vec3';
 
 const deg = (d: number) => (d * Math.PI) / 180;
