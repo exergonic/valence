@@ -4,6 +4,7 @@ import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
 import { classifyMolecule } from '../src/chem/classify';
+import { getLonePairDirections } from '../src/utils/lone-pairs';
 
 interface AtomExpectation {
   element: string;
@@ -527,5 +528,97 @@ describe('Two-coordinate oxygen — topology, not angle (2026-08-06)', () => {
     expect(o.lonePairs).toBe(2);
     expect(o.hasPi).toBe(true);
     expect(o.piDirection).not.toBeNull();
+  });
+});
+
+describe('Methyl anion — the charge-aware lone pair (2026-09-23)', () => {
+  // Regression (reported against the live app): the local MMFF94 path
+  // relaxes a drawn methyl anion to a pyramidal carbanion (H–C–H
+  // 108.8°, the CR angle terms), but the electron bookkeeping ignored
+  // the −1 charge — 4 − 3 σ = 0.5 → floor → 0 lone pairs → sp² — so no
+  // lone pair was drawn and a p orbital appeared on the normal of a
+  // two-bond plane, 36° off the C₃ᵥ axis. C⁻ is isoelectronic with N:
+  // 3 σ bonds + 1 lone pair → sp³, so the lone pair must sit on the
+  // axis equidistant from all three C–H bonds — which is where ammonia's
+  // lone pair already sat (N reaches sp³ without a charge term).
+  //
+  // Geometry: the exported MMFF94-refined coordinates of the drawn
+  // anion (embedAndRefine output; the probe reproduced them bit-for-bit).
+  const XYZ: [string, number, number, number][] = [
+    ['C', 0.0029, 0.0066, -0.2844],
+    ['H', 1.0255, 0.0070, 0.1016],
+    ['H', -0.5167, 0.8918, 0.0913],
+    ['H', -0.5117, -0.8861, 0.0802],
+  ];
+
+  const methylAnion = (): Molecule => ({
+    atoms: XYZ.map(([element, x, y, z], i) =>
+      i === 0 ? { element, x, y, z, charge: -1 } : { element, x, y, z }),
+    bonds: [1, 2, 3].map((i) => ({ atom1Index: 0, atom2Index: i, order: 1 })),
+  });
+
+  // The control: the same pyramidal geometry with neutral N (ammonia).
+  const ammonia = (): Molecule => ({
+    atoms: XYZ.map(([, x, y, z], i) => (i === 0 ? { element: 'N', x, y, z } : { element: 'H', x, y, z })),
+    bonds: [1, 2, 3].map((i) => ({ atom1Index: 0, atom2Index: i, order: 1 })),
+  });
+
+  const bondVectors = (mol: Molecule): [number, number, number][] => {
+    const center = mol.atoms[0];
+    return mol.bonds.map((b) => {
+      const n = mol.atoms[b.atom2Index];
+      return [n.x - center.x, n.y - center.y, n.z - center.z] as [number, number, number];
+    });
+  };
+
+  // The direction the renderer draws for the single lone pair:
+  // getLonePairDirections(σ directions, σ bonds + lone pairs, π direction).
+  const lonePairDirection = (mol: Molecule): [number, number, number] => {
+    const atom = classifyMolecule(mol)[0];
+    const dirs = getLonePairDirections(bondVectors(mol), mol.bonds.length + atom.lonePairs, atom.piDirection);
+    expect(dirs).toHaveLength(1);
+    return dirs[0];
+  };
+
+  it('the carbanion C is sp³ with one lone pair — no p orbital', () => {
+    const c = classifyMolecule(methylAnion())[0];
+    expect(c.element).toBe('C');
+    expect(c.hybridization).toBe('sp³');
+    expect(c.lonePairs).toBe(1);
+    expect(c.hasPi).toBe(false);
+    expect(c.piDirection).toBeNull();
+  });
+
+  it('the lone pair sits on the axis equidistant from all three C–H bonds', () => {
+    const mol = methylAnion();
+    const v = lonePairDirection(mol);
+    const angles = bondVectors(mol).map(
+      (b) => (Math.acos(Math.max(-1, Math.min(1, vecDot(vecNormalize(v), vecNormalize(b))))) * 180) / Math.PI,
+    );
+    expect(angles).toHaveLength(3);
+    expect(angles[1]).toBeCloseTo(angles[0], 6);
+    expect(angles[2]).toBeCloseTo(angles[0], 6);
+    // ~110.1° from every bond: the C₃ᵥ axis. The old sp² p direction
+    // (the normal of a two-bond plane) is perpendicular to two bonds
+    // and off-axis for the third — never three equal angles.
+    expect(angles[0]).toBeCloseTo(110.1, 1);
+    // ...and pointing away from the H cluster (the pyramid apex).
+    const centroid: [number, number, number] = [0, 0, 0];
+    for (const b of bondVectors(mol)) {
+      const u = vecNormalize(b);
+      centroid[0] += u[0];
+      centroid[1] += u[1];
+      centroid[2] += u[2];
+    }
+    expect(vecDot(v, centroid)).toBeLessThan(0);
+  });
+
+  it('ammonia control: the same geometry with neutral N gives the same axis', () => {
+    const n = classifyMolecule(ammonia())[0];
+    expect(n.hybridization).toBe('sp³');
+    expect(n.lonePairs).toBe(1);
+    // Isoelectronic: the carbanion's lone pair lands on the axis the
+    // amine's lone pair already used.
+    expect(vecDot(lonePairDirection(ammonia()), lonePairDirection(methylAnion()))).toBeCloseTo(1, 6);
   });
 });

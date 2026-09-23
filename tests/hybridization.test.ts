@@ -81,11 +81,45 @@ describe('assignHybridization (topology-first)', () => {
     expect(result.hybridization).toBe('sp2');
   });
 
-  it('should return sp2 for carboxylate oxygen (1 σ) — the floor() pin', () => {
+  it('should return sp2 for a neutral 1-σ oxygen — the floor() pin', () => {
     // 6 − 1 = 5 electrons → 2.5 per lone pair. floor() keeps 2 lone
-    // pairs and the sp² resonance structure; round() would give 3 and
-    // sp³. Formal charge would make this exact (6 − 1 − charge).
+    // pairs and sp²; round() would give 3 and sp³. The charged O⁻ is
+    // exact (6 + 1 − 1 = 6 → 3 lone pairs → sp³, the alkoxide pin
+    // below) and a carboxylate keeps its sp² look through the
+    // classifier's conjugation promotion, not through this floor.
     const result = assignHybridization('O', 1);
+    expect(result.hybridization).toBe('sp2');
+  });
+
+  it('should return sp3 for a methyl anion (3 σ bonds, charge −1) — the carbanion regression', () => {
+    // C⁻ is isoelectronic with N: 4 valence electrons + 1 from the
+    // charge − 3 σ bonds = 2 nonbonding electrons → 1 lone pair → 4
+    // domains → sp³ (the pyramidal carbanion). Without the charge term
+    // the count is 0.5 → floor → 0 lone pairs → sp², and the renderer
+    // draws a p orbital on the normal of a two-bond plane instead of
+    // the lone pair on the C₃ᵥ axis.
+    const result = assignHybridization('C', 3, 0, -1);
+    expect(result.hybridization).toBe('sp3');
+    expect(result.geometry).toBe('tetrahedral');
+  });
+
+  it('should return sp3 for an amide anion (2 σ bonds, charge −1)', () => {
+    // 5 + 1 − 2 = 4 nonbonding electrons → 2 lone pairs → 4 domains.
+    const result = assignHybridization('N', 2, 0, -1);
+    expect(result.hybridization).toBe('sp3');
+  });
+
+  it('should return sp3 for an alkoxide oxygen (1 σ bond, charge −1)', () => {
+    // 6 + 1 − 1 = 6 → 3 lone pairs → 4 domains (hydroxide, methoxide).
+    const result = assignHybridization('O', 1, 0, -1);
+    expect(result.hybridization).toBe('sp3');
+  });
+
+  it('should return sp2 for a carbocation (3 σ bonds, charge +1) — charge control', () => {
+    // 4 − 1 − 3 = 0 lone pairs → 3 domains → sp² with an empty p.
+    // The +1 already read sp² through the floor; the charge term must
+    // keep it.
+    const result = assignHybridization('C', 3, 0, 1);
     expect(result.hybridization).toBe('sp2');
   });
 

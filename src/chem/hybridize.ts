@@ -52,16 +52,27 @@ export function assignHybridization(
   element: string,
   sigmaBonds: number,
   piCount: number = 0,
+  charge: number = 0,
 ): HybridizationResult {
   const valence = VALENCE_ELECTRONS[element] || 4;
 
-  // Lone pairs from the valence-electron bookkeeping. floor() resolves the
-  // half-electron remainders that formal charge would: a nitro N
-  // (5 − 3 σ − 1 π = 1 → 0.5) keeps 0 lone pairs (sp²) and a carboxylate
-  // O⁻ (6 − 1 = 5 → 2.5) keeps 2 (sp² — the resonance structure), where
-  // round() would inflate both by one. The cost is a bare amide anion
-  // (1.5 → 1 lone pair, sp²) reading one short of its true sp³.
-  const lonePairs = Math.floor(Math.max(0, (valence - sigmaBonds - piCount) / 2));
+  // Lone pairs from the valence-electron bookkeeping: what the σ and π
+  // bonds leave of the valence shell, plus or minus the formal charge.
+  // The charge term is what makes an anion's extra electron pair
+  // visible: a methyl anion (C, 3 σ, charge −1) has 4 + 1 − 3 = 2
+  // nonbonding electrons → 1 lone pair → 4 domains → sp³. Without it
+  // the count is 0.5 → floor → 0 lone pairs → sp², and the renderer
+  // draws a p orbital on the normal of a two-bond plane instead of the
+  // lone pair on the C₃ᵥ axis (isoelectronic with ammonia, which reads
+  // 5 − 3 = 2 → 1 lone pair → sp³ and is correct).
+  //
+  // floor() still resolves the half-electron remainders that charge
+  // does not: a nitro N (5 − 3 σ − 1 π = 1 → 0.5) keeps 0 lone pairs
+  // (sp²), where round() would inflate it by one. A carboxylate O⁻ is
+  // exact (6 + 1 − 1 = 6 → 3 lone pairs → sp³) and keeps its sp²
+  // resonance look through the classifier's conjugation promotion,
+  // which turns one lone pair back into a p orbital.
+  const lonePairs = Math.floor(Math.max(0, (valence - charge - sigmaBonds - piCount) / 2));
 
   // Steric number = σ bonds + lone pairs. Hydrogen (1 σ bond, 0 lone
   // pairs) reads as 1 → pure s orbital. The upper clamp keeps hypervalent

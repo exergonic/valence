@@ -35,7 +35,7 @@ Built specifically for the classroom, Valence embraces a purely geometric and al
 
 ## ✨ Core Capabilities
 
-*   **🧠 Hybridization Engine:** Assigns sp / sp² / sp³ / sp³d / sp³d² states by counting electron domains (σ bonds + lone pairs) from the molecular graph — never from measured angles, which are the *output* of geometry, not its identity. Includes conjugation detection (e.g., phenol O, amide N, H₂SO₄ O) with a geometric promotion gate.
+*   **🧠 Hybridization Engine:** Assigns sp / sp² / sp³ / sp³d / sp³d² states by counting electron domains (σ bonds + lone pairs, shifted by the formal charge) from the molecular graph — never from measured angles, which are the *output* of geometry, not its identity. Includes conjugation detection (e.g., phenol O, amide N, H₂SO₄ O) with a geometric promotion gate.
 *   **🌐 Robust 3D Embedding:** Kekulizes JSME's aromatic SMILES (monocyclic rings → explicit bonds, so antiaromatic molecules like cyclobutadiene resolve correctly), then tries PubChem PUG REST for MMFF94-optimized coordinates, then the NIH CACTUS (CIR) resolver — each result validated against the sketch's heavy-atom bond graph. The in-house fallback (implicit hydrogens + graph-walk embedder + MMFF94 refinement via the vendored `mmff94-ts` library, in a Web Worker) produces MMFF94-quality geometry with no native dependencies.
 *   **🎨 Advanced Orbital Rendering:** Powered by THREE.js. Utilizes precise `LatheGeometry` lobes to visualize σ, π, p, and lone pair orbitals.
 *   **🧭 p-AO Directionality:** Automatically orientates all π-system p-orbitals perpendicular to the σ plane, forcing parallel alignment across conjugated networks.

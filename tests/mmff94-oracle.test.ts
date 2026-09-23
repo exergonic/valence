@@ -65,12 +65,6 @@ const DEVIATIONS: Deviation[] = [
       'promotion label: the phenol O is delocalized (sp² with a p orbital), but MMFF94 types it 6 (OR, the ether/alcohol type) — the type space does not separate O–C(sp²) from O–C(sp³), so the mapped sp³ expectation is met by the base class, not the promoted label.',
   },
   {
-    molecule: 'methoxide anion',
-    element: 'O',
-    reason:
-      'alkoxide floor() artifact: a 1-σ O⁻ reads 5 electrons → 2.5 per lone pair, floor() keeps 2 → sp² with a rendered p lobe, but the true count is 3 lone pairs → sp³. Known fix: the environment rule (1-σ O on sp3 C → sp³), same distinction MMFF94 draws between type 35 and type 32.',
-  },
-  {
     molecule: 'Phosphorus pentachloride (PCl₅)',
     element: 'P',
     reason:
@@ -109,12 +103,14 @@ const FORMALDEHYDE: Molecule = {
   bonds: [{ atom1Index: 0, atom2Index: 1, order: 2 }],
 };
 
-// The alkoxide is declared H-complete by hand (O⁻ + CH₃): the neutral
-// octet filler would add an O–H and turn it into methanol — the filler
-// has no charge concept, the same blindness the deviation below records.
+// The alkoxide is declared H-complete by hand (O⁻ + CH₃) with its charge
+// explicit: the classifier's electron bookkeeping reads the anion
+// (6 + 1 − 1 = 6 nonbonding electrons → 3 lone pairs → sp³), matching
+// the reference typer's 35 (OM) — the deviation this corpus entry used
+// to record (the charge-blind floor() reading 2.5 → 2 → sp²).
 const METHOXIDE: Molecule = {
   atoms: [
-    { element: 'O', x: 0, y: 0, z: 0 },
+    { element: 'O', charge: -1, x: 0, y: 0, z: 0 },
     { element: 'C', x: 1.4, y: 0, z: 0 },
     { element: 'H', x: 2.49, y: 0, z: 0 },
     { element: 'H', x: 0.85, y: 0.94, z: 0 },

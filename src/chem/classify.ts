@@ -45,14 +45,18 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
       return [n.x - atom.x, n.y - atom.y, n.z - atom.z];
     });
 
-    // Step 1: hybridization from the bond graph — element, σ bonds, and
-    // π bonds determine the electron-domain count. No angle measurement:
-    // measured angles are the OUTPUT of geometry refinement, and any
-    // threshold misclassifies part of the continuous range (the refined
-    // ether oxygen at 111.7° vs sp²'s ~120°). An ether O has 2 σ bonds →
-    // 2 lone pairs → 4 domains → sp³ at any angle; a carbonyl O
-    // (1 σ + 1 π) has 3 domains → sp².
-    const hybrid = assignHybridization(atom.element, neighborIndices.length, piBondsPerAtom[atomIdx]);
+    // Step 1: hybridization from the bond graph — element, σ bonds,
+    // π bonds, and the formal charge determine the electron-domain
+    // count. No angle measurement: measured angles are the OUTPUT of
+    // geometry refinement, and any threshold misclassifies part of the
+    // continuous range (the refined ether oxygen at 111.7° vs sp²'s
+    // ~120°). An ether O has 2 σ bonds → 2 lone pairs → 4 domains →
+    // sp³ at any angle; a carbonyl O (1 σ + 1 π) has 3 domains → sp².
+    // The charge matters because it changes the electron count: a
+    // methyl anion (C, 3 σ, −1) is isoelectronic with ammonia — 1 lone
+    // pair → sp³ — where a neutral 3-σ carbon (CH₃ radical/cation) has
+    // none and reads sp².
+    const hybrid = assignHybridization(atom.element, neighborIndices.length, piBondsPerAtom[atomIdx], atom.charge ?? 0);
 
     // Step 2: count σ lone pairs from steric number − σ bonds.
     // (Steric number = σ bonds + lone pairs, by VSEPR)
