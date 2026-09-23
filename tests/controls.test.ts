@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { moleculeToSDF } from '../src/ui/controls';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
-import { classifyMolecule } from '../src/chem/classify';
+import { assignOrbitals } from '../src/chem/assign-orbitals';
 
 // Regression (2026-09-23): the SDF export wrote zero charge columns and no
 // M  CHG property lines, so a drawn ion exported as a neutral radical — the
@@ -53,7 +53,7 @@ describe('SDF export — formal charges (2026-09-23)', () => {
     const original = formate();
     const reimported = parseMolBlock(moleculeToSDF(original));
     expect(reimported.atoms.map((a) => a.charge)).toEqual(original.atoms.map((a) => a.charge));
-    expect(classifyMolecule(reimported)).toEqual(classifyMolecule(original));
+    expect(assignOrbitals(reimported)).toEqual(assignOrbitals(original));
   });
 
   it('the reported allyl anion exports its charge and re-imports identically', () => {
@@ -89,6 +89,6 @@ $$$$
     expect(exported).toContain('M  CHG  1   3  -1');
     const reimported = parseMolBlock(exported);
     expect(reimported.atoms[2].charge).toBe(-1);
-    expect(classifyMolecule(reimported)).toEqual(classifyMolecule(original));
+    expect(assignOrbitals(reimported)).toEqual(assignOrbitals(original));
   });
 });

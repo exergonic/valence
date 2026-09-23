@@ -1,4 +1,4 @@
-mmff94-ts oracle — valence classifier vs the reference typer
+mmff94-ts oracle — valence orbital assignment vs the reference typer
 corpus: 18 molecules, 68 heavy atoms
 agreement: 65/68 (100.0%), documented deviations: 3, unexplained: 0
 Methane (CH₄): 1/1

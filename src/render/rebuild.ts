@@ -7,7 +7,7 @@ import { renderLabels } from './labels';
 import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
 import { hsvToHex } from './color-schemes';
-import { classifyMolecule } from '../chem/classify';
+import { assignOrbitals } from '../chem/assign-orbitals';
 import { labelPaletteFor } from './label-colors';
 
 // Remove every mesh from a group (recursively into nested groups),
@@ -56,7 +56,7 @@ export function rebuildDisplay(ctx: SceneContext) {
   if (!ctx.display.spaceFilling) {
     renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
   }
-  renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.classifications);
+  renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.atomOrbitals);
 
   // Pedagogical view presets
   const preset = ctx.display.viewPreset;
@@ -76,16 +76,16 @@ export function rebuildDisplay(ctx: SceneContext) {
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
     ctx.hybridizationLabelGroup.visible = false;
-  } else if (labelMode === 'orbital' && ctx.classifications) {
+  } else if (labelMode === 'orbital' && ctx.atomOrbitals) {
     // σ/π/lp orbital labels
-    renderOrbitalLabels(ctx.orbitalLabelGroup, ctx.currentMolecule, ctx.classifications, labelPalette);
+    renderOrbitalLabels(ctx.orbitalLabelGroup, ctx.currentMolecule, ctx.atomOrbitals, labelPalette);
     ctx.orbitalLabelGroup.visible = true;
     ctx.labelGroup.visible = false;
     ctx.hybridizationLabelGroup.visible = false;
     document.getElementById('orbital-legend')!.classList.remove('hidden');
-  } else if (labelMode === 'hybrid' && ctx.classifications) {
+  } else if (labelMode === 'hybrid' && ctx.atomOrbitals) {
     // Hybridization labels (sp², sp³)
-    renderHybridizationLabels(ctx.hybridizationLabelGroup, ctx.currentMolecule, ctx.classifications, labelPalette);
+    renderHybridizationLabels(ctx.hybridizationLabelGroup, ctx.currentMolecule, ctx.atomOrbitals, labelPalette);
     ctx.hybridizationLabelGroup.visible = true;
     ctx.labelGroup.visible = false;
     ctx.orbitalLabelGroup.visible = false;
@@ -100,8 +100,8 @@ export function rebuildDisplay(ctx: SceneContext) {
   }
 
   // π system highlighting — render translucent tubes connecting parallel p orbitals
-  if (ctx.display.highlightPiSystems && ctx.classifications && !ctx.display.spaceFilling) {
-    renderPiSystems(ctx.piSystemGroup, ctx.currentMolecule, ctx.classifications);
+  if (ctx.display.highlightPiSystems && ctx.atomOrbitals && !ctx.display.spaceFilling) {
+    renderPiSystems(ctx.piSystemGroup, ctx.currentMolecule, ctx.atomOrbitals);
     ctx.piSystemGroup.visible = true;
   } else {
     ctx.piSystemGroup.visible = false;
@@ -129,9 +129,9 @@ function filterOrbitalsByPreset(group: THREE.Group, preset: string) {
 
 // Full build: rebuildDisplay plus frame the camera on the new molecule.
 export function buildScene(ctx: SceneContext) {
-  // Cache the per-molecule classification here so renderOrbitals can
+  // Cache the per-molecule orbital assignment here so renderOrbitals can
   // read it instead of recomputing on every display-setting change.
-  ctx.classifications = ctx.currentMolecule ? classifyMolecule(ctx.currentMolecule) : null;
+  ctx.atomOrbitals = ctx.currentMolecule ? assignOrbitals(ctx.currentMolecule) : null;
   rebuildDisplay(ctx);
 
   const center = new THREE.Vector3();

@@ -3,7 +3,7 @@ import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
-import { classifyMolecule } from '../src/chem/classify';
+import { assignOrbitals } from '../src/chem/assign-orbitals';
 import { getLonePairDirections } from '../src/chem/orient-lone-pairs';
 
 interface AtomExpectation {
@@ -168,7 +168,7 @@ describe('Example orbital classifications', () => {
       const example = EXAMPLES.find((e) => e.name === ex.name);
       if (!example) { expect.fail(`Example not found: ${ex.name}`); return; }
 
-      const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
+      const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
 
       for (let i = 0; i < ex.atoms.length; i++) {
         const expected = ex.atoms[i];
@@ -288,7 +288,7 @@ describe('p-AO directionality', () => {
         return;
       }
 
-      const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
+      const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
       for (let i = 0; i < result.length; i++) {
         const atom = result[i];
         if (!atom.hasPi) continue;
@@ -302,7 +302,7 @@ describe('p-AO directionality', () => {
     const example = EXAMPLES.find((e) => e.name === 'Ethene (C₂H₄)');
     if (!example) { expect.fail('Example not found'); return; }
 
-    const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element === 'C');
+    const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element === 'C');
     expect(result).toHaveLength(2);
     expect(result[0].hasPi).toBe(true);
     expect(result[1].hasPi).toBe(true);
@@ -320,7 +320,7 @@ describe('p-AO directionality', () => {
     expect(cAtoms).toHaveLength(2);
     const bondAxis = vecNormalize([cAtoms[1].x - cAtoms[0].x, cAtoms[1].y - cAtoms[0].y, cAtoms[1].z - cAtoms[0].z]);
 
-    const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element === 'C');
+    const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element === 'C');
     for (let i = 0; i < result.length; i++) {
       expect(result[i].hasPi).toBe(true);
       // sp atoms in a triple bond now inherit a deterministic piDirection
@@ -338,7 +338,7 @@ describe('p-AO directionality', () => {
     const nAtoms = molecule.atoms.filter((a) => a.element === 'N');
     const bondAxis = vecNormalize([nAtoms[1].x - nAtoms[0].x, nAtoms[1].y - nAtoms[0].y, nAtoms[1].z - nAtoms[0].z]);
 
-    const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
+    const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
     for (let i = 0; i < result.length; i++) {
       expect(result[i].hasPi).toBe(true);
       expect(result[i].piDirection).not.toBeNull();
@@ -354,7 +354,7 @@ describe('p-AO directionality', () => {
     const oAtoms = molecule.atoms.filter((a) => a.element === 'O');
     const bondAxis = vecNormalize([oAtoms[1].x - oAtoms[0].x, oAtoms[1].y - oAtoms[0].y, oAtoms[1].z - oAtoms[0].z]);
 
-    const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
+    const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
     for (let i = 0; i < result.length; i++) {
       expect(result[i].hasPi).toBe(true);
       expect(result[i].piDirection).not.toBeNull();
@@ -366,7 +366,7 @@ describe('p-AO directionality', () => {
     const example = EXAMPLES.find((e) => e.name === 'But-1-en-3-yne (H₂C=CH-C≡CH)');
     if (!example) { expect.fail('Example not found'); return; }
 
-    const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
+    const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
     // C1: sp² (CH₂), C2: sp² (CH), C3: sp (middle alkyne), C4: sp (terminal alkyne)
     expect(result).toHaveLength(4);
 
@@ -388,7 +388,7 @@ describe('p-AO directionality', () => {
   it('Methane (CH₄) — no π direction', () => {
     const example = EXAMPLES.find((e) => e.name === 'Methane (CH₄)');
     if (!example) { expect.fail('Example not found'); return; }
-    const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
+    const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
     expect(result[0].hasPi).toBe(false);
     expect(result[0].piDirection).toBeNull();
   });
@@ -396,7 +396,7 @@ describe('p-AO directionality', () => {
   it('Water (H₂O) — no π direction', () => {
     const example = EXAMPLES.find((e) => e.name === 'Water (H₂O)');
     if (!example) { expect.fail('Example not found'); return; }
-    const result = classifyMolecule(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
+    const result = assignOrbitals(parseMolBlock(example.mol)).filter((a) => a.element !== 'H');
     expect(result[0].hasPi).toBe(false);
     expect(result[0].piDirection).toBeNull();
   });
@@ -443,7 +443,7 @@ describe('Lone-pair promotion geometry gate', () => {
   };
 
   it('twisted thioether (thioanisole) keeps its σ lone pairs — no fake p lobe', () => {
-    const s = classifyMolecule(TWISTED_THIOANISOLE)[0];
+    const s = assignOrbitals(TWISTED_THIOANISOLE)[0];
     expect(s.element).toBe('S');
     expect(s.hybridization).toBe('sp³');
     expect(s.lonePairs).toBe(2);
@@ -452,7 +452,7 @@ describe('Lone-pair promotion geometry gate', () => {
   });
 
   it('planar thioether still promotes the lone pair to a p parallel to the ring', () => {
-    const s = classifyMolecule(PLANAR_THIOANISOLE)[0];
+    const s = assignOrbitals(PLANAR_THIOANISOLE)[0];
     expect(s.element).toBe('S');
     expect(s.hybridization).toBe('sp²');
     expect(s.lonePairs).toBe(1);
@@ -520,7 +520,7 @@ describe('Lone-pair promotion geometry gate', () => {
   });
 
   it('pyramidal allyl-anion carbanion keeps its σ lone pair — no p on the π system', () => {
-    const cls = classifyMolecule(pyramidalAllylAnion());
+    const cls = assignOrbitals(pyramidalAllylAnion());
     const c = cls[2];
     expect(c.element).toBe('C');
     expect(c.hybridization).toBe('sp³');
@@ -534,7 +534,7 @@ describe('Lone-pair promotion geometry gate', () => {
 
   it('the carbanion lone pair sits on its own equal-angle axis, not on the π direction', () => {
     const mol = pyramidalAllylAnion();
-    const cls = classifyMolecule(mol);
+    const cls = assignOrbitals(mol);
     const atom = cls[2];
     const center = mol.atoms[2];
     const bondVecs = mol.bonds
@@ -579,14 +579,14 @@ describe('Lone-pair promotion geometry gate', () => {
     // p-orbital SIGN follows bond order (the Kekulé phase convention), so
     // compare the classification facts, then the carbanion's veto.
     const facts = (m: Molecule) =>
-      classifyMolecule(m).map(({ element, hybridization, lonePairs, hasPi }) =>
+      assignOrbitals(m).map(({ element, hybridization, lonePairs, hasPi }) =>
         ({ element, hybridization, lonePairs, hasPi }));
     expect(facts(permuted)).toEqual(facts(pyramidalAllylAnion()));
-    expect(classifyMolecule(permuted)[2].piDirection).toBeNull();
+    expect(assignOrbitals(permuted)[2].piDirection).toBeNull();
   });
 
   it('planar allyl anion control: the lone pair is promoted onto the π system', () => {
-    const cls = classifyMolecule(planarAllylAnion());
+    const cls = assignOrbitals(planarAllylAnion());
     const c = cls[2];
     expect(c.hybridization).toBe('sp²');
     expect(c.lonePairs).toBe(0);
@@ -617,7 +617,7 @@ describe('Lone-pair promotion geometry gate', () => {
         { atom1Index: 0, atom2Index: 3, order: 2 },
       ],
     };
-    const o = classifyMolecule(formate)[2];
+    const o = assignOrbitals(formate)[2];
     expect(o.element).toBe('O');
     expect(o.hybridization).toBe('sp²');
     expect(o.lonePairs).toBe(2);
@@ -645,7 +645,7 @@ describe('Two-coordinate oxygen — topology, not angle (2026-08-06)', () => {
   };
 
   it('ether oxygen is sp³ with two σ lone pairs — the pure-p regression', () => {
-    const o = classifyMolecule(DIMETHYL_ETHER)[0];
+    const o = assignOrbitals(DIMETHYL_ETHER)[0];
     expect(o.element).toBe('O');
     expect(o.hybridization).toBe('sp³');
     expect(o.lonePairs).toBe(2);
@@ -668,7 +668,7 @@ describe('Two-coordinate oxygen — topology, not angle (2026-08-06)', () => {
   };
 
   it('an ether O stretched to 120° is STILL sp³ — angles do not decide', () => {
-    const o = classifyMolecule(STRETCHED_ETHER)[0];
+    const o = assignOrbitals(STRETCHED_ETHER)[0];
     expect(o.hybridization).toBe('sp³');
     expect(o.lonePairs).toBe(2);
     expect(o.hasPi).toBe(false);
@@ -685,7 +685,7 @@ describe('Two-coordinate oxygen — topology, not angle (2026-08-06)', () => {
   };
 
   it('carbonyl oxygen (1 σ + 1 π) is sp² with a p orbital — topology control', () => {
-    const o = classifyMolecule(FORMALDEHYDE)[0];
+    const o = assignOrbitals(FORMALDEHYDE)[0];
     expect(o.element).toBe('O');
     expect(o.hybridization).toBe('sp²');
     expect(o.lonePairs).toBe(2);
@@ -737,14 +737,14 @@ describe('Methyl anion — the charge-aware lone pair (2026-09-23)', () => {
   // The direction the renderer draws for the single lone pair:
   // getLonePairDirections(σ directions, σ bonds + lone pairs, π direction).
   const lonePairDirection = (mol: Molecule): [number, number, number] => {
-    const atom = classifyMolecule(mol)[0];
+    const atom = assignOrbitals(mol)[0];
     const dirs = getLonePairDirections(bondVectors(mol), mol.bonds.length + atom.lonePairs, atom.piDirection);
     expect(dirs).toHaveLength(1);
     return dirs[0];
   };
 
   it('the carbanion C is sp³ with one lone pair — no p orbital', () => {
-    const c = classifyMolecule(methylAnion())[0];
+    const c = assignOrbitals(methylAnion())[0];
     expect(c.element).toBe('C');
     expect(c.hybridization).toBe('sp³');
     expect(c.lonePairs).toBe(1);
@@ -777,7 +777,7 @@ describe('Methyl anion — the charge-aware lone pair (2026-09-23)', () => {
   });
 
   it('ammonia control: the same geometry with neutral N gives the same axis', () => {
-    const n = classifyMolecule(ammonia())[0];
+    const n = assignOrbitals(ammonia())[0];
     expect(n.hybridization).toBe('sp³');
     expect(n.lonePairs).toBe(1);
     // Isoelectronic: the carbanion's lone pair lands on the axis the

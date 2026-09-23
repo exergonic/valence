@@ -1,12 +1,17 @@
+// Per-atom orbital assignment: for every atom of a molecule with 3D
+// coordinates, decide which orbitals it shows and where they point —
+// hybridization (hybridize.ts), σ lone pairs, the conjugation promotion,
+// and the p-orbital direction(s) (orient-pi.ts).  The renderer consumes
+// this to draw lobes and labels.
+
 import type { Molecule } from '../mol-parser';
 import { assignHybridization } from './hybridize';
 import { computePiDirection, getPiDirectionFromNeighbor, perpendicularToAllBonds } from './orient-pi';
 import { vecDot, crossProduct } from '../utils/vec3';
 import * as THREE from 'three';
 
-// Result for one atom after running the full VSEPR + conjugation pipeline.
-// The renderer uses this to decide which lobes to draw and where.
-export interface AtomClassification {
+// One atom's assigned orbitals — what the renderer draws and labels.
+export interface AtomOrbitals {
   element: string;
   hybridization: string;   // display label: 'sp', 'sp²', 'sp³'
   lonePairs: number;       // σ lone pairs (lobes drawn in σ positions)
@@ -15,10 +20,11 @@ export interface AtomClassification {
   piDirection2: [number, number, number] | null; // second p-orbital direction (sp only)
 }
 
-// Takes a molecule with 3D coordinates and classifies every heavy atom.
-// Returns the same number of entries as molecule.atoms (hydrogen included,
-// but hydrogens always classify as sp³ with 0 lone pairs and no π system).
-export function classifyMolecule(molecule: Molecule): AtomClassification[] {
+// Takes a molecule with 3D coordinates and assigns the orbitals of every
+// heavy atom.  Returns the same number of entries as molecule.atoms
+// (hydrogen included, but hydrogens always read sp³ with 0 lone pairs and
+// no π system).
+export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
   const atomCount = molecule.atoms.length;
 
   // Adjacency list + count of π bonds touching each atom.
@@ -33,7 +39,7 @@ export function classifyMolecule(molecule: Molecule): AtomClassification[] {
     piBondsPerAtom[bond.atom2Index] += piCount;
   }
 
-  const result: AtomClassification[] = [];
+  const result: AtomOrbitals[] = [];
 
   for (let atomIdx = 0; atomIdx < atomCount; atomIdx++) {
     const atom = molecule.atoms[atomIdx];

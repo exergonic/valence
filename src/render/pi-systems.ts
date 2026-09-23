@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { AtomClassification } from '../chem/classify';
+import type { AtomOrbitals } from '../chem/assign-orbitals';
 import type { Molecule } from '../mol-parser';
 import { getCovalentRadius } from './chem-data';
 
@@ -30,14 +30,14 @@ const PI_LENGTH = 1.1;
 //    is a π system.
 export function detectPiSystems(
   molecule: Molecule,
-  classifications: AtomClassification[],
+  atomOrbitals: AtomOrbitals[],
 ): PiSystem[] {
   const n = molecule.atoms.length;
 
   const atomDirections: [number, number, number][][] = [];
   for (let i = 0; i < n; i++) {
     const dirs: [number, number, number][] = [];
-    const c = classifications[i];
+    const c = atomOrbitals[i];
     if (c?.piDirection) dirs.push(c.piDirection);
     if (c?.piDirection2) dirs.push(c.piDirection2);
     atomDirections.push(dirs);
@@ -118,9 +118,9 @@ export function detectPiSystems(
 export function renderPiSystems(
   group: THREE.Group,
   molecule: Molecule,
-  classifications: AtomClassification[],
+  atomOrbitals: AtomOrbitals[],
 ): void {
-  const systems = detectPiSystems(molecule, classifications);
+  const systems = detectPiSystems(molecule, atomOrbitals);
   for (const system of systems) {
     const piDir = new THREE.Vector3(
       system.direction[0],

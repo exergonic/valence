@@ -3,7 +3,7 @@ import { writeFileSync } from 'node:fs';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
-import { classifyMolecule } from '../src/chem/classify';
+import { assignOrbitals } from '../src/chem/assign-orbitals';
 import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 import { assign_atom_types } from 'mmff94-ts';
 import type { Molecule as MMFFMolecule } from 'mmff94-ts';
@@ -168,7 +168,7 @@ describe('MMFF94 oracle — valence agrees with the reference typer', () => {
 
     for (const [name, mol] of CORPUS) {
       const typed = assign_atom_types(toMMFF(mol));
-      const labels = classifyMolecule(mol);
+      const labels = assignOrbitals(mol);
       let molAgree = 0;
       let molTotal = 0;
       for (let i = 0; i < mol.atoms.length; i++) {
@@ -202,7 +202,7 @@ describe('MMFF94 oracle — valence agrees with the reference typer', () => {
 
     const pct = total === 0 ? 0 : ((agree + deviations.length) / total) * 100;
     report.unshift(
-      `mmff94-ts oracle — valence classifier vs the reference typer`,
+      `mmff94-ts oracle — valence orbital assignment vs the reference typer`,
       `corpus: ${CORPUS.length} molecules, ${total} heavy atoms`,
       `agreement: ${agree}/${total} (${pct.toFixed(1)}%), documented deviations: ${deviations.length}, unexplained: ${unexplained.length}`,
     );

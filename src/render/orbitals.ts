@@ -3,7 +3,7 @@ import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
 import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
 import { getElementColor, getCovalentRadius } from './chem-data';
-import type { AtomClassification } from '../chem/classify';
+import type { AtomOrbitals } from '../chem/assign-orbitals';
 import { getLonePairDirections } from '../chem/orient-lone-pairs';
 import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
 
@@ -12,9 +12,9 @@ export function renderOrbitals(
   molecule: Molecule,
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
   colorScheme: { scheme: ColorScheme; sigma: number; pi: number; lonePair: number } = { scheme: 'element', sigma: 0xcccccc, pi: 0x4488ff, lonePair: 0xffaa44 },
-  classifications: AtomClassification[] | null = null,
+  atomOrbitals: AtomOrbitals[] | null = null,
 ): void {
-  const cached = classifications ?? [];
+  const cached = atomOrbitals ?? [];
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
   for (const bond of molecule.bonds) {

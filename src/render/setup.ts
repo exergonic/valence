@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
 import type { Molecule } from '../mol-parser';
-import type { AtomClassification } from '../chem/classify';
+import type { AtomOrbitals } from '../chem/assign-orbitals';
 import { updateLabels } from './labels';
 
 export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complementary' | 'cool' | 'warm' | 'highcontrast' | 'custom';
@@ -39,7 +39,7 @@ export interface SceneContext {
   piSystemGroup: THREE.Group;
   display: DisplaySettings;
   currentMolecule?: Molecule;
-  classifications: AtomClassification[] | null;
+  atomOrbitals: AtomOrbitals[] | null;
   rerender: () => void;
   teardown: () => void;
   autoRotate: boolean;
@@ -135,7 +135,7 @@ export function initScene(container: HTMLElement): SceneContext {
       autoRotate: false,
       highlightPiSystems: false,
     },
-    classifications: null,
+    atomOrbitals: null,
     rerender: () => {},
     teardown,
     get autoRotate() { return autoRotate; },

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { renderPiSystems, detectPiSystems } from '../src/render/pi-systems';
-import { classifyMolecule } from '../src/chem/classify';
+import { assignOrbitals } from '../src/chem/assign-orbitals';
 import type { Molecule } from '../src/mol-parser';
 
 // A planar collection of carbons on a circle (all C–C in-plane ⇒ all p
@@ -47,21 +47,21 @@ const NAPHTHALENE = planarCarbonRings(10, [
 ]);
 
 function renderCount(molecule: Molecule): number {
-  const classifications = classifyMolecule(molecule);
+  const atomOrbitals = assignOrbitals(molecule);
   const group = new THREE.Group();
-  renderPiSystems(group, molecule, classifications);
+  renderPiSystems(group, molecule, atomOrbitals);
   return group.children.length;
 }
 
 describe('π system highlight (one tube per π bond)', () => {
   it('benzene forms a single 6-atom system', () => {
-    const systems = detectPiSystems(BENZENE, classifyMolecule(BENZENE));
+    const systems = detectPiSystems(BENZENE, assignOrbitals(BENZENE));
     expect(systems).toHaveLength(1);
     expect(systems[0].atomIndices).toHaveLength(6);
   });
 
   it('naphthalene forms a single 10-atom system including the fusion carbons', () => {
-    const systems = detectPiSystems(NAPHTHALENE, classifyMolecule(NAPHTHALENE));
+    const systems = detectPiSystems(NAPHTHALENE, assignOrbitals(NAPHTHALENE));
     expect(systems).toHaveLength(1);
     expect(systems[0].atomIndices).toHaveLength(10);
   });

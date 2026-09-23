@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { LabelPalette } from './label-colors';
+import type { AtomOrbitals } from '../chem/assign-orbitals';
 
 // Small text sprite for orbital/hybridization labels in the 3D scene.
 // No background circle — just crisp text that always faces the camera.
@@ -30,7 +31,7 @@ export function makeLabelSprite(text: string, color: string = '#ffffff'): THREE.
 export function renderOrbitalLabels(
   group: THREE.Group,
   molecule: any,
-  classifications: any[],
+  atomOrbitals: AtomOrbitals[],
   palette: LabelPalette,
 ): void {
   const n = molecule.atoms.length;
@@ -42,7 +43,7 @@ export function renderOrbitalLabels(
 
   for (let i = 0; i < n; i++) {
     const atom = molecule.atoms[i];
-    const info = classifications[i];
+    const info = atomOrbitals[i];
     if (!info) continue;
 
     // Sigma bond labels — at the midpoint of each bond
@@ -78,12 +79,12 @@ export function renderOrbitalLabels(
 export function renderHybridizationLabels(
   group: THREE.Group,
   molecule: any,
-  classifications: any[],
+  atomOrbitals: AtomOrbitals[],
   palette: LabelPalette,
 ): void {
   for (let i = 0; i < molecule.atoms.length; i++) {
     const atom = molecule.atoms[i];
-    const info = classifications[i];
+    const info = atomOrbitals[i];
     if (!info || atom.element === 'H') continue;
 
     const label = makeLabelSprite(info.hybridization, palette.hybrid);
