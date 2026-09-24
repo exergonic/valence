@@ -22,6 +22,7 @@ import type { Molecule as MMFFMolecule } from 'mmff94-ts';
 import type { Molecule } from '../mol-parser';
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { place3D, hasRingBonds } from './place3d';
+import { applyWedgeStereo } from './stereo-wedge';
 
 /** Deterministic ±0.5 hash of the atom index (reproducible tests). */
 function hash(i: number, seed: number): number {
@@ -96,7 +97,24 @@ export function embedAndRefine(molecule: Molecule): Molecule {
   const finite = (m: Molecule) =>
     m.atoms.every((a) => Number.isFinite(a.x) && Number.isFinite(a.y) && Number.isFinite(a.z));
   const refined = refineWithMMFF94(fallback);
-  if (refined && finite(refined)) return refined;
+  if (refined && finite(refined)) {
+    // The optimizer walks downhill to the nearest minimum, and for a strained
+    // drawn stereoisomer that minimum can belong to a different one: the
+    // all-cis hexol's first hydroxyl came back trans (its all-cis chair has
+    // three 1,3-diaxial hydroxyls, so the descent preferred the epimer). The
+    // sketch is the specification, so re-assert it on the relaxed geometry —
+    // the enforcement moves only the wedged branch, and it runs after the
+    // refinement rather than before so nothing can undo it.
+    if (refined.bonds.some((b) => b.stereo)) {
+      const pos = refined.atoms.map((a) => [a.x, a.y, a.z] as [number, number, number]);
+      applyWedgeStereo(withH, pos);
+      return {
+        atoms: refined.atoms.map((a, i) => ({ ...a, x: pos[i][0], y: pos[i][1], z: pos[i][2] })),
+        bonds: refined.bonds,
+      };
+    }
+    return refined;
+  }
   return finite(fallback) ? fallback : placed;
 }
 
