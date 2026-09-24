@@ -94,8 +94,15 @@ export function optimizeTorsions(
 
     const cosA = Math.cos(delta);
     const sinA = Math.sin(delta);
+    const pivot = positions[parentAtom];
     for (const idx of subtree) {
-      positions[idx] = rotateRodrigues(vecSub(positions[idx], positions[parentAtom]), axis, cosA, sinA);
+      // Rotate about the axis through the pivot: rotate the offset, then put
+      // the pivot back. (Dropping the second step re-homes the whole subtree
+      // into the origin's frame and shears it off the bond it was rotated
+      // around — it cost the all-cis hexol its stereocenters.)
+      const offset = vecSub(positions[idx], pivot);
+      const turned = rotateRodrigues(offset, axis, cosA, sinA);
+      positions[idx] = [turned[0] + pivot[0], turned[1] + pivot[1], turned[2] + pivot[2]];
     }
   }
 }

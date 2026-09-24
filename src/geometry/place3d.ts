@@ -208,15 +208,29 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     }
   }
 
+  // Root the walk on a ring atom when the molecule has a ring: the ring was
+  // just seeded from the drawn coordinates, and rooting inside it keeps the
+  // rest of the walk in that same frame. Rooting on a substituent instead
+  // parks it at the origin while the ring stays where it was drawn — the
+  // all-cis hexol's first oxygen ended up 5 A from the carbon it belongs to,
+  // and the refinement, dragging it back, inverted a neighbouring center.
   let root = 0;
   for (let i = 0; i < n; i++) {
-    if (molecule.atoms[i].element !== 'H' && adj[i].length > 0 && !placed.has(i)) {
+    if (molecule.atoms[i].element !== 'H' && adj[i].length > 0 && placed.has(i)) {
       root = i;
       break;
     }
   }
+  if (!placed.has(root)) {
+    for (let i = 0; i < n; i++) {
+      if (molecule.atoms[i].element !== 'H' && adj[i].length > 0) {
+        root = i;
+        break;
+      }
+    }
+    pos[root] = [0, 0, 0];
+  }
 
-  pos[root] = [0, 0, 0];
   placed.add(root);
   parent[root] = root;
 
@@ -286,12 +300,13 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     }
   }
 
-  // The drawn wedge and hash bonds fix each stereocenter's configuration; the
-  // graph walk knows nothing about them, so enforce it before the torsion pass
-  // relaxes the seed.
-  applyWedgeStereo(molecule, pos);
-
   optimizeTorsions(molecule, adj, parent, pos);
+
+  // The drawn wedge and hash bonds fix each stereocenter's configuration, and
+  // the graph walk knows nothing about them. This runs last, after the torsion
+  // pass: a torsion rotation can carry a wedged atom along with a plain
+  // neighbor, which would undo the very configuration just established.
+  applyWedgeStereo(molecule, pos);
 
   // Unplaced atoms (isolated) keep their 2D input coordinates.
   return pos.map((p, i) => p || [molecule.atoms[i].x, molecule.atoms[i].y, 0]);
