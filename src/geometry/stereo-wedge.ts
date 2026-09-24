@@ -94,38 +94,46 @@ export function applyWedgeStereo(molecule: Molecule, pos: Vec3[]): void {
     const required = flag === 1 ? reference : -reference;
     if (chiralitySign(pos, center, n1, n2, wedged) === required) continue;
 
-    // Invert the center by turning the wedged branch so the wedged atom lands
-    // on the mirror of its current direction through the plane spanned by the
-    // center and its two reference neighbors. That flips the sign exactly —
-    // the sign is the wedged vector's component along (n1-c) x (n2-c), so
-    // negating that component negates the sign, whatever the center's shape.
-    // (Mirroring through the plane of the other three *atoms* instead is only
-    // equivalent while the center is ideal, and can leave a distorted center
-    // inverted. And a rotation keeps the branch rigid, so nested stereocenters
-    // survive and nothing else in the molecule moves.
-    //
-    // Swapping two branches instead (the other obvious option) is catastrophic
-    // in a ring: "the branch on the other side" is reachable the long way
-    // round, so it is the entire rest of the ring, and the swap translates it
-    // rigidly — a drawn all-cis hexol came back with ring bonds of 5.06 Å.)
+    // Invert the center by swapping the wedged atom with a terminal plain
+    // neighbor — exchanging two ligands is what inverts a tetrahedral center.
+    // The wedged atom takes the neighbor's direction and the neighbor takes its
+    // old one, so the two can never end up in the same slot. (Turning the
+    // wedged branch onto the mirror of its direction also flips the sign
+    // exactly, but the mirror is chosen from geometry alone, with no idea that
+    // something is already sitting there: a drawn all-cis
+    // hexamethylcyclohexane came back with a ring hydrogen and its methyl 6
+    // degrees apart — 0.46 A — sharing one axial slot.)
     const branch = collect(adj, wedged, center);
     // The inversion is a local operation only while the wedged atom is
     // terminal. If a plain neighbor sits inside the branch, turning the branch
     // would carry that neighbor along — a rigid motion of everything but the
     // center, which leaves the configuration exactly as it was. A wedge drawn
     // on a ring bond is such a center; it is left alone rather than mangled.
+    // (Swapping whole branches instead is worse: in a ring "the branch on the
+    // other side" is reachable the long way round, so it is the rest of the
+    // molecule, and a drawn all-cis hexol came back with 5.06 A ring bonds.)
     if (plain.some((nb) => branch.includes(nb))) continue;
 
+    // The partner must be terminal too: moving a neighbor that carries its own
+    // substituents would either stretch its bonds or drag its branch. A center
+    // with no terminal plain neighbor keeps the configuration it was given.
+    const swap =
+      plain.find((nb) => adj[nb].length === 1 && molecule.atoms[nb].element === 'H') ??
+      plain.find((nb) => adj[nb].length === 1);
+    if (swap === undefined) continue;
+
     const c = pos[center];
-    const v = vecSub(pos[wedged], c);
-    const normal = vecNormalize(crossProduct(vecSub(pos[n1], c), vecSub(pos[n2], c)));
-    const mirrored = vecSub(v, scale(normal, 2 * vecDot(v, normal)));
-    let axis = crossProduct(v, mirrored);
-    let angle = Math.atan2(length(axis), vecDot(v, mirrored));
+    const vW = vecSub(pos[wedged], c);
+    const vS = vecSub(pos[swap], c);
+    const lenS = length(vS);
+    if (length(vW) < 1e-6 || lenS < 1e-6) continue;
+
+    let axis = crossProduct(vW, vS);
+    let angle = Math.atan2(length(axis), vecDot(vW, vS));
     if (length(axis) < 1e-9) {
-      // The wedged bond lies along the plane normal, so the mirror is exactly
-      // the opposite direction: any perpendicular axis turns it around.
-      axis = findPerpendicular(v);
+      // Wedged atom and partner already point the same way — the collision this
+      // swap exists to prevent. Turn the branch half a turn so they separate.
+      axis = findPerpendicular(vW);
       angle = Math.PI;
     }
     const axisHat = vecNormalize(axis);
@@ -134,6 +142,8 @@ export function applyWedgeStereo(molecule: Molecule, pos: Vec3[]): void {
     for (const i of branch) {
       pos[i] = add(c, rotateRodrigues(vecSub(pos[i], c), axisHat, cosA, sinA));
     }
+    // The partner takes the wedged atom's old direction, at its own bond length.
+    pos[swap] = add(c, scale(vecNormalize(vW), lenS));
   }
 }
 

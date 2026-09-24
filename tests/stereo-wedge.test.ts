@@ -255,4 +255,64 @@ describe('a drawn ring (the all-cis hexol)', () => {
       ).toBe(-Math.sign(faces[(i + 1) % 6]));
     }
   });
+
+  it('keeps every ring substituent in its own slot — the all-cis hexamethyl', async () => {
+    // The same ring with methyls instead of hydroxyls, drawn the same way. This
+    // one caught the inversion turning the wedged branch onto its mirror
+    // direction: the mirror is chosen from geometry alone, with no idea that
+    // something is already sitting there, and C1's ring hydrogen and its methyl
+    // came back 6° apart — 0.46 Å — sharing one axial slot.
+    const sketch = parseMolBlock(ALL_CIS_HEXAMETHYL_MOL);
+    const refined = await embedAndRefine(fillMissingHydrogens(sketch));
+    expect(refined, 'the local pipeline produced a geometry').toBeTruthy();
+    const pos = positions(refined!);
+    expect(stereoViolations(sketch, pos)).toEqual([]);
+    for (const c of [0, 1, 2, 3, 4, 5]) {
+      const nbrs = refined!.bonds
+        .filter((b) => b.atom1Index === c || b.atom2Index === c)
+        .map((b) => (b.atom1Index === c ? b.atom2Index : b.atom1Index));
+      const h = nbrs.find((i) => refined!.atoms[i].element === 'H')!;
+      const methyl = nbrs.find((i) => refined!.atoms[i].element === 'C' && i >= 6)!;
+      const vh = vecNormalize(vecSub(pos[h], pos[c]));
+      const vm = vecNormalize(vecSub(pos[methyl], pos[c]));
+      const angle = (Math.acos(Math.max(-1, Math.min(1, vecDot(vh, vm)))) * 180) / Math.PI;
+      expect(angle, `C${c + 1}: H and CH3 only ${angle.toFixed(1)}° apart`).toBeGreaterThan(60);
+      expect(
+        Math.hypot(...vecSub(pos[h], pos[methyl])),
+        `C${c + 1}: H and CH3 overlap`,
+      ).toBeGreaterThan(1.5);
+    }
+  });
 });
+
+// All-cis hexamethylcyclohexane, as drawn in the sketcher: the same hexagon
+// with six methyls, all wedged.
+const ALL_CIS_HEXAMETHYL_MOL = `JME 2024-04-29 Wed Sep 23 23:10:27 GMT-400 2026
+
+ 12 12  0  0  0  0  0  0  0  0999 V2000
+    3.6373    2.1000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.6373    3.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4249    4.2000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2124    3.5000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2124    2.1000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4249    1.4000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4249    5.6000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    4.8497    4.2000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    4.8497    1.4000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4249    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.4000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    4.2000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  4  1  0  0  0  0
+  4  5  1  0  0  0  0
+  5  6  1  0  0  0  0
+  6  1  1  0  0  0  0
+  3  7  1  1  0  0  0
+  2  8  1  1  0  0  0
+  1  9  1  1  0  0  0
+  6 10  1  1  0  0  0
+  5 11  1  1  0  0  0
+  4 12  1  1  0  0  0
+M  END
+`;
