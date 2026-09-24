@@ -1,5 +1,6 @@
 import type { Molecule } from '../mol-parser';
 import { optimizeTorsions } from './torsions';
+import { applyWedgeStereo } from './stereo-wedge';
 import { vecDot, crossProduct, vecNormalize, rotateRodrigues } from '../utils/vec3';
 import { idealVseprVectors } from '../chem/ideal-vsepr-vectors';
 
@@ -284,6 +285,11 @@ export function place3D(molecule: Molecule): [number, number, number][] {
       queue.push(nb);
     }
   }
+
+  // The drawn wedge and hash bonds fix each stereocenter's configuration; the
+  // graph walk knows nothing about them, so enforce it before the torsion pass
+  // relaxes the seed.
+  applyWedgeStereo(molecule, pos);
 
   optimizeTorsions(molecule, adj, parent, pos);
 

@@ -16,6 +16,13 @@ export interface Bond {
   atom1Index: number;
   atom2Index: number;
   order: number;
+  /**
+   * V2000 bond stereo flag from columns 10-12: 1 = wedge (atom 2 is drawn in
+   * front of the page), 6 = hash (behind). Absent for plain bonds, and for
+   * sources that don't carry it (the V3000 converter today). The first atom of
+   * the bond is the narrow end — the stereocenter.
+   */
+  stereo?: 1 | 6;
 }
 
 export interface Molecule {

@@ -48,10 +48,15 @@ function parseV2000(molBlock: string): Molecule {
   for (let i = 0; i < bondCount; i++) {
     const line = lines[bondStart + i];
     if (!line || line.length < 9) break;
+    // Bond stereo flag, columns 10-12 (0-indexed 9-12): 1 = wedge (up), 6 =
+    // hash (down). 4 ("either") and everything else carry no absolute
+    // configuration, so they are left unset.
+    const stereo = parseInt(line.substring(9, 12).trim());
     bonds.push({
       atom1Index: parseInt(line.substring(0, 3).trim()) - 1,
       atom2Index: parseInt(line.substring(3, 6).trim()) - 1,
       order: parseInt(line.substring(6, 9).trim()) || 1,
+      ...(stereo === 1 || stereo === 6 ? { stereo: stereo as 1 | 6 } : {}),
     });
   }
 
