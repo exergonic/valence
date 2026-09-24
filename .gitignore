@@ -4,6 +4,7 @@ dist/
 *.local
 
 AGENTS.md
+NOTES.md
 
 # Dev-only bench assets (Ketcher standalone build, OpenChemLib bundle) —
 # see playground/sketchers.html for how to fetch them.
