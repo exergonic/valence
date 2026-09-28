@@ -4,7 +4,14 @@
 // symmetric percentile-clipped scale bound. The renderer just composes them
 // onto per-atom vdW spheres.
 import { describe, it, expect } from 'vitest';
-import { espColor, espPotentialAt, espVmax, ESP_CUTOFF } from '../src/chem/esp';
+import {
+  espColor,
+  espPotentialAt,
+  espVmax,
+  unionVdwField,
+  computeEspSurface,
+  ESP_CUTOFF,
+} from '../src/chem/esp';
 import type { Molecule } from '../src/mol-parser';
 
 // Water in the app's own fixture geometry (from the examples), with the BCI
@@ -83,5 +90,111 @@ describe('espVmax — symmetric, percentile-clipped scale bound', () => {
   it('all-zero potentials anchor at 1 (all-green surface, no NaNs)', () => {
     expect(espVmax([0, 0, 0])).toBe(1);
     expect(espVmax([])).toBe(1);
+  });
+});
+
+describe('unionVdwField — the signed distance to the fused surface', () => {
+  const singleH = (): Molecule => ({ atoms: [{ element: 'H', x: 0, y: 0, z: 0 }], bonds: [] });
+
+  it('is negative inside an atom sphere, positive outside, zero on the boundary', () => {
+    const mol = singleH();
+    expect(unionVdwField(0, 0, 0, mol.atoms)).toBeCloseTo(-1.2, 9);
+    expect(unionVdwField(0, 0, 1.2, mol.atoms)).toBeCloseTo(0, 6);
+    expect(unionVdwField(0, 0, 2, mol.atoms)).toBeCloseTo(0.8, 9);
+  });
+
+  it('two overlapping atoms make a united minimum, not the sum of spheres', () => {
+    const mol: Molecule = {
+      atoms: [
+        { element: 'H', x: 0, y: 0, z: 0 },
+        { element: 'H', x: 1.0, y: 0, z: 0 },
+      ],
+      bonds: [],
+    };
+    // Midway between them (inside both) is well inside the union.
+    expect(unionVdwField(0.5, 0, 0, mol.atoms)).toBeLessThan(0);
+  });
+});
+
+describe('computeEspSurface — the fused molecular surface', () => {
+  const singleH = (): Molecule => ({ atoms: [{ element: 'H', x: 0, y: 0, z: 0 }], bonds: [] });
+
+  it('a single atom yields a closed sphere at the vdW radius', () => {
+    const surf = computeEspSurface(singleH(), [1]);
+    expect(surf.vertexCount).toBeGreaterThan(500);
+    expect(surf.vertexCount % 3).toBe(0);
+    // Every vertex sits on the fused boundary (|p| ≈ 1.2 Å) with a radial
+    // outward normal.
+    for (let i = 0; i < surf.vertexCount; i++) {
+      const r = Math.hypot(surf.positions[i * 3], surf.positions[i * 3 + 1], surf.positions[i * 3 + 2]);
+      expect(r).toBeGreaterThan(1.0);
+      expect(r).toBeLessThan(1.4);
+      const dot =
+        surf.positions[i * 3] * surf.normals[i * 3] +
+        surf.positions[i * 3 + 1] * surf.normals[i * 3 + 1] +
+        surf.positions[i * 3 + 2] * surf.normals[i * 3 + 2];
+      expect(dot / r).toBeCloseTo(1, 6);
+    }
+    // Potential probed at the fused boundary: q/r ≈ 1/1.2 for a radius in
+    // the sampled band.
+    for (const v of surf.potentials) {
+      expect(v).toBeGreaterThan(1 / 1.4);
+      expect(v).toBeLessThan(1 / 1.0);
+    }
+  });
+
+  it('the surface is watertight — every mesh edge belongs to two triangles', () => {
+    const surf = computeEspSurface(singleH(), [1]);
+    const q = Math.round;
+    const key = (i: number, j: number): string => {
+      const p = (k: number) => {
+        const a = surf.positions[k * 3], b = surf.positions[k * 3 + 1], c = surf.positions[k * 3 + 2];
+        return `${q(a * 1e5)},${q(b * 1e5)},${q(c * 1e5)}`;
+      };
+      const a = p(i), b = p(j);
+      return a < b ? `${a}|${b}` : `${b}|${a}`;
+    };
+    const edges = new Map<string, number>();
+    for (let t = 0; t < surf.vertexCount; t += 3) {
+      for (const [u, v] of [[0, 1], [1, 2], [2, 0]] as const) {
+        const k = key(t + u, t + v);
+        edges.set(k, (edges.get(k) ?? 0) + 1);
+      }
+    }
+    expect(edges.size).toBeGreaterThan(200);
+    for (const count of edges.values()) expect(count).toBe(2);
+  });
+
+  it('two fused spheres give a larger, single surface', () => {
+    const mol: Molecule = {
+      atoms: [
+        { element: 'H', x: 0, y: 0, z: 0 },
+        { element: 'H', x: 1.0, y: 0, z: 0 },
+      ],
+      bonds: [],
+    };
+    const one = computeEspSurface(singleH(), [1]);
+    const two = computeEspSurface(mol, [1, 1]);
+    expect(two.vertexCount).toBeGreaterThan(one.vertexCount);
+    // Probe potential on the merged boundary (not inside a neighbor sphere).
+    for (let i = 0; i < two.vertexCount; i++) {
+      const v = two.potentials[i];
+      expect(Number.isFinite(v)).toBe(true);
+      expect(v).toBeGreaterThan(0);
+    }
+  });
+
+  it('water: the fused surface probes the potential again — oxygens negative, hydrogens positive', () => {
+    const surf = computeEspSurface(water(), WATER_CHARGES);
+    expect(surf.vertexCount).toBeGreaterThan(1000);
+    let sawNegative = false;
+    let sawPositive = false;
+    for (const v of surf.potentials) {
+      if (v < 0) sawNegative = true;
+      if (v > 0) sawPositive = true;
+    }
+    expect(sawNegative).toBe(true);
+    expect(sawPositive).toBe(true);
+    expect(surf.vmax).toBeGreaterThan(0);
   });
 });

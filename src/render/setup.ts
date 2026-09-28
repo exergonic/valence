@@ -3,6 +3,7 @@ import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls
 import type { Molecule } from '../mol-parser';
 import type { AtomOrbitals } from '../chem/assign-orbitals';
 import type { DipoleResult, ResolvedCharges } from '../chem/dipole';
+import type { EspSurfaceData } from '../chem/esp';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
@@ -55,6 +56,9 @@ export interface SceneContext {
    *  values the dipole arrow uses (BCI + residual placement). Feeds the
    *  charge label mode (and the future ESP surface). */
   charges: ResolvedCharges | null;
+  /** Cached fused vdW ESP surface for the current molecule (computed lazily
+   *  on the first ESP render; null until then or for an untypeable molecule). */
+  espSurface: EspSurfaceData | null;
   rerender: () => void;
   teardown: () => void;
   autoRotate: boolean;
@@ -180,6 +184,7 @@ export function initScene(container: HTMLElement): SceneContext {
     atomOrbitals: null,
     dipole: null,
     charges: null,
+    espSurface: null,
     rerender: () => {},
     teardown,
     get autoRotate() { return autoRotate; },

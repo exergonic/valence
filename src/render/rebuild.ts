@@ -8,6 +8,7 @@ import { renderOrbitalLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
 import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
+import { computeEspSurface } from '../chem/esp';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/assign-orbitals';
@@ -127,12 +128,17 @@ export function rebuildDisplay(ctx: SceneContext) {
     renderDipole(ctx.dipoleGroup, ctx.dipole);
   }
 
-  // Charge-model ESP surface — translucent vdW spheres colored by the point
-  // charges' potential. Only when the charges exist (untypeable molecules
-  // get no surface, like no dipole) and the toggle asks for it; opacity comes
-  // from the transparency slider.
+  // Charge-model ESP surface — a translucent overlay of the FUSED (united)
+// vdW molecular surface, colored by the potential probed at the fused
+// boundary (see chem/esp.ts). Only when the charges exist (untypeable
+// molecules get no surface, like no dipole) and the toggle asks for it. The
+// surface mesh is cached per molecule and extracted lazily on first render —
+// opacity changes reuse it.
   if (ctx.display.showEsp && ctx.charges) {
-    renderEsp(ctx.espGroup, ctx.currentMolecule, ctx.charges.charges, ctx.display.espOpacity);
+    if (!ctx.espSurface) {
+      ctx.espSurface = computeEspSurface(ctx.currentMolecule, ctx.charges.charges);
+    }
+    renderEsp(ctx.espGroup, ctx.espSurface, ctx.display.espOpacity);
     ctx.espGroup.visible = true;
   } else {
     ctx.espGroup.visible = false;
@@ -168,6 +174,8 @@ export function buildScene(ctx: SceneContext) {
   // charges join it — the charge label mode reads them.
   ctx.dipole = ctx.currentMolecule ? computeDipole(ctx.currentMolecule) : null;
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
+  // New molecule, new ESP surface (recomputed lazily on first render).
+  ctx.espSurface = null;
   rebuildDisplay(ctx);
 
   const center = new THREE.Vector3();
