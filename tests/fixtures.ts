@@ -147,8 +147,132 @@ M  END
 $$$$
 `;
 
+// Methyl anion pair: the drawn sketch is a bare carbon (JSME leaves H
+// implicit) carrying the -1 charge; the PubChem record is the live CID 881
+// SDF verbatim — exactly planar (H-C-H 120°, the D3h inversion transition
+// state) at energy 0.0052 with NO partial-charges block, i.e. an unrelaxed
+// template the fetch guard must reject. The CIR record is the live resolver
+// output verbatim — pyramidal (H-C-H 109.47°), correctly minimized, and
+// (like all CIR output) carrying no PUBCHEM blocks at all.
+export const DRAWN_METHYL_ANION_MOL = `  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+M  CHG  1   1  -1
+M  END
+`;
+
+export const PUBCHEM_METHYL_ANION_SDF = `881
+  -OEChem-09282608473D
+
+  4  3  0     0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  5  0  0  0  0  0  0  0  0  0  0
+   -0.9204    0.4506    0.3490 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8189    0.6270   -0.3291 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.1020   -1.0776   -0.0187 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  CHG  1   1  -1
+M  END
+> <PUBCHEM_COMPOUND_CID>
+881
+
+> <PUBCHEM_CONFORMER_RMSD>
+0.4
+
+> <PUBCHEM_CONFORMER_DIVERSEORDER>
+1
+
+> <PUBCHEM_EFFECTIVE_ROTOR_COUNT>
+0
+
+> <PUBCHEM_PHARMACOPHORE_FEATURES>
+0
+
+> <PUBCHEM_HEAVY_ATOM_COUNT>
+1
+
+> <PUBCHEM_ATOM_DEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_ATOM_UDEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_BOND_DEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_BOND_UDEF_STEREO_COUNT>
+0
+
+> <PUBCHEM_ISOTOPIC_ATOM_COUNT>
+0
+
+> <PUBCHEM_COMPONENT_COUNT>
+1
+
+> <PUBCHEM_CACTVS_TAUTO_COUNT>
+1
+
+> <PUBCHEM_CONFORMER_ID>
+0000037100000001
+
+> <PUBCHEM_MMFF94_ENERGY>
+0.0052
+
+> <PUBCHEM_FEATURE_SELFOVERLAP>
+0
+
+> <PUBCHEM_SHAPE_FINGERPRINT>
+260 1 18410856563934756871
+
+> <PUBCHEM_SHAPE_MULTIPOLES>
+20.58
+0.62
+0.62
+0.62
+0
+0
+0
+0
+0
+0
+0
+0
+0
+0
+
+> <PUBCHEM_SHAPE_SELFOVERLAP>
+19.645
+
+> <PUBCHEM_SHAPE_VOLUME>
+20.6
+
+> <PUBCHEM_COORDINATE_TYPE>
+10
+5
+2
+
+$$$$
+`;
+
+export const CIR_METHYL_ANION_SDF = `CH3
+NCtclcactv09282608273D 0   0.00000     0.00000
+
+  4  3  0  0  0  0  0  0  0  0999 V2000
+   -0.0000   -0.0000    0.0731 C   0  5  0  0  0  0  0  0  0  0  0  0
+   -0.0212   -1.0274   -0.2903 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9004    0.4954   -0.2903 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.8792    0.5321   -0.2903 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  CHG  1   1  -1
+M  END
+$$$$
+`;
+
 export const drawnCyclobutadiene: Molecule = parseMolBlock(DRAWN_CYCLOBUTADIENE_MOL);
 export const pubchemCyclobutadiene: Molecule = parseMolBlock(PUBCHEM_CYCLOBUTADIENE_SDF);
 export const pubchemCyclobutane: Molecule = parseMolBlock(PUBCHEM_CYCLOBUTANE_SDF);
 export const drawnBenzene: Molecule = parseMolBlock(DRAWN_BENZENE_MOL);
 export const pubchemBenzene: Molecule = parseMolBlock(PUBCHEM_BENZENE_SDF);
+export const drawnMethylAnion: Molecule = parseMolBlock(DRAWN_METHYL_ANION_MOL);

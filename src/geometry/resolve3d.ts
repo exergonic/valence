@@ -155,11 +155,20 @@ async function fetchPubChemRecord(cid: string): Promise<{ name?: string; pubchem
  * drawn cyclobutadiene), and PubChem/CIR both resolve that antiaromatic
  * 4-ring form to the saturated ring (cyclobutane, CID 9250) — without the
  * check the app would render the wrong compound while reporting "PubChem 3D".
+ *
+ * A PubChem record without MMFF94 partial charges is rejected as well: the
+ * charges block is written by PubChem's own force-field layer, so its
+ * absence means the coordinates were never minimized — an unrelaxed
+ * template, not MMFF94 geometry. Methyl anion (CID 881) ships exactly
+ * planar (D3h, the inversion transition state) at the cation's energy with
+ * no charge block; CIR SDFs never carry PUBCHEM blocks, so the CIR leg
+ * leaves this off.
  */
 async function fetchValidated(
   url: string,
   reference: Molecule,
   makeInfo: (sdf: string) => PubChemInfo,
+  requireMmffCharges = false,
 ): Promise<Fetch3DResult | null> {
   try {
     const resp = await fetch(url);
@@ -170,7 +179,9 @@ async function fetchValidated(
     const molecule = parseMolBlock(text);
     if (molecule.atoms.length === 0) return null;
     if (!structuresMatch(molecule, reference)) return null;
-    return { sdf: text, molecule, info: makeInfo(text) };
+    const info = makeInfo(text);
+    if (requireMmffCharges && info.mmff94?.partialCharges === undefined) return null;
+    return { sdf: text, molecule, info };
   } catch {
     return null;
   }
@@ -183,6 +194,9 @@ export async function fetch3D(smiles: string, reference: Molecule): Promise<Fetc
     `${PUBCHEM_URL}/${encoded}/SDF?record_type=3d`,
     reference,
     (sdf) => ({ source: 'pubchem' as const, ...parsePubChemMeta(sdf) }),
+    // PubChem's MMFF94 data rides in the SDF itself; a record without
+    // partial charges was never force-field-relaxed (see fetchValidated).
+    true,
   );
   if (pubchem) {
     // The structure is validated — trust the CID parsed from its own SDF and

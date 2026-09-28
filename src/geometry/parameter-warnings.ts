@@ -12,6 +12,12 @@ import { toMMFFMol } from './mmff-refine';
 // The report is validated against the whole 761-molecule suite:
 // zero false positives on any molecule whose chemistry MMFF94
 // actually covers.
+//
+// By-design absences stay silent on purpose: a dropped out-of-plane term
+// on a carbanion (methyl anion's carbon types as tetrahedral MMFF 1,
+// whose table holds no planar restraint -- pyramidalization comes from
+// angle bending) is normal MMFF94 operation, not a gap. Only genuinely
+// degraded typing warns, so the popup informs without crying wolf.
 export interface ParameterGapInfo {
   /** User-facing warnings, ready for the status popup. */
   warnings: string[];
