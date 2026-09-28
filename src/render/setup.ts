@@ -27,6 +27,10 @@ export interface DisplaySettings {
   spaceFilling: boolean;
   autoRotate: boolean;
   highlightPiSystems: boolean;
+  /** Charge-model ESP surface (translucent vdW spheres colored by V). */
+  showEsp: boolean;
+  /** ESP surface translucency — 0.05..0.95 (1 − opacity reads as see-through). */
+  espOpacity: number;
 }
 
 export interface SceneContext {
@@ -40,6 +44,7 @@ export interface SceneContext {
   orbitalLabelGroup: THREE.Group;
   piSystemGroup: THREE.Group;
   dipoleGroup: THREE.Group;
+  espGroup: THREE.Group;
   atomRig: { key: THREE.DirectionalLight; fill: THREE.DirectionalLight; rim: THREE.DirectionalLight };
   display: DisplaySettings;
   currentMolecule?: Molecule;
@@ -120,6 +125,10 @@ export function initScene(container: HTMLElement): SceneContext {
   // Off by default — a dipole is a thing you ask to see, not the default view.
   dipoleGroup.visible = false;
   scene.add(dipoleGroup);
+  const espGroup = new THREE.Group();
+  // Off by default, like the dipole — the ESP surface is a thing you ask to see.
+  espGroup.visible = false;
+  scene.add(espGroup);
 
   let autoRotate = false;
 
@@ -132,6 +141,7 @@ export function initScene(container: HTMLElement): SceneContext {
       orbitalLabelGroup.rotation.y += 0.005;
       piSystemGroup.rotation.y += 0.005;
       dipoleGroup.rotation.y += 0.005;
+      espGroup.rotation.y += 0.005;
     }
     controls.update();
     // Forward-push the atom labels against the (moved) camera. The dipole
@@ -156,7 +166,7 @@ export function initScene(container: HTMLElement): SceneContext {
   };
 
   return {
-    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, piSystemGroup, dipoleGroup, atomRig,
+    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, piSystemGroup, dipoleGroup, espGroup, atomRig,
     display: {
       atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', atomStyle: 'glossy', bgColor: '#ffffff',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
@@ -164,6 +174,8 @@ export function initScene(container: HTMLElement): SceneContext {
       spaceFilling: false,
       autoRotate: false,
       highlightPiSystems: false,
+      showEsp: false,
+      espOpacity: 0.5,
     },
     atomOrbitals: null,
     dipole: null,

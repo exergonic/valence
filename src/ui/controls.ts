@@ -51,6 +51,21 @@ export function setupControls(ctx: SceneContext) {
     ctx.dipoleGroup.visible = dipoleToggle.checked;
   });
 
+  // Charge-model ESP surface — rebuilt per molecule by rebuildDisplay; the
+  // checkbox shows it and the slider sets the translucency.
+  const espToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-esp')!;
+  espToggle.checked = ctx.display.showEsp;
+  espToggle.addEventListener('change', () => {
+    ctx.display.showEsp = espToggle.checked;
+    rerender();
+  });
+  const espOpacity = panel.querySelector<HTMLInputElement>('#ctrl-esp-opacity')!;
+  espOpacity.value = String(ctx.display.espOpacity);
+  espOpacity.addEventListener('input', () => {
+    ctx.display.espOpacity = parseFloat(espOpacity.value);
+    rerender();
+  });
+
   // Labels dropdown — one control for all label modes
   const labelModeSelect = panel.querySelector<HTMLSelectElement>('#ctrl-label-mode')!;
   labelModeSelect.addEventListener('change', () => {
