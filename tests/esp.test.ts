@@ -1,8 +1,9 @@
 // Phase-1 ESP: the charge-model electrostatic potential surface. The pure
 // pieces (chem/esp.ts) are pinned here — the physics (V = Σ q/|r−rᵢ|, with
-// the near-point cutoff), the textbook red/green/blue color scale, and the
-// symmetric percentile-clipped scale bound. The renderer just composes them
-// onto per-atom vdW spheres.
+// the near-point cutoff), the textbook red/green/blue color scale, the
+// symmetric percentile-clipped scale bound, and the fused-surface extractor
+// (marching tetrahedra over the union vdW field; the renderer just turns the
+// cached surface data into colored geometry).
 import { describe, it, expect } from 'vitest';
 import {
   espColor,

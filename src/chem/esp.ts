@@ -1,13 +1,15 @@
 /**
  * The electrostatic potential surface — charge-model ESP, Phase 1 of PLAN.md.
  *
- * Surface: the united (smoothed) vdW molecular surface, extracted by
- * marching tetrahedra over the signed-distance field of the union of the
- * atoms' vdW spheres — f(p) = min_i(|p − aᵢ| − rᵢ) < 0 inside, 0 on the
- * boundary. The individual atomic spheres are resolved into this fused
- * surface FIRST; the charges/potentials are probed at the fused boundary,
- * not at the individual-sphere vertices (a vertex of one sphere can sit
- * inside a neighbor).
+ * Surface: the united vdW molecular surface, extracted by marching
+ * tetrahedra over the signed-distance field of the union of the atoms' vdW
+ * spheres — f(p) = min_i(|p − aᵢ| − rᵢ) < 0 inside, 0 on the boundary.
+ * This gives the exact union surface, honest cusps at the sphere
+ * intersections included; only the finite grid rounds them slightly. The
+ * individual atomic spheres are resolved into this fused surface FIRST; the
+ * charges/potentials are probed at the fused boundary, not at the
+ * individual-sphere vertices (a vertex of one sphere can sit inside a
+ * neighbor).
  *
  * Potential: the electric potential of the molecule's point charges at a
  * surface vertex, V(r) = Σ qᵢ/|r − rᵢ|, with a floor on |r − rᵢ| so a

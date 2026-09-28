@@ -176,6 +176,27 @@ describe('dipole — conventions and behavior', () => {
     expect(computeDipole(helium)).toBeNull();
   });
 
+  it('resolveCharges refuses untypeable elements too — the labels and ESP inherit the one guard', () => {
+    // The typer hands helium a generic fallback type (charges [0]), so
+    // without the shared guard the charge labels would print "0.00" and the
+    // ESP would draw a surface — BCI-adjacent, not the BCI model. The guard
+    // lives in resolveCharges itself, so the dipole, the labels and the ESP
+    // all refuse from one place (review-raised 2026-09-28).
+    const helium: Molecule = {
+      atoms: [{ element: 'He', x: 0, y: 0, z: 0 }],
+      bonds: [],
+    };
+    const mixed: Molecule = {
+      atoms: [
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'He', x: 2, y: 0, z: 0 },
+      ],
+      bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }],
+    };
+    expect(resolveCharges(helium)).toBeNull();
+    expect(resolveCharges(mixed)).toBeNull();
+  });
+
   it('an empty molecule gets no dipole either', () => {
     expect(computeDipole({ atoms: [], bonds: [] })).toBeNull();
   });

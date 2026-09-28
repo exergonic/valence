@@ -94,8 +94,9 @@ export function chargeModelResult(molecule: Molecule): ChargeModelResult | null 
  *  residual (a drawn charge the type space cannot represent — the carbanion
  *  C⁻) placed on the atom(s) that carry it. `residualCharge` is set when
  *  that placement ran, so the UI can report the model was approximated.
- *  Shared by the dipole arrow and the per-atom charge labels (and the future
- *  ESP surface) so every number on screen comes from one resolution. */
+ *  Shared by the dipole arrow, the per-atom charge labels and the ESP
+ *  surface, so every number on screen comes from one resolution — and every
+ *  consumer inherits the one refusal rule. */
 export interface ResolvedCharges {
   charges: number[];
   residualCharge: boolean;
@@ -103,6 +104,13 @@ export interface ResolvedCharges {
 
 export function resolveCharges(molecule: Molecule): ResolvedCharges | null {
   try {
+    // An element outside the MMFF94 type space gets a generic fallback type
+    // and therefore charges that are not the BCI model at all — refuse here
+    // (null), so the dipole says "n/a", the charge labels print nothing, and
+    // the ESP draws no surface, all from this one guard. The "no arrow, no
+    // lie" ladder is uniform across every charge consumer.
+    if (parameterGapInfo(molecule).untyped.length > 0) return null;
+
     const charged = chargeModelResult(molecule);
     if (!charged) return null;
     const charges = charged.charges;
@@ -144,11 +152,6 @@ export function computeDipole(molecule: Molecule): DipoleResult | null {
 }
 
 function computeDipoleOrThrow(molecule: Molecule): DipoleResult | null {
-  // An element outside the MMFF94 type space gets a generic fallback type
-  // and therefore charges that are not the BCI model at all — return no
-  // arrow rather than a wrong one.
-  if (parameterGapInfo(molecule).untyped.length > 0) return null;
-
   // BCI charges are geometry-independent (connectivity + types only), so
   // this is computed once per molecule, not per frame. resolveCharges
   // returns the final displayed values — BCI plus any residual placement,
