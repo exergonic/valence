@@ -14,6 +14,9 @@ import {
   ESP_CUTOFF,
 } from '../src/chem/esp';
 import type { Molecule } from '../src/mol-parser';
+import { parseMolBlock } from '../src/mol-parser';
+import { embedAndRefine } from '../src/geometry/mmff-refine';
+import { resolveCharges } from '../src/chem/dipole';
 
 // Water in the app's own fixture geometry (from the examples), with the BCI
 // oracle charges: O −0.86, H +0.43.
@@ -197,5 +200,91 @@ describe('computeEspSurface — the fused molecular surface', () => {
     expect(sawNegative).toBe(true);
     expect(sawPositive).toBe(true);
     expect(surf.vmax).toBeGreaterThan(0);
+  });
+
+  it('the fused DMS surface is watertight and consistently wound at its creases', () => {
+    // The reported artifact (2026-09-28): white sawtooth patches over
+    // dimethyl sulfide's surface. Two intertwined causes: (1) the
+    // orientation reference picked the nearest atom CENTER, while the
+    // field's gradient is radial from the argmin of |p−aᵢ| − rᵢ — they
+    // disagree at heteronuclear cusps, flipping triangles inward (culled →
+    // cracks); (2) the degenerate-sliver skip left zero-width slits,
+    // breaking closure. Fixed by the argmin mis-normal, the BFS winding
+    // guarantee, and emitting the slivers. Every directed edge must now be
+    // traversed once in each direction: no flipped pairs, no holes.
+    const mol = embedAndRefine(parseMolBlock(`JME 2024-04-29 Mon Sep 28 13:02:00 GMT-400 2026
+
+  3  2  0  0  0  0  0  0  0  0999 V2000
+   -1.2000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 S   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+M  END
+`)).molecule;
+    const charges = resolveCharges(mol)!;
+    const surf = computeEspSurface(mol, charges.charges);
+
+    const R = 1e5;
+    const pos = (k: number) =>
+      `${Math.round(surf.positions[k * 3] * R)},${Math.round(surf.positions[k * 3 + 1] * R)},${Math.round(surf.positions[k * 3 + 2] * R)}`;
+    const directed = new Map<string, number>();
+    for (let t = 0; t < surf.vertexCount; t += 3) {
+      const a = pos(t), b = pos(t + 1), c = pos(t + 2);
+      for (const [u, v] of [[a, b], [b, c], [c, a]] as const) {
+        const k = `${u}>${v}`;
+        directed.set(k, (directed.get(k) ?? 0) + 1);
+      }
+    }
+    let missingReverse = 0;
+    let sameDirection = 0;
+    for (const [k, n] of directed) {
+      const [u, v] = k.split('>');
+      const rev = directed.get(`${v}>${u}`) ?? 0;
+      if (rev === 0) missingReverse++;
+      if (n !== 1) sameDirection++;
+    }
+    expect(missingReverse).toBe(0);
+    expect(sameDirection).toBe(0);
+  });
+
+  it('every area-bearing triangle points outward against the finite-difference field gradient', () => {
+    // The root cause of the DMS cracks (external review, 2026-09-28): the
+    // orientation reference used the nearest atom CENTER, but the field's
+    // gradient is radial from the argmin of |p−aᵢ| − rᵢ. With different vdW
+    // radii the two disagree at heteronuclear cusps (C vs H) and flipped
+    // triangles inward — 71 of 23,848 on the reviewer's trimethylamine. The
+    // oracle here is independent: a finite-difference gradient of
+    // unionVdwField at each triangle centroid; a C–H fused pair is the
+    // minimal heteronuclear cusp that exposes the bug.
+    const mol: Molecule = {
+      atoms: [
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'H', x: 1.09, y: 0, z: 0 },
+      ],
+      bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }],
+    };
+    const surf = computeEspSurface(mol, [0.2, -0.2]);
+    const h = 1e-4;
+    const fd = (x: number, y: number, z: number): [number, number, number] => [
+      (unionVdwField(x + h, y, z, mol.atoms) - unionVdwField(x - h, y, z, mol.atoms)) / (2 * h),
+      (unionVdwField(x, y + h, z, mol.atoms) - unionVdwField(x, y - h, z, mol.atoms)) / (2 * h),
+      (unionVdwField(x, y, z + h, mol.atoms) - unionVdwField(x, y, z - h, mol.atoms)) / (2 * h),
+    ];
+    let checked = 0;
+    for (let v = 0; v < surf.vertexCount; v += 3) {
+      const i0 = v * 3, i1 = (v + 1) * 3, i2 = (v + 2) * 3;
+      const e1 = [surf.positions[i1] - surf.positions[i0], surf.positions[i1 + 1] - surf.positions[i0 + 1], surf.positions[i1 + 2] - surf.positions[i0 + 2]];
+      const e2 = [surf.positions[i2] - surf.positions[i0], surf.positions[i2 + 1] - surf.positions[i0 + 1], surf.positions[i2 + 2] - surf.positions[i0 + 2]];
+      const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+      if (Math.hypot(n[0], n[1], n[2]) < 1e-9) continue; // sliver: no meaningful direction
+      const cx = (surf.positions[i0] + surf.positions[i1] + surf.positions[i2]) / 3;
+      const cy = (surf.positions[i0 + 1] + surf.positions[i1 + 1] + surf.positions[i2 + 1]) / 3;
+      const cz = (surf.positions[i0 + 2] + surf.positions[i1 + 2] + surf.positions[i2 + 2]) / 3;
+      const g = fd(cx, cy, cz);
+      expect(n[0] * g[0] + n[1] * g[1] + n[2] * g[2]).toBeGreaterThan(0);
+      checked++;
+    }
+    expect(checked).toBeGreaterThan(100);
   });
 });

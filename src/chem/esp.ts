@@ -167,13 +167,18 @@ export function computeEspSurface(
   const normals: number[] = [];
   const potentials: number[] = [];
 
-  // Outward unit normal of the union field at p: straight away from the
-  // nearest atom center (the field is min over spheres, each radial).
+  // Outward unit normal of the union field at p: away from the atom whose
+  // SIGNED distance |p − aᵢ| − rᵢ is smallest — the field's true argmin, i.e.
+  // its analytic gradient direction wherever the min is unique. Picking the
+  // nearest CENTER instead disagrees at heteronuclear cusps (C vs H at a
+  // C–H intersection): external review, 2026-09-28, measured 71 triangles
+  // flipped inward on trimethylamine against a finite-difference gradient,
+  // which backface culling then punched out as the white cracks.
   const outwardNormal = (px: number, py: number, pz: number): [number, number, number] => {
     let best = -1;
     let bestD = Infinity;
     for (let i = 0; i < atoms.length; i++) {
-      const d = Math.hypot(px - atoms[i].x, py - atoms[i].y, pz - atoms[i].z);
+      const d = Math.hypot(px - atoms[i].x, py - atoms[i].y, pz - atoms[i].z) - getVdwRadius(atoms[i].element);
       if (d < bestD) { bestD = d; best = i; }
     }
     const dx = px - atoms[best].x, dy = py - atoms[best].y, dz = pz - atoms[best].z;
@@ -193,12 +198,14 @@ export function computeEspSurface(
   const emit = (tri: Array<[number, number, number]>) => {
     // Orient the triangle outward using the field gradient at its centroid,
     // then emit its three vertices with per-vertex normals and potentials.
+    // Degenerate slivers are emitted too (their winding settled by the BFS
+    // below): skipping them left zero-width slits, and the surface must stay
+    // closed for backface culling.
     const [a, b, c] = tri;
     const cx = (a[0] + b[0] + c[0]) / 3, cy = (a[1] + b[1] + c[1]) / 3, cz = (a[2] + b[2] + c[2]) / 3;
     const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     const e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
     const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
-    if (Math.hypot(n[0], n[1], n[2]) < 1e-9) return; // degenerate sliver — skip
     const g = outwardNormal(cx, cy, cz);
     if (n[0] * g[0] + n[1] * g[1] + n[2] * g[2] < 0) {
       const tmp = tri[1]; tri[1] = tri[2]; tri[2] = tmp; // flip winding
@@ -266,6 +273,88 @@ export function computeEspSurface(
           }
         }
       }
+    }
+  }
+
+// Orientation consistency. Even with the field-argmin gradient above, the
+  // per-triangle flip can disagree with a neighbor where a triangle straddles
+  // a sphere-union crease — measured 2026-09-28: on a V8-refined DMS geometry
+  // the argmin fix alone left 10 same-direction (culled) edges; a geometry
+  // refined by JSC gave 0, so this is engine-sensitive. Propagate one
+  // orientation across shared edges (BFS over the triangle adjacency), then
+  // point the whole mesh outward — a guarantee, not a heuristic.
+  {
+    const triCount = positions.length / 9;
+    const vkey = (k: number) =>
+      `${Math.round(positions[k * 3] * 1e5)},${Math.round(positions[k * 3 + 1] * 1e5)},${Math.round(positions[k * 3 + 2] * 1e5)}`;
+    const edgeTris = new Map<string, { tri: number; dir: number }[]>();
+    for (let t = 0; t < triCount; t++) {
+      const keys = [vkey(3 * t), vkey(3 * t + 1), vkey(3 * t + 2)];
+      for (let e = 0; e < 3; e++) {
+        const ka = keys[e];
+        const kb = keys[(e + 1) % 3];
+        const ek = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+        const list = edgeTris.get(ek);
+        const dir = ka < kb ? 1 : -1;
+        if (list) list.push({ tri: t, dir });
+        else edgeTris.set(ek, [{ tri: t, dir }]);
+      }
+    }
+
+    const flip = new Uint8Array(triCount);
+    const seen = new Uint8Array(triCount);
+    for (let seed = 0; seed < triCount; seed++) {
+      if (seen[seed]) continue;
+      seen[seed] = 1;
+      const stack = [seed];
+      while (stack.length > 0) {
+        const t = stack.pop()!;
+        const keys = [vkey(3 * t), vkey(3 * t + 1), vkey(3 * t + 2)];
+        for (let e = 0; e < 3; e++) {
+          const ka = keys[e];
+          const kb = keys[(e + 1) % 3];
+          const ek = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+          const dir = ka < kb ? 1 : -1;
+          const effDir = flip[t] ? -dir : dir;
+          for (const other of edgeTris.get(ek)!) {
+            if (other.tri === t || seen[other.tri]) continue;
+            seen[other.tri] = 1;
+            // A shared edge must be traversed in OPPOSITE directions by its
+            // two triangles; the neighbor's emitted winding decides its flip.
+            flip[other.tri] = other.dir === effDir ? 1 : 0;
+            stack.push(other.tri);
+          }
+        }
+      }
+    }
+
+    const swapVerts = (a: number, b: number) => {
+      for (let c = 0; c < 3; c++) {
+        let tmp = positions[a * 3 + c]; positions[a * 3 + c] = positions[b * 3 + c]; positions[b * 3 + c] = tmp;
+        tmp = normals[a * 3 + c]; normals[a * 3 + c] = normals[b * 3 + c]; normals[b * 3 + c] = tmp;
+      }
+      const tmpQ = potentials[a]; potentials[a] = potentials[b]; potentials[b] = tmpQ;
+    };
+    for (let t = 0; t < triCount; t++) {
+      if (flip[t]) swapVerts(3 * t + 1, 3 * t + 2);
+    }
+
+    // The propagation fixes relative orientation; make it outward globally by
+    // the stored radial normals — a triangle's geometric normal should agree
+    // with its vertices' outward normals on the whole mesh.
+    let agreement = 0;
+    for (let t = 0; t < triCount; t++) {
+      const i0 = 3 * t, i1 = 3 * t + 1, i2 = 3 * t + 2;
+      const e1x = positions[i1 * 3] - positions[i0 * 3], e1y = positions[i1 * 3 + 1] - positions[i0 * 3 + 1], e1z = positions[i1 * 3 + 2] - positions[i0 * 3 + 2];
+      const e2x = positions[i2 * 3] - positions[i0 * 3], e2y = positions[i2 * 3 + 1] - positions[i0 * 3 + 1], e2z = positions[i2 * 3 + 2] - positions[i0 * 3 + 2];
+      const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+      const gx = normals[i0 * 3] + normals[i1 * 3] + normals[i2 * 3];
+      const gy = normals[i0 * 3 + 1] + normals[i1 * 3 + 1] + normals[i2 * 3 + 1];
+      const gz = normals[i0 * 3 + 2] + normals[i1 * 3 + 2] + normals[i2 * 3 + 2];
+      agreement += nx * gx + ny * gy + nz * gz;
+    }
+    if (agreement < 0) {
+      for (let t = 0; t < triCount; t++) swapVerts(3 * t + 1, 3 * t + 2);
     }
   }
 
