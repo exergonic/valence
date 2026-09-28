@@ -24,6 +24,37 @@ import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { place3D, hasRingBonds } from './place3d';
 import { applyWedgeStereo } from './stereo-wedge';
 
+/**
+ * Valence Molecule → mmff94-ts Molecule adapter, shared by every caller
+ * that hands a molecule to the force-field library (the refine bridge
+ * itself, the parameter-gap report, the charge-model dipole).
+ *
+ * The valenced data model names bonds atom1Index/atom2Index/order and
+ * atoms element/x/y/z/charge; the library wants atomic index fields,
+ * atom1/atom2/bond_order, and formal_charge. Only the genuinely charged
+ * atoms pass formal_charge — the library derives primary BCI charges
+ * from the assigned atom type when it is absent, so a neutral molecule
+ * must not carry it (measured: charged variants come out exactly as
+ * before while a drawn ion gets its charged types).
+ */
+export function toMMFFMol(molecule: Molecule): MMFFMolecule {
+  return {
+    atoms: molecule.atoms.map((a, i) => ({
+      index: i,
+      element: a.element,
+      x: a.x,
+      y: a.y,
+      z: a.z,
+      ...(a.charge ? { formal_charge: a.charge } : {}),
+    })),
+    bonds: molecule.bonds.map((b) => ({
+      atom1: b.atom1Index,
+      atom2: b.atom2Index,
+      bond_order: b.order,
+    })),
+  };
+}
+
 /** Deterministic ±0.5 hash of the atom index (reproducible tests). */
 function hash(i: number, seed: number): number {
   return (((i + 1) * 2654435761 + seed * 97) % 1000) / 1000 - 0.5;
@@ -169,20 +200,12 @@ export function refineWithMMFF94(molecule: Molecule): Molecule | null {
         }
       : molecule;
 
-    const mmff: MMFFMolecule = {
-      atoms: start.atoms.map((a, i) => ({
-        index: i, element: a.element, x: a.x, y: a.y, z: a.z,
-        // mmff94-ts derives primary formal charges from the assigned
-        // atom type when formal_charge is absent — pass it only for
-        // genuinely charged atoms, so neutral molecules refine exactly
-        // as before while a drawn ion (carbocation, ammonium, ...)
-        // gets its charged type variants and BCI primary charge.
-        ...(a.charge ? { formal_charge: a.charge } : {}),
-      })),
-      bonds: start.bonds.map((b) => ({
-        atom1: b.atom1Index, atom2: b.atom2Index, bond_order: b.order,
-      })),
-    };
+    // toMMFFMol passes formal_charge only for genuinely charged atoms —
+    // mmff94-ts derives primary BCI charges from the assigned atom type
+    // when it is absent, so neutral molecules refine exactly as before
+    // while a drawn ion (carbocation, ammonium, ...) gets its charged
+    // type variants and BCI primary charge.
+    const mmff = toMMFFMol(start);
 
     const result = optimize_lbfgs(mmff, { max_iterations: 200 });
     // The 200-iteration budget (measured 2026-08-06, diethylphosphine):

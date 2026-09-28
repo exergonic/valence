@@ -1,5 +1,6 @@
 import { parameter_gap_report } from 'mmff94-ts';
 import type { Molecule } from '../mol-parser';
+import { toMMFFMol } from './mmff-refine';
 
 // User-facing warnings when a locally refined molecule runs on
 // generic MMFF94 parameters. The signal comes from the library's
@@ -11,12 +12,15 @@ import type { Molecule } from '../mol-parser';
 // The report is validated against the whole 761-molecule suite:
 // zero false positives on any molecule whose chemistry MMFF94
 // actually covers.
-export function parameterGapWarnings(molecule: Molecule): string[] {
-  const mmff = {
-    atoms: molecule.atoms.map((a, i) => ({ index: i, element: a.element, x: a.x, y: a.y, z: a.z })),
-    bonds: molecule.bonds.map((b) => ({ atom1: b.atom1Index, atom2: b.atom2Index, bond_order: b.order })),
-  };
-  const report = parameter_gap_report(mmff);
+export interface ParameterGapInfo {
+  /** User-facing warnings, ready for the status popup. */
+  warnings: string[];
+  /** Indices of atoms whose element is outside the MMFF94 type space. */
+  untyped: number[];
+}
+
+export function parameterGapInfo(molecule: Molecule): ParameterGapInfo {
+  const report = parameter_gap_report(toMMFFMol(molecule));
 
   const warnings: string[] = [];
   for (const gap of report.atoms) {
@@ -27,5 +31,9 @@ export function parameterGapWarnings(molecule: Molecule): string[] {
   for (const i of report.untyped) {
     warnings.push(`${molecule.atoms[i].element} has no MMFF94 type — generic fallback, geometry approximate`);
   }
-  return warnings;
+  return { warnings, untyped: [...report.untyped] };
+}
+
+export function parameterGapWarnings(molecule: Molecule): string[] {
+  return parameterGapInfo(molecule).warnings;
 }

@@ -1,6 +1,7 @@
 import type { Molecule } from '../mol-parser';
 import { parseMolBlock } from '../mol-parser';
 import { structuresMatch } from './validate-structure';
+import { ATOMIC_MASS } from '../chem/assign-mass';
 
 export interface PubChemInfo {
   source: 'pubchem' | 'cir' | 'local';
@@ -42,15 +43,6 @@ const CIR_URL = 'https://cactus.nci.nih.gov/chemical/structure';
 // Everything we want from PubChem's property endpoint, one request — the 3D
 // SDF we download carries only the CID, so this fills in the curated record.
 const PUBCHEM_PROPERTIES = 'Title,MolecularFormula,MolecularWeight,IUPACName,SMILES,InChI,InChIKey';
-
-export const ATOMIC_MASS: Record<string, number> = {
-  H: 1.008, He: 4.003,
-  Li: 6.941, Be: 9.012, B: 10.81, C: 12.011, N: 14.007, O: 15.999, F: 18.998, Ne: 20.180,
-  Na: 22.990, Mg: 24.305, Al: 26.982, Si: 28.086, P: 30.974, S: 32.065, Cl: 35.453, Ar: 39.948,
-  K: 39.098, Ca: 40.078,
-  Fe: 55.845, Cu: 63.546, Zn: 65.38, Mn: 54.938,
-  Br: 79.904, I: 126.904,
-};
 
 export function computeFormula(atoms: string[]): { formula: string; weight: number } {
   const counts: Record<string, number> = {};
