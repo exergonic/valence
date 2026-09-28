@@ -3,8 +3,8 @@ import type { SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderOrbitals } from './orbitals';
-import { renderLabels, renderChargeLabels } from './labels';
-import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
+import { renderLabels, renderChargeLabels, renderHybridizationLabels } from './labels';
+import { renderOrbitalLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
 import { renderDipole } from './dipole';
 import { applyAtomStyle } from './atom-styles';
@@ -46,7 +46,6 @@ export function rebuildDisplay(ctx: SceneContext) {
   clearGroup(ctx.orbitalGroup);
   clearGroup(ctx.labelGroup);
   clearGroup(ctx.orbitalLabelGroup);
-  clearGroup(ctx.hybridizationLabelGroup);
   clearGroup(ctx.piSystemGroup);
   clearGroup(ctx.dipoleGroup);
 
@@ -71,30 +70,29 @@ export function rebuildDisplay(ctx: SceneContext) {
     filterOrbitalsByPreset(ctx.orbitalGroup, preset);
   }
 
-  // Labels — one dropdown controls which (if any) label layer is visible
+  // Labels — one dropdown controls which (if any) label layer is visible.
+  // The atom-centered modes (element symbols, hybridizations, charges) are
+  // mutually exclusive and share labelGroup; orbital σ/π/lp labels live in
+  // orbitalLabelGroup (plain colored text whose colors must track the
+  // background: pale tints on the dark presets, darkened hues on white/gray).
   const labelMode = ctx.display.labelMode;
-  // Orbital/hybridization labels are plain colored text, so their colors must
-  // track the background: pale tints on the dark presets, darkened hues on
-  // white/gray ones.
   const labelPalette = labelPaletteFor(ctx.display.bgColor);
   if (labelMode === 'atom') {
-    // Element symbol labels (C, N, O...) — rendered into labelGroup
+    // Element symbol labels (C, N, O...)
     renderLabels(ctx.labelGroup, ctx.currentMolecule);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
-    ctx.hybridizationLabelGroup.visible = false;
   } else if (labelMode === 'orbital' && ctx.atomOrbitals) {
     // σ/π/lp orbital labels
     renderOrbitalLabels(ctx.orbitalLabelGroup, ctx.currentMolecule, ctx.atomOrbitals, labelPalette);
     ctx.orbitalLabelGroup.visible = true;
     ctx.labelGroup.visible = false;
-    ctx.hybridizationLabelGroup.visible = false;
     document.getElementById('orbital-legend')!.classList.remove('hidden');
   } else if (labelMode === 'hybrid' && ctx.atomOrbitals) {
-    // Hybridization labels (sp², sp³)
-    renderHybridizationLabels(ctx.hybridizationLabelGroup, ctx.currentMolecule, ctx.atomOrbitals, labelPalette);
-    ctx.hybridizationLabelGroup.visible = true;
-    ctx.labelGroup.visible = false;
+    // Hybridization labels (sp², sp³) — shadowed on the atom like the
+    // element symbols.
+    renderHybridizationLabels(ctx.labelGroup, ctx.currentMolecule, ctx.atomOrbitals);
+    ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
   } else if (labelMode === 'charge' && ctx.charges) {
     // Partial charges — the same resolved charge-model values the dipole
@@ -102,12 +100,10 @@ export function rebuildDisplay(ctx: SceneContext) {
     renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, ctx.charges.charges);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
-    ctx.hybridizationLabelGroup.visible = false;
   } else {
     // Off
     ctx.labelGroup.visible = false;
     ctx.orbitalLabelGroup.visible = false;
-    ctx.hybridizationLabelGroup.visible = false;
   }
   if (labelMode !== 'orbital') {
     document.getElementById('orbital-legend')!.classList.add('hidden');

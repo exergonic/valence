@@ -12,7 +12,6 @@ export interface LabelPalette {
   sigma: string;
   pi: string;
   lonePair: string;
-  hybrid: string;
 }
 
 /** Pale tints for the original dark navy/charcoal backgrounds. */
@@ -20,7 +19,6 @@ export const DARK_BG_LABELS: LabelPalette = {
   sigma: '#88bbff',
   pi: '#ffaa44',
   lonePair: '#ffdd44',
-  hybrid: '#aaffaa',
 };
 
 /** Darkened equivalents of the same hues — ≥4.5:1 contrast against white. */
@@ -28,7 +26,6 @@ export const LIGHT_BG_LABELS: LabelPalette = {
   sigma: '#1d4ed8',
   pi: '#b45309',
   lonePair: '#a16207',
-  hybrid: '#15803d',
 };
 
 /** Pick the palette whose colors read on the given background color. */

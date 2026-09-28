@@ -38,7 +38,6 @@ export interface SceneContext {
   orbitalGroup: THREE.Group;
   labelGroup: THREE.Group;
   orbitalLabelGroup: THREE.Group;
-  hybridizationLabelGroup: THREE.Group;
   piSystemGroup: THREE.Group;
   dipoleGroup: THREE.Group;
   atomRig: { key: THREE.DirectionalLight; fill: THREE.DirectionalLight; rim: THREE.DirectionalLight };
@@ -114,9 +113,6 @@ export function initScene(container: HTMLElement): SceneContext {
   const orbitalLabelGroup = new THREE.Group();
   orbitalLabelGroup.visible = false;
   scene.add(orbitalLabelGroup);
-  const hybridizationLabelGroup = new THREE.Group();
-  hybridizationLabelGroup.visible = false;
-  scene.add(hybridizationLabelGroup);
   const piSystemGroup = new THREE.Group();
   piSystemGroup.visible = false;
   scene.add(piSystemGroup);
@@ -134,7 +130,6 @@ export function initScene(container: HTMLElement): SceneContext {
       orbitalGroup.rotation.y += 0.005;
       labelGroup.rotation.y += 0.005;
       orbitalLabelGroup.rotation.y += 0.005;
-      hybridizationLabelGroup.rotation.y += 0.005;
       piSystemGroup.rotation.y += 0.005;
       dipoleGroup.rotation.y += 0.005;
     }
@@ -161,7 +156,7 @@ export function initScene(container: HTMLElement): SceneContext {
   };
 
   return {
-    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup, piSystemGroup, dipoleGroup, atomRig,
+    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, piSystemGroup, dipoleGroup, atomRig,
     display: {
       atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', atomStyle: 'glossy', bgColor: '#ffffff',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },

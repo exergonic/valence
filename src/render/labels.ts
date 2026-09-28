@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import { getCovalentRadius } from './chem-data';
+import type { AtomOrbitals } from '../chem/assign-orbitals';
 
 // How far each label is pushed toward the camera, as a multiple of the
 // atom's own orbital-cloud radius (covalent radius + padding). The orbital
@@ -58,6 +59,22 @@ export function renderChargeLabels(group: THREE.Group, molecule: Molecule, charg
   placeAtomLabels(group, molecule, (i) => {
     const q = charges[i];
     return q === undefined ? null : formatCharge(q);
+  });
+}
+
+// Hybridization labels on the heavy atoms (sp, sp², sp³, sp³d, sp³d²) — the
+// same shadowed atom-center treatment as the element/charge labels (the
+// modes are mutually exclusive); hydrogen keeps no label here.
+export function renderHybridizationLabels(
+  group: THREE.Group,
+  molecule: Molecule,
+  atomOrbitals: AtomOrbitals[],
+): void {
+  placeAtomLabels(group, molecule, (i) => {
+    const atom = molecule.atoms[i];
+    const info = atomOrbitals[i];
+    if (!info || atom.element === 'H') return null;
+    return info.hybridization;
   });
 }
 

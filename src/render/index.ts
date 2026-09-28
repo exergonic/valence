@@ -5,8 +5,8 @@ export { applyAtomStyle, atomEnvMap, atomLayer, makeAtomMaterial, ATOM_LAYER } f
 export type { AtomStyle } from './atom-styles';
 export { renderBonds } from './bonds';
 export { renderOrbitals } from './orbitals';
-export { renderLabels } from './labels';
-export { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
+export { renderLabels, renderChargeLabels, renderHybridizationLabels } from './labels';
+export { renderOrbitalLabels } from './orbital-labels';
 export { renderPiSystems } from './pi-systems';
 export { renderDipole } from './dipole';
 export { rebuildDisplay, buildScene } from './rebuild';

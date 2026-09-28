@@ -74,21 +74,3 @@ export function renderOrbitalLabels(
     }
   }
 }
-
-// Hybridization labels above each heavy atom (sp, sp², sp³, sp³d, sp³d²).
-export function renderHybridizationLabels(
-  group: THREE.Group,
-  molecule: any,
-  atomOrbitals: AtomOrbitals[],
-  palette: LabelPalette,
-): void {
-  for (let i = 0; i < molecule.atoms.length; i++) {
-    const atom = molecule.atoms[i];
-    const info = atomOrbitals[i];
-    if (!info || atom.element === 'H') continue;
-
-    const label = makeLabelSprite(info.hybridization, palette.hybrid);
-    label.position.set(atom.x, atom.y + 0.8, atom.z);
-    group.add(label);
-  }
-}
