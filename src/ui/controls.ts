@@ -356,7 +356,11 @@ export function moleculeToSDF(mol: { atoms: any[]; bonds: any[] }): string {
     lines.push(`${a.x.toFixed(4).padStart(10)}${a.y.toFixed(4).padStart(10)}${a.z.toFixed(4).padStart(10)} ${a.element.padStart(3)}  0  0  0  0  0  0  0  0  0  0  0  0`);
   }
   for (const b of mol.bonds) {
-    lines.push(`${(b.atom1Index + 1).toString().padStart(3)}${(b.atom2Index + 1).toString().padStart(3)}${b.order.toString().padStart(3)}  0  0  0  0`);
+    // Drawn wedge/hash rides in the V2000 bond stereo column, columns
+    // 10-12: 1 = wedge (up), 6 = hash (down) — exactly the column
+    // parseMolBlock reads back, so an export round-trips the
+    // stereochemistry instead of flattening it to plain bonds.
+    lines.push(`${(b.atom1Index + 1).toString().padStart(3)}${(b.atom2Index + 1).toString().padStart(3)}${b.order.toString().padStart(3)}${(b.stereo ?? 0).toString().padStart(3)}  0  0  0`);
   }
   // Formal charges ride on M  CHG property lines — the V2000 way, and
   // exactly what parseMolBlock reads back (it lets M  CHG override the

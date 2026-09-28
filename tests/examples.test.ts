@@ -492,10 +492,10 @@ describe('Lone-pair promotion geometry gate', () => {
     { atom1Index: 2, atom2Index: 7, order: 1 },
   ];
 
-  // The drawn anion's charge, restored: the SDF export writes zero charge
-  // columns and no M  CHG (moleculeToSDF in controls.ts), so the exported
-  // file reads as a neutral radical — C3 carries −1 here, as it did in
-  // the app when the classification ran.
+  // The drawn anion's charge, restored: before the 2026-09-23 M  CHG export
+  // fix, moleculeToSDF flattened a drawn ion to a neutral radical; this
+  // fixture carries the −1 by hand, as the app's classification saw it in
+  // the report that prompted the fix.
   const pyramidalAllylAnion = (): Molecule => ({
     atoms: ALLYL_ANION_XYZ.map(([element, x, y, z], i) =>
       i === 2 ? { element, x, y, z, charge: -1 } : { element, x, y, z }),

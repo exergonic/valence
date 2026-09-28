@@ -92,3 +92,42 @@ $$$$
     expect(assignOrbitals(reimported)).toEqual(assignOrbitals(original));
   });
 });
+
+// Regression (2026-09-27): the SDF export wrote the V2000 bond stereo column
+// as 0, so a drawn wedge/hash flattened to a plain bond on the way out —
+// charges got their M  CHG lines, stereochemistry got nothing, and an
+// export->re-import cycle silently dropped the sketch's configuration. The
+// flag now rides in columns 10-12, the same column parseMolBlock reads.
+describe('SDF export — drawn stereochemistry (2026-09-27)', () => {
+  const wedged = (stereo: 1 | 6): Molecule => ({
+    atoms: [
+      { element: 'C', x: 0, y: 0, z: 0 },
+      { element: 'C', x: 1.2, y: 0, z: 0 },
+      { element: 'Br', x: 0.6, y: 1.04, z: 0 },
+    ],
+    bonds: [
+      { atom1Index: 0, atom2Index: 1, order: 1 },
+      { atom1Index: 0, atom2Index: 2, order: 1, stereo },
+    ],
+  });
+
+  for (const flag of [1, 6] as const) {
+    it(`writes the V2000 bond stereo flag ${flag} in columns 10-12`, () => {
+      const sdf = moleculeToSDF(wedged(flag));
+      // The wedge bond 1-3: fixed-width V2000, flag at columns 10-12.
+      expect(sdf).toContain(`  1  3  1${flag.toString().padStart(3)}  0  0  0`);
+      const bondLine = sdf.split('\n').find((l) => l.startsWith('  1  3'))!;
+      expect(bondLine.substring(9, 12).trim()).toBe(String(flag));
+      // The plain bond keeps its zero stereo column.
+      expect(sdf).toContain('  1  2  1  0  0  0  0');
+    });
+
+    it(`round-trips flag ${flag} through parseMolBlock`, () => {
+      const reimported = parseMolBlock(moleculeToSDF(wedged(flag)));
+      const wedge = reimported.bonds.find((b) => b.atom1Index === 0 && b.atom2Index === 2)!;
+      expect(wedge.stereo).toBe(flag);
+      const plain = reimported.bonds.find((b) => b.atom1Index === 0 && b.atom2Index === 1)!;
+      expect(plain.stereo).toBeUndefined();
+    });
+  }
+});
