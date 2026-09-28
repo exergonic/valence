@@ -482,6 +482,40 @@ html, body {
   border-bottom: none;
 }
 
+/* ── Model Info log (bottom of the controls panel) ──
+   Verbose caveats that do not fit the one-line molecule header
+   (dipole on generic parameters, an ion the type space cannot
+   represent, ...). Hidden until a molecule raises a note. */
+
+#panel-info {
+  padding: 10px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+}
+
+#panel-info.hidden { display: none; }
+
+#panel-info-title {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #888;
+  margin-bottom: 5px;
+}
+
+#panel-info-items {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.panel-info-item {
+  color: #d8c69a;
+  line-height: 1.5;
+}
+
 .ctrl-label {
   display: block;
   font-weight: 600;

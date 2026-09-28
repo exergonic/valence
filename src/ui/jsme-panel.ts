@@ -7,7 +7,7 @@ import { computeLocalGeometry } from '../geometry/local-geometry';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import type { PubChemInfo } from '../geometry/resolve3d';
-import { computeDipole, DIPOLE_APPROXIMATE } from '../chem/dipole';
+import { computeDipole, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE } from '../chem/dipole';
 import type { DipoleResult } from '../chem/dipole';
 
 declare global {
@@ -38,16 +38,25 @@ function hideRenderError() {
 }
 
 // The dipole runs on MMFF94 BCI partial charges; on generic parameters
-// (hypervalent centers, ...) those charges are approximate, so the popup
-// gets one more line rather than a silently approximate arrow.
-function dipoleWarnings(warnings: string[], molecule: Molecule, dipole: DipoleResult | null): string[] {
+// (hypervalent centers, ...) those charges are approximate, and an ion the
+// type space cannot represent (the carbanion C⁻) gets its drawn charge
+// placed by hand. Either way the readout would silently overstate itself.
+// The caveat prose is far too long for the one-line molecule header, so it
+// goes to the panel's Info log (bottom of the right panel) and the header
+// keeps only the short structural warnings — the stereo notes from the
+// pipeline.
+function composeNotes(warnings: string[], molecule: Molecule, dipole: DipoleResult | null): {
+  warnings: string[];
+  info: string[];
+} {
   const gaps = parameterGapWarnings(molecule);
-  const out = [...warnings, ...gaps];
-  if (dipole && gaps.length > 0) out.push(DIPOLE_APPROXIMATE);
-  return out;
+  const info = [...gaps];
+  if (dipole && gaps.length > 0) info.push(DIPOLE_APPROXIMATE);
+  if (dipole?.residualCharge) info.push(DIPOLE_RESIDUAL_CHARGE);
+  return { warnings, info };
 }
 
-function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null }) {
+function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null; info?: string[] }) {
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
   const nameEl = document.getElementById('mol-name')!;
@@ -75,6 +84,22 @@ function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null }
   const warningsEl = document.getElementById('mol-warnings')!;
   warningsEl.classList.toggle('hidden', !(info.warnings && info.warnings.length > 0));
   warningsEl.textContent = info.warnings?.join('\n') ?? '';
+
+  // Verbose model caveats go to the Info log at the bottom of the right
+  // panel, not the molecule header (one line, white-space nowrap — a long
+  // paragraph there is unreadable). The log exists only while a molecule
+  // has notes to show.
+  const infoEl = document.getElementById('panel-info')!;
+  const itemsEl = document.getElementById('panel-info-items')!;
+  const notes = info.info ?? [];
+  itemsEl.replaceChildren();
+  for (const note of notes) {
+    const item = document.createElement('div');
+    item.className = 'panel-info-item';
+    item.textContent = note;
+    itemsEl.appendChild(item);
+  }
+  infoEl.classList.toggle('hidden', notes.length === 0);
 
   // Charge-model dipole readout. A null dipole means the molecule has no
   // honest MMFF94 charges (an element outside the type space); say so
@@ -176,12 +201,14 @@ export function mountJsmePanel(ctx: SceneContext) {
         molecule = result.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         const dipole = computeDipole(molecule);
+        const notes = composeNotes(result.info.warnings ?? [], molecule, dipole);
         updateMoleculeInfo({
           ...result.info,
           formula,
           weight: `${weight}`,
           dipole,
-          warnings: dipoleWarnings(result.info.warnings ?? [], molecule, dipole),
+          warnings: notes.warnings,
+          info: notes.info,
         });
       } else {
         showLoading('Refining geometry...');
@@ -201,15 +228,18 @@ export function mountJsmePanel(ctx: SceneContext) {
         molecule = local.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         const dipole = computeDipole(molecule);
+        const notes = composeNotes(local.warnings, molecule, dipole);
         updateMoleculeInfo({
           source: 'local',
           formula,
           weight: `${weight}`,
           dipole,
           // The stereo-enforcement failures ride out of the worker with the
-          // molecule; the parameter-gap report and the dipole caveat are
-          // composed here.
-          warnings: dipoleWarnings(local.warnings, molecule, dipole),
+          // molecule; the parameter-gap report and the dipole caveats are
+          // composed here (the header keeps the structural warnings, the
+          // verbose caveats go to the panel's Info log).
+          warnings: notes.warnings,
+          info: notes.info,
         });
         console.log('[render-timing]', {
           jsme: +(t1 - t0).toFixed(1),

@@ -234,6 +234,15 @@
               <p class="measure-hint">Add a text callout to the canvas. Drag to position, type to edit.</p>
             </div>
           </div>
+
+          <!-- Model Info log — verbose caveats the one-line header cannot
+               fit (dipole on generic parameters, an ion the type space
+               cannot represent, ...). It exists only when a molecule
+               raised a note; empty otherwise. -->
+          <div id="panel-info" class="hidden">
+            <span class="panel-info-title">Info</span>
+            <div id="panel-info-items"></div>
+          </div>
         </div>
 
         <!-- Floating action buttons -->
