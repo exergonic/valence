@@ -43,6 +43,14 @@ export function setupControls(ctx: SceneContext) {
     ctx.orbitalGroup.visible = orbToggle.checked;
   });
 
+  // Dipole arrow — same visibility pattern as the orbital toggle: the arrow
+  // is rebuilt per molecule by rebuildDisplay, the checkbox only shows it.
+  const dipoleToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-dipole')!;
+  ctx.dipoleGroup.visible = dipoleToggle.checked;
+  dipoleToggle.addEventListener('change', () => {
+    ctx.dipoleGroup.visible = dipoleToggle.checked;
+  });
+
   // Labels dropdown — one control for all label modes
   const labelModeSelect = panel.querySelector<HTMLSelectElement>('#ctrl-label-mode')!;
   labelModeSelect.addEventListener('change', () => {

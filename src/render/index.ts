@@ -8,4 +8,5 @@ export { renderOrbitals } from './orbitals';
 export { renderLabels } from './labels';
 export { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
 export { renderPiSystems } from './pi-systems';
+export { renderDipole } from './dipole';
 export { rebuildDisplay, buildScene } from './rebuild';

@@ -9,7 +9,7 @@ import { getCovalentRadius } from './chem-data';
 // atom) can never occlude it, while any genuinely nearer geometry can.
 const LABEL_PUSH = 1.25;
 
-function makeTextSprite(text: string): THREE.Sprite {
+export function makeTextSprite(text: string): THREE.Sprite {
   const canvas = document.createElement('canvas');
   canvas.width = 80;
   canvas.height = 80;

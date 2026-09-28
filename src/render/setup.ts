@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
 import type { Molecule } from '../mol-parser';
 import type { AtomOrbitals } from '../chem/assign-orbitals';
+import type { DipoleResult } from '../chem/dipole';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
@@ -39,10 +40,13 @@ export interface SceneContext {
   orbitalLabelGroup: THREE.Group;
   hybridizationLabelGroup: THREE.Group;
   piSystemGroup: THREE.Group;
+  dipoleGroup: THREE.Group;
   atomRig: { key: THREE.DirectionalLight; fill: THREE.DirectionalLight; rim: THREE.DirectionalLight };
   display: DisplaySettings;
   currentMolecule?: Molecule;
   atomOrbitals: AtomOrbitals[] | null;
+  /** Per-molecule charge-model dipole (computed in buildScene, like atomOrbitals). */
+  dipole: DipoleResult | null;
   rerender: () => void;
   teardown: () => void;
   autoRotate: boolean;
@@ -112,6 +116,10 @@ export function initScene(container: HTMLElement): SceneContext {
   const piSystemGroup = new THREE.Group();
   piSystemGroup.visible = false;
   scene.add(piSystemGroup);
+  const dipoleGroup = new THREE.Group();
+  // Off by default — a dipole is a thing you ask to see, not the default view.
+  dipoleGroup.visible = false;
+  scene.add(dipoleGroup);
 
   let autoRotate = false;
 
@@ -124,10 +132,13 @@ export function initScene(container: HTMLElement): SceneContext {
       orbitalLabelGroup.rotation.y += 0.005;
       hybridizationLabelGroup.rotation.y += 0.005;
       piSystemGroup.rotation.y += 0.005;
+      dipoleGroup.rotation.y += 0.005;
     }
     controls.update();
-    // Forward-push the atom labels against the (moved) camera.
+    // Forward-push the atom labels against the (moved) camera — the dipole
+    // group's "+" marker uses the same per-frame push.
     updateLabels(labelGroup, camera);
+    updateLabels(dipoleGroup, camera);
     renderer.render(scene, camera);
   }
   animate();
@@ -146,7 +157,7 @@ export function initScene(container: HTMLElement): SceneContext {
   };
 
   return {
-    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup, piSystemGroup, atomRig,
+    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, hybridizationLabelGroup, piSystemGroup, dipoleGroup, atomRig,
     display: {
       atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', atomStyle: 'glossy', bgColor: '#ffffff',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
@@ -156,6 +167,7 @@ export function initScene(container: HTMLElement): SceneContext {
       highlightPiSystems: false,
     },
     atomOrbitals: null,
+    dipole: null,
     rerender: () => {},
     teardown,
     get autoRotate() { return autoRotate; },

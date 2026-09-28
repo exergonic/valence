@@ -383,6 +383,16 @@ html, body {
   font-size: 11px;
 }
 
+#mol-dipole {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+}
+#mol-dipole.unsupported {
+  color: #888;
+  font-weight: 400;
+}
+
 #mol-source {
   font-size: 10px;
   font-weight: 600;

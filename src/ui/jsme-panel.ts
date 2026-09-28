@@ -1,11 +1,14 @@
 import type { SceneContext } from '../render';
 import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
+import type { Molecule } from '../mol-parser';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import type { PubChemInfo } from '../geometry/resolve3d';
+import { computeDipole, DIPOLE_APPROXIMATE } from '../chem/dipole';
+import type { DipoleResult } from '../chem/dipole';
 
 declare global {
   interface Window {
@@ -34,7 +37,17 @@ function hideRenderError() {
   document.getElementById('render-error')!.classList.add('hidden');
 }
 
-function updateMoleculeInfo(info: PubChemInfo) {
+// The dipole runs on MMFF94 BCI partial charges; on generic parameters
+// (hypervalent centers, ...) those charges are approximate, so the popup
+// gets one more line rather than a silently approximate arrow.
+function dipoleWarnings(warnings: string[], molecule: Molecule, dipole: DipoleResult | null): string[] {
+  const gaps = parameterGapWarnings(molecule);
+  const out = [...warnings, ...gaps];
+  if (dipole && gaps.length > 0) out.push(DIPOLE_APPROXIMATE);
+  return out;
+}
+
+function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null }) {
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
   const nameEl = document.getElementById('mol-name')!;
@@ -62,6 +75,28 @@ function updateMoleculeInfo(info: PubChemInfo) {
   const warningsEl = document.getElementById('mol-warnings')!;
   warningsEl.classList.toggle('hidden', !(info.warnings && info.warnings.length > 0));
   warningsEl.textContent = info.warnings?.join('\n') ?? '';
+
+  // Charge-model dipole readout. A null dipole means the molecule has no
+  // honest MMFF94 charges (an element outside the type space); say so
+  // rather than leaving the readout blank next to an absent arrow. The
+  // visible text stays short — the hover explains the model and the
+  // arrow convention.
+  const dipoleEl = document.getElementById('mol-dipole')!;
+  if (info.dipole) {
+    dipoleEl.classList.remove('unsupported');
+    dipoleEl.textContent = `Dipole: ${info.dipole.debye.toFixed(2)} D`;
+    dipoleEl.title =
+      'Computed from MMFF94 BCI partial charges (a charge model, not a quantum-mechanical dipole). ' +
+      'The arrow points from the positive end (δ+) toward the negative end (δ−) — the chemistry ' +
+      'convention; the physics convention draws it the other way.';
+  } else if (info.dipole === null) {
+    dipoleEl.classList.add('unsupported');
+    dipoleEl.textContent = 'Dipole: n/a';
+    dipoleEl.title = '';
+  } else {
+    dipoleEl.textContent = '';
+    dipoleEl.title = '';
+  }
 
   // Collapsible PubChem record — only populated on successful PubChem lookups.
   const dataDetails = document.getElementById('mol-data')!;
@@ -140,7 +175,14 @@ export function mountJsmePanel(ctx: SceneContext) {
         // returns the parsed molecule — no re-parse here.
         molecule = result.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-        updateMoleculeInfo({ ...result.info, formula, weight: `${weight}` });
+        const dipole = computeDipole(molecule);
+        updateMoleculeInfo({
+          ...result.info,
+          formula,
+          weight: `${weight}`,
+          dipole,
+          warnings: dipoleWarnings(result.info.warnings ?? [], molecule, dipole),
+        });
       } else {
         showLoading('Refining geometry...');
         const local = await computeLocalGeometry(molecule);
@@ -158,13 +200,16 @@ export function mountJsmePanel(ctx: SceneContext) {
         }
         molecule = local.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
+        const dipole = computeDipole(molecule);
         updateMoleculeInfo({
           source: 'local',
           formula,
           weight: `${weight}`,
+          dipole,
           // The stereo-enforcement failures ride out of the worker with the
-          // molecule; the parameter-gap report is recomputed here.
-          warnings: [...local.warnings, ...parameterGapWarnings(molecule)],
+          // molecule; the parameter-gap report and the dipole caveat are
+          // composed here.
+          warnings: dipoleWarnings(local.warnings, molecule, dipole),
         });
         console.log('[render-timing]', {
           jsme: +(t1 - t0).toFixed(1),

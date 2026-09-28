@@ -6,9 +6,11 @@ import { renderOrbitals } from './orbitals';
 import { renderLabels } from './labels';
 import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
+import { renderDipole } from './dipole';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/assign-orbitals';
+import { computeDipole } from '../chem/dipole';
 import { labelPaletteFor } from './label-colors';
 
 // Remove every mesh from a group (recursively into nested groups),
@@ -46,6 +48,7 @@ export function rebuildDisplay(ctx: SceneContext) {
   clearGroup(ctx.orbitalLabelGroup);
   clearGroup(ctx.hybridizationLabelGroup);
   clearGroup(ctx.piSystemGroup);
+  clearGroup(ctx.dipoleGroup);
 
   const { atoms, bonds } = ctx.currentMolecule;
   const c = ctx.display.colors;
@@ -110,6 +113,14 @@ export function rebuildDisplay(ctx: SceneContext) {
   } else {
     ctx.piSystemGroup.visible = false;
   }
+
+  // Charge-model dipole arrow — nothing to render when the molecule is
+  // untypeable (computeDipole returned null) or the model gives ~0 D.
+  // Visibility belongs to the #ctrl-show-dipole checkbox, so a rebuild
+  // never flips the user's choice back on (or off).
+  if (ctx.dipole) {
+    renderDipole(ctx.dipoleGroup, ctx.dipole);
+  }
 }
 
 // Show only orbitals matching the active preset.
@@ -136,6 +147,9 @@ export function buildScene(ctx: SceneContext) {
   // Cache the per-molecule orbital assignment here so renderOrbitals can
   // read it instead of recomputing on every display-setting change.
   ctx.atomOrbitals = ctx.currentMolecule ? assignOrbitals(ctx.currentMolecule) : null;
+  // Same for the charge-model dipole (BCI charges are geometry-independent:
+  // computed once per molecule — see chem/dipole.ts).
+  ctx.dipole = ctx.currentMolecule ? computeDipole(ctx.currentMolecule) : null;
   rebuildDisplay(ctx);
 
   const center = new THREE.Vector3();
