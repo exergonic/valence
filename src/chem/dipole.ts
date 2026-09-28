@@ -39,12 +39,56 @@ export interface DipoleResult {
   com: [number, number, number];
   /** Magnitude in Debye. */
   debye: number;
+  /** True when the BCI model had no type for a drawn ion's formal charge
+   *  (the carbanion C⁻ most notably) and the missing residual was placed
+   *  on the charged atom(s) by hand. The UI surfaces a caveat then. */
+  residualCharge: boolean;
 }
 
 /** User-facing caveat, appended to the status warnings when the dipole runs
  *  on generic MMFF94 parameters (hypervalent centers, ...). */
 export const DIPOLE_APPROXIMATE =
   'Dipole (MMFF94 charge model) is approximate — partial charges run on generic parameters';
+
+/** User-facing caveat for an ion the BCI model could not represent: the
+ *  drawn net charge was placed on the atom(s) that carry it because the
+ *  MMFF94 type space has no charged variant for them. */
+export const DIPOLE_RESIDUAL_CHARGE =
+  'Dipole (MMFF94 charge model) is approximate — MMFF94 has no atom type for this drawn ion ' +
+  '(e.g. carbanion C⁻); its net charge was placed on the atom(s) carrying it.';
+
+/** The BCI charges of a molecule and how much of its drawn charge they
+ *  account for. The BCI model puts a formal charge on a molecule only
+ *  through atom TYPES with a primary q⁰ (ammonium N⁺ → 34, carboxylate O →
+ *  32, ...). An ion with no such type — the carbanion C⁻ most notably;
+ *  MMFF94 defines no carbon-anion type — comes back from the library
+ *  neutral, its drawn charge silent: `residual` ends up nonzero.
+ *
+ *  Shared by the dipole (which injects the residual onto the charged atoms)
+ *  and the fetch guard (which rejects a remote conformer whose ion the type
+ *  space cannot represent — see validate-structure.ts). Returns null when
+ *  the library cannot type or charge the molecule at all. */
+export interface ChargeModelResult {
+  /** BCI partial charges, full precision ({ round: false }, like the dipole). */
+  charges: number[];
+  /** Net formal charge of the molecule (sum of the drawn charges). */
+  netFormal: number;
+  /** netFormal − Σ q_BCI — the charge the type space could not represent
+   *  (0 for every ion MMFF94 can type: N⁺, carboxylate O⁻, halides, ...). */
+  residual: number;
+}
+
+export function chargeModelResult(molecule: Molecule): ChargeModelResult | null {
+  const typed = assign_bci_charges(assign_atom_types(toMMFFMol(molecule)), { round: false });
+  const charges = typed.partial_charges;
+  if (!charges || charges.length !== molecule.atoms.length) return null;
+
+  let netFormal = 0;
+  for (const a of molecule.atoms) netFormal += a.charge ?? 0;
+  let bciSum = 0;
+  for (const q of charges) bciSum += q;
+  return { charges, netFormal, residual: netFormal - bciSum };
+}
 
 export function computeDipole(molecule: Molecule): DipoleResult | null {
   if (molecule.atoms.length === 0) return null;
@@ -66,11 +110,31 @@ function computeDipoleOrThrow(molecule: Molecule): DipoleResult | null {
 
   // BCI charges are geometry-independent (connectivity + types only), so
   // this is computed once per molecule, not per frame.
-  const typed = assign_bci_charges(assign_atom_types(toMMFFMol(molecule)), { round: false });
-  const charges = typed.partial_charges;
-  if (!charges || charges.length !== molecule.atoms.length) return null;
+  const charged = chargeModelResult(molecule);
+  if (!charged) return null;
+  const charges = charged.charges;
   for (const q of charges) {
     if (!Number.isFinite(q)) return null;
+  }
+
+  // A nonzero residual is a drawn charge the type space could not represent
+  // (the carbanion C⁻: it types as the neutral CR, its C–H BCI is 0, and
+  // the −1 is silent in the library's sum). The sketch is the specification,
+  // so the model may not drop it: place the residual on the atom(s) the
+  // sketch charged, in proportion to their formal charge (a lone −1 lands
+  // whole on its C). This is model bookkeeping, not physics, so it sets a
+  // flag the UI reports with the other approximations.
+  let residualCharge = false;
+  if (Math.abs(charged.residual) > 1e-9) {
+    // A nonzero residual with no atom to hang it on (no formal charges) is
+    // an internal inconsistency — refuse the arrow rather than invent a
+    // home for it.
+    if (Math.abs(charged.netFormal) < 1e-9) return null;
+    for (let i = 0; i < molecule.atoms.length; i++) {
+      const fc = molecule.atoms[i].charge ?? 0;
+      if (fc !== 0) charges[i] += charged.residual * (fc / charged.netFormal);
+    }
+    residualCharge = true;
   }
 
   // Center of mass from standard atomic weights. An element the table does
@@ -104,5 +168,5 @@ function computeDipoleOrThrow(molecule: Molecule): DipoleResult | null {
   const vector: [number, number, number] =
     norm > 1e-12 ? [-physics[0] / norm, -physics[1] / norm, -physics[2] / norm] : [0, 0, 0];
 
-  return { physics, vector, com, debye };
+  return { physics, vector, com, debye, residualCharge };
 }

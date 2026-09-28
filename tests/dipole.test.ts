@@ -1,6 +1,10 @@
 // The charge-model dipole: MMFF94 BCI partial charges (assign_bci_charges
 // from the vendored mmff94-ts) evaluated on the displayed molecule, origin
 // at the center of mass, rendered as an arrow from the δ+ end to the δ− end.
+// An ion the type space cannot represent (the carbanion C⁻ — MMFF94 has no
+// carbon-anion type) gets its drawn net charge placed on the charged
+// atom(s) — the residual rule in chem/dipole.ts — and flags it so the
+// readout warns rather than showing a silent 0.00 D.
 //
 // The oracle is water. Measured from the vendored BCI parameters
 // (2026-09-27): O −0.86, H +0.43 → |μ| ≈ 2.42 D, exactly along the H–O–H
@@ -65,6 +69,8 @@ describe('dipole — water oracle', () => {
     // experimental value wide enough for the BCI model's ~30% overshoot.
     expect(d!.debye).toBeGreaterThan(1.85 - 0.6);
     expect(d!.debye).toBeLessThan(1.85 + 0.6);
+    // Neutral and representable — no residual charge was injected.
+    expect(d!.residualCharge).toBe(false);
   });
 
   it('physics vector lies on the H–O–H bisector, from O toward the H midpoint', () => {
@@ -131,6 +137,8 @@ describe('dipole — conventions and behavior', () => {
     expect(d!.debye).toBeLessThan(5.0);
     expect(d!.physics[0]).toBeLessThan(0);
     expect(d!.vector[0]).toBeGreaterThan(0);
+    // The carboxylate q⁰ model represents the −1 itself — no injection.
+    expect(d!.residualCharge).toBe(false);
   });
 
   it('ammonium: computes without error and is symmetric enough to have ~no dipole', () => {
@@ -156,6 +164,8 @@ describe('dipole — conventions and behavior', () => {
     expect(d).not.toBeNull();
     expect(Number.isFinite(d!.debye)).toBe(true);
     expect(d!.debye).toBeLessThan(0.05);
+    // The NR+ type carries its own q⁰ — no residual injection.
+    expect(d!.residualCharge).toBe(false);
   });
 
   it('an element outside the MMFF94 type space gets no dipole — no arrow, no lie', () => {
@@ -168,5 +178,64 @@ describe('dipole — conventions and behavior', () => {
 
   it('an empty molecule gets no dipole either', () => {
     expect(computeDipole({ atoms: [], bonds: [] })).toBeNull();
+  });
+});
+
+describe('dipole — ions the type space cannot represent', () => {
+  // Methyl anion: MMFF94 has no carbon-anion type, so the typer sends the
+  // C as the neutral CR (1) and the C–H BCI (pair 0-1-5) is exactly 0 —
+  // the library's charge sum would be 0.00 with a drawn −1 on the sketch.
+  // The residual rule places the −1 on the carbon instead of dropping it.
+  // Symmetric trigonal pyramid, C pushed 0.25 Å above the H triangle's
+  // plane (H–C–H ≈ 113°): with the −1 on C and zeros on H, μ = 0.51 D
+  // along the pyramid axis, δ− at the lone pair.
+  it('methyl anion: the drawn −1 survives the model and points at the lone pair', () => {
+    const methylAnion: Molecule = {
+      atoms: [
+        { element: 'C', charge: -1, x: 0, y: 0, z: 0.25 },
+        { element: 'H', x: 1.02, y: 0, z: -0.28 },
+        { element: 'H', x: -0.51, y: 0.88334, z: -0.28 },
+        { element: 'H', x: -0.51, y: -0.88334, z: -0.28 },
+      ],
+      bonds: [
+        { atom1Index: 0, atom2Index: 1, order: 1 },
+        { atom1Index: 0, atom2Index: 2, order: 1 },
+        { atom1Index: 0, atom2Index: 3, order: 1 },
+      ],
+    };
+    const d = computeDipole(methylAnion);
+    expect(d).not.toBeNull();
+    expect(d!.residualCharge).toBe(true);
+    // Pinned 2026-09-28: 0.512 D, all in −z.
+    expect(d!.debye).toBeGreaterThan(0.4);
+    expect(d!.debye).toBeLessThan(0.7);
+    // Physics δ− → δ+: from the carbon (lone pair) toward the hydrogens.
+    expect(d!.physics[2]).toBeLessThan(0);
+    expect(Math.hypot(d!.physics[0], d!.physics[1])).toBeLessThan(1e-9);
+    // Arrow δ+ → δ−: points back at the carbon.
+    expect(Math.abs(d!.vector[2])).toBeGreaterThan(0.999);
+    expect(d!.vector[2]).toBeGreaterThan(0);
+  });
+
+  it('a neutral methane gets exactly zero — the residual rule never fires', () => {
+    const methane: Molecule = {
+      atoms: [
+        { element: 'C', x: 0, y: 0, z: 0 },
+        { element: 'H', x: 0, y: 0, z: 1.09 },
+        { element: 'H', x: 1.02725, y: 0, z: -0.36333 },
+        { element: 'H', x: -0.5136, y: 0.8896, z: -0.36333 },
+        { element: 'H', x: -0.5136, y: -0.8896, z: -0.36333 },
+      ],
+      bonds: [
+        { atom1Index: 0, atom2Index: 1, order: 1 },
+        { atom1Index: 0, atom2Index: 2, order: 1 },
+        { atom1Index: 0, atom2Index: 3, order: 1 },
+        { atom1Index: 0, atom2Index: 4, order: 1 },
+      ],
+    };
+    const d = computeDipole(methane);
+    expect(d).not.toBeNull();
+    expect(d!.debye).toBe(0);
+    expect(d!.residualCharge).toBe(false);
   });
 });
