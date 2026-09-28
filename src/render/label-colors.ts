@@ -13,8 +13,6 @@ export interface LabelPalette {
   pi: string;
   lonePair: string;
   hybrid: string;
-  /** Partial-charge labels — a violet distinct from the π/lone-pair hues. */
-  charge: string;
 }
 
 /** Pale tints for the original dark navy/charcoal backgrounds. */
@@ -23,7 +21,6 @@ export const DARK_BG_LABELS: LabelPalette = {
   pi: '#ffaa44',
   lonePair: '#ffdd44',
   hybrid: '#aaffaa',
-  charge: '#c4b5fd',
 };
 
 /** Darkened equivalents of the same hues — ≥4.5:1 contrast against white. */
@@ -32,7 +29,6 @@ export const LIGHT_BG_LABELS: LabelPalette = {
   pi: '#b45309',
   lonePair: '#a16207',
   hybrid: '#15803d',
-  charge: '#6d28d9',
 };
 
 /** Pick the palette whose colors read on the given background color. */

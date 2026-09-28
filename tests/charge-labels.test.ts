@@ -1,7 +1,7 @@
-// Partial-charge label formatting (render/orbital-labels.ts formatCharge):
-// the number that appears above each atom in the Charges label mode.
+// Partial-charge label formatting (render/labels.ts formatCharge): the
+// number that appears on the atom itself in the Charges label mode.
 import { describe, it, expect } from 'vitest';
-import { formatCharge } from '../src/render/orbital-labels';
+import { formatCharge } from '../src/render/labels';
 
 describe('formatCharge', () => {
   it('formats positive and negative charges with an explicit sign', () => {

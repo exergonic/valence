@@ -3,8 +3,8 @@ import type { SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderOrbitals } from './orbitals';
-import { renderLabels } from './labels';
-import { renderOrbitalLabels, renderHybridizationLabels, renderChargeLabels } from './orbital-labels';
+import { renderLabels, renderChargeLabels } from './labels';
+import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
 import { renderDipole } from './dipole';
 import { applyAtomStyle } from './atom-styles';
@@ -98,8 +98,8 @@ export function rebuildDisplay(ctx: SceneContext) {
     ctx.orbitalLabelGroup.visible = false;
   } else if (labelMode === 'charge' && ctx.charges) {
     // Partial charges — the same resolved charge-model values the dipole
-    // arrow uses (BCI + residual placement).
-    renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, ctx.charges.charges, labelPalette);
+    // arrow uses (BCI + residual placement), drawn like element labels.
+    renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, ctx.charges.charges);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
     ctx.hybridizationLabelGroup.visible = false;

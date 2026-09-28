@@ -40,9 +40,40 @@ export function makeTextSprite(text: string): THREE.Sprite {
 }
 
 export function renderLabels(group: THREE.Group, molecule: Molecule): void {
+  placeAtomLabels(group, molecule, (i) => molecule.atoms[i].element);
+}
+
+/** Render a partial charge as a short sign-prefixed label: "+0.43",
+ *  "−0.36" (U+2212 minus), "0.00". Values within ±0.005 read as zero. */
+export function formatCharge(q: number): string {
+  if (Math.abs(q) < 0.005) return '0.00';
+  return q > 0 ? `+${q.toFixed(2)}` : `−${Math.abs(q).toFixed(2)}`;
+}
+
+// Partial-charge labels — the element-label treatment (shadowed circle at
+// the atom center, pushed toward the camera per-frame) because the two label
+// modes are mutually exclusive and occupy the same spot. Values come from
+// resolveCharges, so a label and the dipole arrow always agree.
+export function renderChargeLabels(group: THREE.Group, molecule: Molecule, charges: number[]): void {
+  placeAtomLabels(group, molecule, (i) => {
+    const q = charges[i];
+    return q === undefined ? null : formatCharge(q);
+  });
+}
+
+// The shared atom-centered placement for the label modes that sit on the
+// atom itself (element symbols, partial charges): image the darkened shadow,
+// remember the push, and updateLabels keeps them camera-facing each frame.
+function placeAtomLabels(
+  group: THREE.Group,
+  molecule: Molecule,
+  textFor: (i: number) => string | null,
+): void {
   for (let i = 0; i < molecule.atoms.length; i++) {
     const atom = molecule.atoms[i];
-    const sprite = makeTextSprite(atom.element);
+    const text = textFor(i);
+    if (text === null) continue;
+    const sprite = makeTextSprite(text);
     sprite.position.set(atom.x, atom.y, atom.z);
     // Remember the atom position and the label's push so updateLabels can
     // re-position the sprite toward the camera on every frame.
