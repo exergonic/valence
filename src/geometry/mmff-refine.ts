@@ -23,6 +23,7 @@ import type { Molecule } from '../mol-parser';
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { place3D, hasRingBonds } from './place3d';
 import { applyWedgeStereo } from './stereo-wedge';
+import { restoreThreeRingPlanarity } from './ring-planarity';
 
 /**
  * Valence Molecule → mmff94-ts Molecule adapter, shared by every caller
@@ -151,6 +152,13 @@ export function embedAndRefine(molecule: Molecule): EmbedResult {
     m.atoms.every((a) => Number.isFinite(a.x) && Number.isFinite(a.y) && Number.isFinite(a.z));
   const refined = refineWithMMFF94(fallback);
   if (refined && finite(refined)) {
+    // MMFF94 has no reference angle for a trigonal center's substituent in
+    // a 3-ring, so its minimum puckers the ring's exocyclic bonds out of
+    // the plane (cyclopropenyl cation: all C–H ~54° out — measured
+    // 2026-09-28, faithful MMFF94; see ring-planarity.ts). The chemistry is
+    // planar there, so restore it after the refinement and before the
+    // stereo enforcement, so the sketch's wedge still wins.
+    const planar = restoreThreeRingPlanarity(refined);
     // The optimizer walks downhill to the nearest minimum, and for a strained
     // drawn stereoisomer that minimum can belong to a different one: the
     // all-cis hexol's first hydroxyl came back trans (its all-cis chair has
@@ -158,8 +166,8 @@ export function embedAndRefine(molecule: Molecule): EmbedResult {
     // sketch is the specification, so re-assert it on the relaxed geometry —
     // the enforcement moves only the wedged branch, and it runs after the
     // refinement rather than before so nothing can undo it.
-    if (refined.bonds.some((b) => b.stereo)) return enforceStereo(refined);
-    return { molecule: refined, warnings: [] };
+    if (planar.bonds.some((b) => b.stereo)) return enforceStereo(planar);
+    return { molecule: planar, warnings: [] };
   }
   // The unrefined path kept place3D's geometry, whose enforcement ran before
   // separateOverlaps moved nonbonded pairs apart — a push through a
@@ -167,7 +175,7 @@ export function embedAndRefine(molecule: Molecule): EmbedResult {
   // too, so the fallback never ships a wedge it has silently dropped.
   const unrefined = finite(fallback) ? fallback : placed;
   if (unrefined.bonds.some((b) => b.stereo)) return enforceStereo(unrefined);
-  return { molecule: unrefined, warnings: [] };
+  return { molecule: restoreThreeRingPlanarity(unrefined), warnings: [] };
 }
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {
