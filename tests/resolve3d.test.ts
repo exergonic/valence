@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { fetch3D } from '../src/geometry/resolve3d';
-import { vecSub, vecDot } from '../src/utils/vec3';
 import {
   drawnCyclobutadiene,
   drawnMethylAnion,
@@ -120,25 +119,19 @@ describe('fetch3D validation guard', () => {
     expect(result!.molecule.atoms).toHaveLength(8);
   });
 
-  it('rejects a PubChem record without MMFF94 charges and falls through to CIR', async () => {
+  it('rejects the methyl anion on both legs and falls through to the local pipeline', async () => {
     const fn = mockFetch(PUBCHEM_METHYL_ANION_SDF, CIR_METHYL_ANION_SDF);
     const result = await fetch3D('[CH3-]', drawnMethylAnion);
 
-    // CID 881 matches the sketch's heavy-atom graph (a single carbon) but
-    // carries no MMFF94 charge block — an unrelaxed planar template, not
-    // MMFF94 geometry — so the guard rejects it and CIR's pyramidal anion
-    // wins. No property lookup is attempted for the rejected record.
-    expect(result).not.toBeNull();
-    expect(result!.info.source).toBe('cir');
+    // CID 881 matches the sketch's heavy-atom graph but carries no MMFF94
+    // charge block — an unrelaxed planar template (H-C-H 120°), so the
+    // PubChem leg rejects it. CIR's pyramidal anion (H-C-H 109.47°) is
+    // correctly minimized, but its −1 carbon has no MMFF94 type
+    // (unrepresentableCharge), so its conformer is not trusted either. Both
+    // legs refuse; the local pipeline renders the anion with the residual
+    // charge rule (pinned in dipole.test.ts).
+    expect(result).toBeNull();
+    // Both legs were attempted.
     expect(fn.mock.calls.length).toBe(2);
-
-    // Pyramidal, not planar: the rejected record sits at exactly 120°.
-    const [center, h1, h2] = [result!.molecule.atoms[0], result!.molecule.atoms[1], result!.molecule.atoms[2]];
-    const pos = (a: { x: number; y: number; z: number }): [number, number, number] => [a.x, a.y, a.z];
-    const vi = vecSub(pos(h1), pos(center));
-    const vj = vecSub(pos(h2), pos(center));
-    const cos = vecDot(vi, vj) / Math.hypot(...vi) / Math.hypot(...vj);
-    const hch = (Math.acos(Math.min(1, Math.max(-1, cos))) * 180) / Math.PI;
-    expect(hch).toBeLessThan(115);
   });
 });
