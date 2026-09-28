@@ -15,11 +15,11 @@
  * longer silently cross-wires if that guard ever fails.
  */
 import type { Molecule } from '../mol-parser';
-import { embedAndRefine } from './mmff-refine';
+import { embedAndRefine, type EmbedResult } from './mmff-refine';
 
 let worker: Worker | null = null;
 let nextId = 1;
-const pending = new Map<number, { resolve: (m: Molecule | null) => void; reject: () => void }>();
+const pending = new Map<number, { resolve: (r: EmbedResult | null) => void; reject: () => void }>();
 
 function ensureWorker(): Worker | null {
   if (typeof Worker === 'undefined') return null;
@@ -29,11 +29,11 @@ function ensureWorker(): Worker | null {
       type: 'module',
     });
     worker.onmessage = (e: MessageEvent) => {
-      const { id, molecule } = e.data as { id: number; molecule: Molecule | null };
+      const { id, result } = e.data as { id: number; result: EmbedResult | null };
       const entry = pending.get(id);
       if (entry) {
         pending.delete(id);
-        entry.resolve(molecule ?? null);
+        entry.resolve(result);
       }
     };
     worker.onerror = () => {
@@ -49,7 +49,7 @@ function ensureWorker(): Worker | null {
   return worker;
 }
 
-export function computeLocalGeometry(molecule: Molecule): Promise<Molecule | null> {
+export function computeLocalGeometry(molecule: Molecule): Promise<EmbedResult | null> {
   const w = ensureWorker();
   if (!w) {
     return Promise.resolve(safeRefine(molecule));
@@ -63,7 +63,7 @@ export function computeLocalGeometry(molecule: Molecule): Promise<Molecule | nul
 }
 
 /** Synchronous fallback — never throws. */
-function safeRefine(molecule: Molecule): Molecule | null {
+function safeRefine(molecule: Molecule): EmbedResult | null {
   try {
     return embedAndRefine(molecule);
   } catch {

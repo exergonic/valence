@@ -17,9 +17,12 @@ const sign = (x: number) => (x > 0 ? 1 : x < 0 ? -1 : 0);
  * just the wedged vector's component along (n1-c) x (n2-c).
  *
  * (A triple built from the three *plain* neighbors looks like a chirality
- * label but is not: for a near-regular tetrahedron all four choices of three
- * substituents share a sign, so it cannot tell an inverted center from an
- * untouched one.)
+ * label but is not: around a regular tetrahedron the four choices of three
+ * vertices alternate in sign — (+, −, +, −) — they do not share one. And
+ * the swap below moves one of that triple's own atoms (the partner takes
+ * the wedged atom's direction), so its sign does not transform cleanly
+ * under the operation. The diagnostic has to track the labeled wedged
+ * atom, the only one whose crossing of the (n1, n2) plane is the flip.)
  */
 export function chiralitySign(pos: Vec3[], center: number, n1: number, n2: number, wedged: number): number {
   const c = pos[center];
@@ -41,8 +44,16 @@ export function chiralitySign(pos: Vec3[], center: number, n1: number, n2: numbe
  * wedge flag says which side the wedged atom is on. Calibrated against
  * PubChem's own 3D conformers of (R)- and (S)-2-bromobutane (CIDs 637147 and
  * 12236140) and L-alanine — see tests/stereo-wedge.test.ts.
+ *
+ * Returns warning strings: one per center whose configuration the sketch
+ * asked for but the geometry was too distorted to enforce. The invert swap
+ * flips the chirality sign exactly only while the two swapped ligands sit on
+ * opposite sides of the (n1, n2) plane, so after the move the sign is
+ * re-checked; a failure undoes the swap and reports instead of leaving a
+ * silently wrong structure.
  */
-export function applyWedgeStereo(molecule: Molecule, pos: Vec3[]): void {
+export function applyWedgeStereo(molecule: Molecule, pos: Vec3[]): string[] {
+  const warnings: string[] = [];
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
   for (const bond of molecule.bonds) {
@@ -128,6 +139,11 @@ export function applyWedgeStereo(molecule: Molecule, pos: Vec3[]): void {
     const lenS = length(vS);
     if (length(vW) < 1e-6 || lenS < 1e-6) continue;
 
+    // Snapshots for the re-check below: a failed inversion is undone, leaving
+    // the geometry exactly as the embedder handed it over.
+    const branchBefore = branch.map((i) => [pos[i][0], pos[i][1], pos[i][2]] as Vec3);
+    const swapBefore: Vec3 = [pos[swap][0], pos[swap][1], pos[swap][2]];
+
     let axis = crossProduct(vW, vS);
     let angle = Math.atan2(length(axis), vecDot(vW, vS));
     if (length(axis) < 1e-9) {
@@ -144,7 +160,22 @@ export function applyWedgeStereo(molecule: Molecule, pos: Vec3[]): void {
     }
     // The partner takes the wedged atom's old direction, at its own bond length.
     pos[swap] = add(c, scale(vecNormalize(vW), lenS));
+
+    // The flip above is exact only while the two swapped ligands sit on
+    // opposite sides of the (n1, n2) plane — guaranteed near a regular
+    // tetrahedron, not for a badly distorted center. Re-check the label
+    // instead of trusting the geometry: on a failure the move is undone and
+    // the center keeps the configuration the embedder gave it, reported
+    // rather than silently wrong.
+    if (chiralitySign(pos, center, n1, n2, wedged) !== required) {
+      for (let k = 0; k < branch.length; k++) pos[branch[k]] = branchBefore[k];
+      pos[swap] = swapBefore;
+      warnings.push(
+        `C${center + 1}: drawn ${flag === 1 ? 'wedge' : 'hash'} not honored — center too distorted to invert by swapping substituents; configuration may not match the sketch`,
+      );
+    }
   }
+  return warnings;
 }
 
 /** Atoms reachable from `start` without passing through `block`. */

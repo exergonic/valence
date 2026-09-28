@@ -156,13 +156,15 @@ export function mountJsmePanel(ctx: SceneContext) {
           );
           return;
         }
-        molecule = local;
+        molecule = local.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         updateMoleculeInfo({
           source: 'local',
           formula,
           weight: `${weight}`,
-          warnings: parameterGapWarnings(molecule),
+          // The stereo-enforcement failures ride out of the worker with the
+          // molecule; the parameter-gap report is recomputed here.
+          warnings: [...local.warnings, ...parameterGapWarnings(molecule)],
         });
         console.log('[render-timing]', {
           jsme: +(t1 - t0).toFixed(1),

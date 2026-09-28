@@ -12,7 +12,7 @@ import type { Molecule } from '../src/mol-parser';
 import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 import { place3D } from '../src/geometry/place3d';
 import { embedAndRefine } from '../src/geometry/mmff-refine';
-import { chiralitySign } from '../src/geometry/stereo-wedge';
+import { chiralitySign, applyWedgeStereo } from '../src/geometry/stereo-wedge';
 import { vecSub, vecDot, vecNormalize } from '../src/utils/vec3';
 
 type Vec3 = [number, number, number];
@@ -210,11 +210,11 @@ function ohFaces(molecule: Molecule, pos: Vec3[]): number[] {
 describe('a drawn ring (the all-cis hexol)', () => {
   it('places every hydroxyl on the face its wedge asks for', async () => {
     const sketch = parseMolBlock(ALL_CIS_HEXOL_MOL);
-    const refined = await embedAndRefine(fillMissingHydrogens(sketch));
-    expect(refined, 'the local pipeline produced a geometry').toBeTruthy();
-    const pos = positions(refined!);
+    const result = await embedAndRefine(fillMissingHydrogens(sketch));
+    expect(result, 'the local pipeline produced a geometry').toBeTruthy();
+    const pos = positions(result!.molecule);
     expect(stereoViolations(sketch, pos)).toEqual([]);
-    const faces = ohFaces(refined!, pos);
+    const faces = ohFaces(result!.molecule, pos);
     expect(
       faces.every((f) => f > 0) || faces.every((f) => f < 0),
       `hydroxyl faces: ${faces.map((f) => f.toFixed(2)).join(' ')}`,
@@ -223,8 +223,9 @@ describe('a drawn ring (the all-cis hexol)', () => {
 
   it('keeps the ring closed while inverting a center', async () => {
     const sketch = parseMolBlock(ALL_CIS_HEXOL_MOL);
-    const refined = await embedAndRefine(fillMissingHydrogens(sketch));
-    const pos = positions(refined!);
+    const result = await embedAndRefine(fillMissingHydrogens(sketch));
+    const refined = result!.molecule;
+    const pos = positions(refined);
     // The branch-swap version left C-C bonds of 5.06 Å here.
     for (const bond of refined!.bonds) {
       if (bond.atom1Index >= 6 || bond.atom2Index >= 6) continue;
@@ -243,11 +244,11 @@ describe('a drawn ring (the all-cis hexol)', () => {
       atoms: sketch.atoms,
       bonds: sketch.bonds.map((b) => (b.stereo && b.atom1Index % 2 === 1 ? { ...b, stereo: 6 as const } : b)),
     };
-    const refined = await embedAndRefine(fillMissingHydrogens(alternating));
-    expect(refined, 'the local pipeline produced a geometry').toBeTruthy();
-    const pos = positions(refined!);
+    const result = await embedAndRefine(fillMissingHydrogens(alternating));
+    expect(result, 'the local pipeline produced a geometry').toBeTruthy();
+    const pos = positions(result!.molecule);
     expect(stereoViolations(alternating, pos)).toEqual([]);
-    const faces = ohFaces(refined!, pos);
+    const faces = ohFaces(result!.molecule, pos);
     for (let i = 0; i < 6; i++) {
       expect(
         Math.sign(faces[i]),
@@ -263,9 +264,10 @@ describe('a drawn ring (the all-cis hexol)', () => {
     // something is already sitting there, and C1's ring hydrogen and its methyl
     // came back 6° apart — 0.46 Å — sharing one axial slot.
     const sketch = parseMolBlock(ALL_CIS_HEXAMETHYL_MOL);
-    const refined = await embedAndRefine(fillMissingHydrogens(sketch));
-    expect(refined, 'the local pipeline produced a geometry').toBeTruthy();
-    const pos = positions(refined!);
+    const result = await embedAndRefine(fillMissingHydrogens(sketch));
+    expect(result, 'the local pipeline produced a geometry').toBeTruthy();
+    const refined = result!.molecule;
+    const pos = positions(refined);
     expect(stereoViolations(sketch, pos)).toEqual([]);
     for (const c of [0, 1, 2, 3, 4, 5]) {
       const nbrs = refined!.bonds
@@ -282,6 +284,83 @@ describe('a drawn ring (the all-cis hexol)', () => {
         `C${c + 1}: H and CH3 overlap`,
       ).toBeGreaterThan(1.5);
     }
+  });
+});
+
+// ---- Post-swap re-verification (2026-09-27) ------------------------------
+// The invert swap flips the chirality sign exactly only while the two
+// swapped ligands sit on opposite sides of the (n1, n2) plane. A badly
+// distorted center can pass the rotation and come back the wrong way; the
+// move must be undone and reported, never silently left.
+describe('post-swap re-verification', () => {
+  // A tetrahedral center whose 3D positions are deliberately distorted: the
+  // swap partner (the H) sits on the SAME side of the (n1, n2) plane as the
+  // wedged atom, so exchanging their directions cannot flip the sign. The 2D
+  // drawing asks for the opposite configuration, so applyWedgeStereo must
+  // attempt the swap, fail the re-check, and undo everything.
+  //
+  // 2D layout (the page-plane reference): center at the origin, two plain
+  // carbons at (-1, 1) and (1, 1) — cross2d negative — so a wedge (flag 1)
+  // requires sign −1. The two dangling carbons keep atoms 1 and 2
+  // non-terminal so the H is the swap partner.
+  const distorted = (): Molecule => ({
+    atoms: [
+      { element: 'C', x: 0, y: 0, z: 0 },
+      { element: 'C', x: -1, y: 1, z: 0 },
+      { element: 'C', x: 1, y: 1, z: 0 },
+      { element: 'H', x: 0, y: -1, z: 0 },
+      { element: 'Br', x: 0.6, y: 1.04, z: 0 },
+      { element: 'C', x: -2, y: 1, z: 0 },
+      { element: 'C', x: 2, y: 1, z: 0 },
+    ],
+    bonds: [
+      { atom1Index: 0, atom2Index: 1, order: 1 },
+      { atom1Index: 0, atom2Index: 2, order: 1 },
+      { atom1Index: 0, atom2Index: 3, order: 1 },
+      { atom1Index: 0, atom2Index: 4, order: 1, stereo: 1 },
+      { atom1Index: 1, atom2Index: 5, order: 1 },
+      { atom1Index: 2, atom2Index: 6, order: 1 },
+    ],
+  });
+
+  it('undoes a swap whose sign re-check fails, and reports the center', () => {
+    const mol = distorted();
+    // 3D: n1 = (1,0,0), n2 = (0,1,0), so the (n1, n2) plane is z = 0; both
+    // the wedged Br and the H sit above it — no exchange of directions can
+    // move the wedged atom across the plane.
+    const pos: Vec3[] = [
+      [0, 0, 0], // center
+      [1, 0, 0], // n1
+      [0, 1, 0], // n2
+      [0.2, 0.1, 1.5], // H — same side as the wedged atom
+      [0.8, 0.2, 1], // wedged Br
+      [2, 0, -1], // C1's substituent (never touched)
+      [-1, 2, -1], // C2's substituent (never touched)
+    ];
+    const before = pos.map((p) => [...p] as Vec3);
+    const warnings = applyWedgeStereo(mol, pos);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('C1');
+    expect(pos).toEqual(before);
+  });
+
+  it('keeps a swap that passes the re-check, with no warning', () => {
+    const mol = distorted();
+    // Partner below the plane this time: the exchange moves the wedged atom
+    // across it, the sign flips exactly, and the move stands.
+    const pos: Vec3[] = [
+      [0, 0, 0],
+      [1, 0, 0],
+      [0, 1, 0],
+      [0.2, 0.1, -1.5], // H — the other side
+      [0.8, 0.2, 1], // wedged Br
+      [2, 0, -1],
+      [-1, 2, -1],
+    ];
+    const warnings = applyWedgeStereo(mol, pos);
+    expect(warnings).toEqual([]);
+    // The wedge (flag 1) with this 2D reference requires sign −1.
+    expect(chiralitySign(pos, 0, 1, 2, 4)).toBe(-1);
   });
 });
 

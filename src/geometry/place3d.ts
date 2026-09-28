@@ -306,6 +306,8 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   // the graph walk knows nothing about them. This runs last, after the torsion
   // pass: a torsion rotation can carry a wedged atom along with a plain
   // neighbor, which would undo the very configuration just established.
+  // Its warnings are deliberately dropped here — the final enforcement happens
+  // in embedAndRefine's re-assert passes, which collect them.
   applyWedgeStereo(molecule, pos);
 
   // Unplaced atoms (isolated) keep their 2D input coordinates.

@@ -72,16 +72,38 @@ function separateOverlaps(molecule: Molecule): Molecule {
   return { atoms, bonds: molecule.bonds };
 }
 
+export interface EmbedResult {
+  molecule: Molecule;
+  /** Stereo-enforcement failures from applyWedgeStereo (see stereo-wedge.ts). */
+  warnings: string[];
+}
+
 /**
  * The full local geometry pipeline: add implicit hydrogens, embed with
  * the graph-walk embedder, separate any overlapping atoms, then refine
  * with MMFF94. Returns the best geometry available (refined, or the
  * separated placed guess when the refinement cannot type the
- * molecule). Runs inside the geometry worker for large molecules; also
- * the synchronous fallback when Workers are unavailable.
+ * molecule) plus any stereo-enforcement warnings the sketch drew but
+ * the geometry could not honor. Runs inside the geometry worker for
+ * large molecules; also the synchronous fallback when Workers are
+ * unavailable.
  */
-export function embedAndRefine(molecule: Molecule): Molecule {
+export function embedAndRefine(molecule: Molecule): EmbedResult {
   const withH = fillMissingHydrogens(molecule);
+  // Re-assert the drawn wedges on a finished geometry: pull the positions,
+  // run the enforcement, write the corrected coordinates back. Shared by the
+  // refined path (post-MMFF94) and the unrefined path (post-separateOverlaps).
+  const enforceStereo = (m: Molecule): EmbedResult => {
+    const pos = m.atoms.map((a) => [a.x, a.y, a.z] as [number, number, number]);
+    const warnings = applyWedgeStereo(withH, pos);
+    return {
+      molecule: {
+        atoms: m.atoms.map((a, i) => ({ ...a, x: pos[i][0], y: pos[i][1], z: pos[i][2] })),
+        bonds: m.bonds,
+      },
+      warnings,
+    };
+  };
   const coords = place3D(withH);
   const placed: Molecule = {
     atoms: withH.atoms.map((a, i) => ({
@@ -105,17 +127,16 @@ export function embedAndRefine(molecule: Molecule): Molecule {
     // sketch is the specification, so re-assert it on the relaxed geometry —
     // the enforcement moves only the wedged branch, and it runs after the
     // refinement rather than before so nothing can undo it.
-    if (refined.bonds.some((b) => b.stereo)) {
-      const pos = refined.atoms.map((a) => [a.x, a.y, a.z] as [number, number, number]);
-      applyWedgeStereo(withH, pos);
-      return {
-        atoms: refined.atoms.map((a, i) => ({ ...a, x: pos[i][0], y: pos[i][1], z: pos[i][2] })),
-        bonds: refined.bonds,
-      };
-    }
-    return refined;
+    if (refined.bonds.some((b) => b.stereo)) return enforceStereo(refined);
+    return { molecule: refined, warnings: [] };
   }
-  return finite(fallback) ? fallback : placed;
+  // The unrefined path kept place3D's geometry, whose enforcement ran before
+  // separateOverlaps moved nonbonded pairs apart — a push through a
+  // stereocenter can undo the very flip just made. Re-assert the sketch here
+  // too, so the fallback never ships a wedge it has silently dropped.
+  const unrefined = finite(fallback) ? fallback : placed;
+  if (unrefined.bonds.some((b) => b.stereo)) return enforceStereo(unrefined);
+  return { molecule: unrefined, warnings: [] };
 }
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {

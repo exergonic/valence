@@ -99,7 +99,7 @@ describe('refineWithMMFF94', () => {
     // The exact composition the geometry worker executes: implicit
     // H's (none needed here) -> embedder -> refinement. Must land on
     // the same reference total as the manual placed + refine path.
-    const result = embedAndRefine(ethane);
+    const result = embedAndRefine(ethane).molecule;
     expect(result.atoms.length).toBe(ethane.atoms.length);
     expect(mmffEnergy(result)).toBeCloseTo(-4.73436, 3);
   });
@@ -131,7 +131,7 @@ describe('refineWithMMFF94', () => {
   8  1  1  0  0  0  0
 M  END
 `);
-    const result = embedAndRefine(cyclo);
+    const result = embedAndRefine(cyclo).molecule;
     expect(result.atoms).toHaveLength(24);
     expect(result.bonds).toHaveLength(24);
 
@@ -228,7 +228,7 @@ M  END
   5 16  2  0  0  0  0
 M  END
 `);
-    const result = embedAndRefine(wittig);
+    const result = embedAndRefine(wittig).molecule;
     expect(result.atoms).toHaveLength(37); // 20 heavy + 17 H
     const P = result.atoms[0];
     const C2 = result.atoms[1];
@@ -286,7 +286,7 @@ M  END
   1  6  1  0  0  0  0
 M  END
 `);
-    const result = embedAndRefine(pcl5);
+    const result = embedAndRefine(pcl5).molecule;
     expect(result.atoms).toHaveLength(6);
     for (const a of result.atoms) {
       expect(Number.isFinite(a.x)).toBe(true);
