@@ -82,13 +82,52 @@ export function renderHybridizationLabels(
   atomOrbitals: AtomOrbitals[],
   palette: LabelPalette,
 ): void {
-  for (let i = 0; i < molecule.atoms.length; i++) {
+  placePerAtomLabels(group, molecule, 0.8, palette.hybrid, (i) => {
     const atom = molecule.atoms[i];
     const info = atomOrbitals[i];
-    if (!info || atom.element === 'H') continue;
+    if (!info || atom.element === 'H') return null;
+    return info.hybridization;
+  });
+}
 
-    const label = makeLabelSprite(info.hybridization, palette.hybrid);
-    label.position.set(atom.x, atom.y + 0.8, atom.z);
+/** Render a partial charge as a short sign-prefixed label: "+0.43",
+ *  "−0.36" (U+2212 minus), "0.00". Values within ±0.005 read as zero. */
+export function formatCharge(q: number): string {
+  if (Math.abs(q) < 0.005) return '0.00';
+  return q > 0 ? `+${q.toFixed(2)}` : `−${Math.abs(q).toFixed(2)}`;
+}
+
+// The one per-atom label placement loop shared by the label modes that hang
+// a short text above every atom: the caller supplies the text (null to
+// skip) and the color; the placement is always a fixed offset above the atom.
+function placePerAtomLabels(
+  group: THREE.Group,
+  molecule: any,
+  offset: number,
+  color: string,
+  textFor: (i: number) => string | null,
+): void {
+  for (let i = 0; i < molecule.atoms.length; i++) {
+    const atom = molecule.atoms[i];
+    const text = textFor(i);
+    if (text === null) continue;
+    const label = makeLabelSprite(text, color);
+    label.position.set(atom.x, atom.y + offset, atom.z);
     group.add(label);
   }
+}
+
+// Partial-charge labels above every atom (hydrogens included — the dipole
+// counts their charge too). Show the resolved charge-model values the dipole
+// uses, so a label and the arrow always agree.
+export function renderChargeLabels(
+  group: THREE.Group,
+  molecule: any,
+  charges: number[],
+  palette: LabelPalette,
+): void {
+  placePerAtomLabels(group, molecule, 0.8, palette.charge, (i) => {
+    const q = charges[i];
+    return q === undefined ? null : formatCharge(q);
+  });
 }

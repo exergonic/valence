@@ -90,6 +90,47 @@ export function chargeModelResult(molecule: Molecule): ChargeModelResult | null 
   return { charges, netFormal, residual: netFormal - bciSum };
 }
 
+/** The resolved charges the app actually displays: the BCI charges with any
+ *  residual (a drawn charge the type space cannot represent — the carbanion
+ *  C⁻) placed on the atom(s) that carry it. `residualCharge` is set when
+ *  that placement ran, so the UI can report the model was approximated.
+ *  Shared by the dipole arrow and the per-atom charge labels (and the future
+ *  ESP surface) so every number on screen comes from one resolution. */
+export interface ResolvedCharges {
+  charges: number[];
+  residualCharge: boolean;
+}
+
+export function resolveCharges(molecule: Molecule): ResolvedCharges | null {
+  try {
+    const charged = chargeModelResult(molecule);
+    if (!charged) return null;
+    const charges = charged.charges;
+
+    // A nonzero residual is a drawn charge the type space could not
+    // represent (the carbanion C⁻: it types as the neutral CR, its C–H BCI
+    // is 0, and the −1 is silent in the library's sum). The sketch is the
+    // specification, so the model may not drop it: place the residual on the
+    // atom(s) the sketch charged, in proportion to their formal charge (a
+    // lone −1 lands whole on its C). Model bookkeeping, not physics, so it
+    // flags the UI with the other approximations.
+    let residualCharge = false;
+    if (Math.abs(charged.residual) > 1e-9) {
+      // A nonzero residual with no atom to hang it on (no formal charges) is
+      // an internal inconsistency — refuse rather than invent a home for it.
+      if (Math.abs(charged.netFormal) < 1e-9) return null;
+      for (let i = 0; i < molecule.atoms.length; i++) {
+        const fc = molecule.atoms[i].charge ?? 0;
+        if (fc !== 0) charges[i] += charged.residual * (fc / charged.netFormal);
+      }
+      residualCharge = true;
+    }
+    return { charges, residualCharge };
+  } catch {
+    return null;
+  }
+}
+
 export function computeDipole(molecule: Molecule): DipoleResult | null {
   if (molecule.atoms.length === 0) return null;
   try {
@@ -109,33 +150,16 @@ function computeDipoleOrThrow(molecule: Molecule): DipoleResult | null {
   if (parameterGapInfo(molecule).untyped.length > 0) return null;
 
   // BCI charges are geometry-independent (connectivity + types only), so
-  // this is computed once per molecule, not per frame.
-  const charged = chargeModelResult(molecule);
-  if (!charged) return null;
-  const charges = charged.charges;
+  // this is computed once per molecule, not per frame. resolveCharges
+  // returns the final displayed values — BCI plus any residual placement,
+  // the same numbers the charge labels will show.
+  const resolved = resolveCharges(molecule);
+  if (!resolved) return null;
+  const charges = resolved.charges;
   for (const q of charges) {
     if (!Number.isFinite(q)) return null;
   }
-
-  // A nonzero residual is a drawn charge the type space could not represent
-  // (the carbanion C⁻: it types as the neutral CR, its C–H BCI is 0, and
-  // the −1 is silent in the library's sum). The sketch is the specification,
-  // so the model may not drop it: place the residual on the atom(s) the
-  // sketch charged, in proportion to their formal charge (a lone −1 lands
-  // whole on its C). This is model bookkeeping, not physics, so it sets a
-  // flag the UI reports with the other approximations.
-  let residualCharge = false;
-  if (Math.abs(charged.residual) > 1e-9) {
-    // A nonzero residual with no atom to hang it on (no formal charges) is
-    // an internal inconsistency — refuse the arrow rather than invent a
-    // home for it.
-    if (Math.abs(charged.netFormal) < 1e-9) return null;
-    for (let i = 0; i < molecule.atoms.length; i++) {
-      const fc = molecule.atoms[i].charge ?? 0;
-      if (fc !== 0) charges[i] += charged.residual * (fc / charged.netFormal);
-    }
-    residualCharge = true;
-  }
+  const residualCharge = resolved.residualCharge;
 
   // Center of mass from standard atomic weights. An element the table does
   // not know contributes 0 — it is skipped (see assign-mass.ts for the

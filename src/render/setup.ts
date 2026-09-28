@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
 import type { Molecule } from '../mol-parser';
 import type { AtomOrbitals } from '../chem/assign-orbitals';
-import type { DipoleResult } from '../chem/dipole';
+import type { DipoleResult, ResolvedCharges } from '../chem/dipole';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
@@ -18,7 +18,7 @@ export interface ColorSettings {
 export interface DisplaySettings {
   atomScale: number;
   bondScale: number;
-  labelMode: 'atom' | 'orbital' | 'hybrid' | 'off';
+  labelMode: 'atom' | 'orbital' | 'hybrid' | 'charge' | 'off';
   orbitalPreset: 'glass' | 'glossy' | 'matte' | 'metallic';
   atomStyle: AtomStyle;
   bgColor: string;
@@ -47,6 +47,10 @@ export interface SceneContext {
   atomOrbitals: AtomOrbitals[] | null;
   /** Per-molecule charge-model dipole (computed in buildScene, like atomOrbitals). */
   dipole: DipoleResult | null;
+  /** Resolved per-atom partial charges for the current molecule — the same
+   *  values the dipole arrow uses (BCI + residual placement). Feeds the
+   *  charge label mode (and the future ESP surface). */
+  charges: ResolvedCharges | null;
   rerender: () => void;
   teardown: () => void;
   autoRotate: boolean;
@@ -168,6 +172,7 @@ export function initScene(container: HTMLElement): SceneContext {
     },
     atomOrbitals: null,
     dipole: null,
+    charges: null,
     rerender: () => {},
     teardown,
     get autoRotate() { return autoRotate; },

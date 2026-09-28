@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
-import { computeDipole } from '../src/chem/dipole';
+import { computeDipole, resolveCharges } from '../src/chem/dipole';
 
 const waterMol = (): Molecule => {
   const ex = EXAMPLES.find((e) => e.name === 'Water (H₂O)');
@@ -237,5 +237,36 @@ describe('dipole — ions the type space cannot represent', () => {
     expect(d).not.toBeNull();
     expect(d!.debye).toBe(0);
     expect(d!.residualCharge).toBe(false);
+  });
+
+  it('resolveCharges returns the same values the arrow uses — labels match the dipole', () => {
+    // The charge label mode consumes resolveCharges; the arrow consumes the
+    // same resolved values, so a label and the dipole always agree. For the
+    // methanide, the −1 that BCI silently drops lands whole on the carbon.
+    const methanide: Molecule = {
+      atoms: [
+        { element: 'C', charge: -1, x: 0, y: 0, z: 0.25 },
+        { element: 'H', x: 1.02, y: 0, z: -0.28 },
+        { element: 'H', x: -0.51, y: 0.88334, z: -0.28 },
+        { element: 'H', x: -0.51, y: -0.88334, z: -0.28 },
+      ],
+      bonds: [
+        { atom1Index: 0, atom2Index: 1, order: 1 },
+        { atom1Index: 0, atom2Index: 2, order: 1 },
+        { atom1Index: 0, atom2Index: 3, order: 1 },
+      ],
+    };
+    const resolved = resolveCharges(methanide);
+    expect(resolved).not.toBeNull();
+    expect(resolved!.residualCharge).toBe(true);
+    expect(resolved!.charges[0]).toBeCloseTo(-1);
+    expect(resolved!.charges[1]).toBeCloseTo(0);
+    expect(resolved!.charges[2]).toBeCloseTo(0);
+
+    // A representable ion (acetate's carboxylate oxygens carry the −1 in the
+    // type space itself) resolves without any residual placement.
+    const acetateResolved = resolveCharges(acetateMol());
+    expect(acetateResolved).not.toBeNull();
+    expect(acetateResolved!.residualCharge).toBe(false);
   });
 });

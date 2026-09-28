@@ -4,13 +4,13 @@ import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderOrbitals } from './orbitals';
 import { renderLabels } from './labels';
-import { renderOrbitalLabels, renderHybridizationLabels } from './orbital-labels';
+import { renderOrbitalLabels, renderHybridizationLabels, renderChargeLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
 import { renderDipole } from './dipole';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/assign-orbitals';
-import { computeDipole } from '../chem/dipole';
+import { computeDipole, resolveCharges } from '../chem/dipole';
 import { labelPaletteFor } from './label-colors';
 
 // Remove every mesh from a group (recursively into nested groups),
@@ -96,6 +96,13 @@ export function rebuildDisplay(ctx: SceneContext) {
     ctx.hybridizationLabelGroup.visible = true;
     ctx.labelGroup.visible = false;
     ctx.orbitalLabelGroup.visible = false;
+  } else if (labelMode === 'charge' && ctx.charges) {
+    // Partial charges — the same resolved charge-model values the dipole
+    // arrow uses (BCI + residual placement).
+    renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, ctx.charges.charges, labelPalette);
+    ctx.labelGroup.visible = true;
+    ctx.orbitalLabelGroup.visible = false;
+    ctx.hybridizationLabelGroup.visible = false;
   } else {
     // Off
     ctx.labelGroup.visible = false;
@@ -148,8 +155,10 @@ export function buildScene(ctx: SceneContext) {
   // read it instead of recomputing on every display-setting change.
   ctx.atomOrbitals = ctx.currentMolecule ? assignOrbitals(ctx.currentMolecule) : null;
   // Same for the charge-model dipole (BCI charges are geometry-independent:
-  // computed once per molecule — see chem/dipole.ts).
+  // computed once per molecule — see chem/dipole.ts). The resolved per-atom
+  // charges join it — the charge label mode reads them.
   ctx.dipole = ctx.currentMolecule ? computeDipole(ctx.currentMolecule) : null;
+  ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
   rebuildDisplay(ctx);
 
   const center = new THREE.Vector3();
