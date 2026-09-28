@@ -15,9 +15,10 @@ import { makeTextSprite } from './labels';
  * for; it is the only overlay in the scene that works this way.
  *
  * Length scales with |μ| so the arrow feels like the property, but is
- * clamped so a large dipole (acetate's ≈6.6 D) does not sprout a
- * javelin through the scene: L = clamp(0.4 Å/D · μ, 0.8, 4.5) Å —
- * water's 2.4 D (BCI) gives ≈1 Å, roughly one O–H bond.
+ * clamped so a large dipole (acetate's ≈4.5 D — measured 2026-09-28 on
+ * the wB97X-D3/def2-TZVP geometry) does not sprout a javelin through
+ * the scene: L = clamp(0.4 Å/D · μ, 0.8, 4.5) Å — water's 2.4 D (BCI)
+ * gives ≈1 Å, roughly one O–H bond.
  */
 const LENGTH_PER_DEBYE = 0.4;
 const MIN_LENGTH = 0.8;
