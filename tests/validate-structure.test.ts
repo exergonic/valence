@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { structuresMatch } from '../src/geometry/validate-structure';
+import { structuresMatch, unrepresentableCharge } from '../src/geometry/validate-structure';
 import { parseMolBlock } from '../src/mol-parser';
 import {
   drawnCyclobutadiene,
@@ -104,5 +104,110 @@ M  END
 M  END
 `);
     expect(structuresMatch(cyclobutene, drawnCyclobutadiene)).toBe(false);
+  });
+
+  it('accepts a charged sketch matched by a charged fetch (methyl anion)', () => {
+    // The methyl anion as JSME sends it: one heavy atom, charge −1, no H's.
+    const sketch = parseMolBlock(`  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  5  0  0  0  0  0  0  0  0  0  0
+M  CHG  1   1  -1
+M  END
+`);
+    // PubChem's methanide record: same heavy atom, charge preserved, three
+    // explicit H's. Net formal charge −1 on both sides → identity holds.
+    const pubchem = parseMolBlock(`  4  3  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  5  0  0  0  0  0  0  0  0  0  0
+   -0.9204    0.4506    0.3490 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8189    0.6270   -0.3291 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.1020   -1.0776   -0.0187 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  CHG  1   1  -1
+M  END
+`);
+    // Heavy atoms line up (1 C, no heavy-heavy bonds) AND the charge is −1
+    // on both — identity passes. The full fetch guard still rejects this
+    // record, though: the −1 has no MMFF94 type, so its conformer is an
+    // artifact (see the unrepresentable-charge tests below).
+    expect(structuresMatch(pubchem, sketch)).toBe(true);
+  });
+
+  it('rejects a neutral fetch for a charged sketch — methane must never serve methanide', () => {
+    // Heavy atoms match the methyl anion's (one C) and there are no
+    // heavy-heavy bonds, so pre-charge-guard this passed. The net charge
+    // (−1 vs 0) is the species' identity: the drawn anion may not be
+    // rendered from a neutral record.
+    const sketch = parseMolBlock(`  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  5  0  0  0  0  0  0  0  0  0  0
+M  CHG  1   1  -1
+M  END
+`);
+    const methane = parseMolBlock(`  5  4  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    1.0900 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0274    0.0000   -0.3633 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5137    0.8898   -0.3633 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5137   -0.8898   -0.3633 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+`);
+    expect(structuresMatch(methane, sketch)).toBe(false);
+    expect(structuresMatch(sketch, methane)).toBe(false);
+  });
+
+  it('unrepresentableCharge: the carbanion is rejected, representable ions and neutrals are not', () => {
+    // The PubChem methanide record again — the −1 on C has no MMFF94 type
+    // (C types as neutral CR, C–H BCI is 0), so the charge model cannot
+    // account for it. That is why the full fetch guard rejects this record
+    // even though the charge identity matches: its conformer came from
+    // neutral-type parameters and is an artifact (planar methanide).
+    const methanide = parseMolBlock(`  4  3  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  5  0  0  0  0  0  0  0  0  0  0
+   -0.9204    0.4506    0.3490 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8189    0.6270   -0.3291 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.1020   -1.0776   -0.0187 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  CHG  1   1  -1
+M  END
+`);
+    expect(unrepresentableCharge(methanide)).toBe(true);
+
+    // Ammonium: the +1 on N has a proper MMFF94 type (34, NR+) with its own
+    // primary charge — fully representable, PubChem's record stays trusted.
+    const ammonium = parseMolBlock(`  5  4  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 N   0  3  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    1.0220 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9644    0.0000   -0.3407 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4822    0.8352   -0.3407 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.4822   -0.8352   -0.3407 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  CHG  1   1  1
+M  END
+`);
+    expect(unrepresentableCharge(ammonium)).toBe(false);
+
+    // Neutral methane — no charge to represent, passes trivially.
+    const methane = parseMolBlock(`  5  4  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    1.0900 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0274    0.0000   -0.3633 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5137    0.8898   -0.3633 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.5137   -0.8898   -0.3633 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+`);
+    expect(unrepresentableCharge(methane)).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import type { Molecule } from '../mol-parser';
 import { parseMolBlock } from '../mol-parser';
-import { structuresMatch } from './validate-structure';
+import { structuresMatch, unrepresentableCharge } from './validate-structure';
 import { ATOMIC_MASS } from '../chem/assign-mass';
 
 export interface PubChemInfo {
@@ -148,21 +148,20 @@ async function fetchPubChemRecord(cid: string): Promise<{ name?: string; pubchem
 }
 
 /**
- * Try one 3D structure service, then reject any structure whose heavy-atom
- * graph doesn't match the sketched molecule (see validate-structure.ts).
- * The guard exists because the services resolve the query SMILES by their
- * own rules: JSME emits aromatic lower-case SMILES (e.g. "c1ccc1" for a
- * drawn cyclobutadiene), and PubChem/CIR both resolve that antiaromatic
- * 4-ring form to the saturated ring (cyclobutane, CID 9250) — without the
- * check the app would render the wrong compound while reporting "PubChem 3D".
- *
- * A PubChem record without MMFF94 partial charges is rejected as well: the
- * charges block is written by PubChem's own force-field layer, so its
- * absence means the coordinates were never minimized — an unrelaxed
- * template, not MMFF94 geometry. Methyl anion (CID 881) ships exactly
- * planar (D3h, the inversion transition state) at the cation's energy with
- * no charge block; CIR SDFs never carry PUBCHEM blocks, so the CIR leg
- * leaves this off.
+ * Try one 3D structure service, then reject any structure the guard refuses:
+ * identity first (heavy-atom graph + net formal charge must match the
+ * sketched molecule — see validate-structure.ts; the services resolve the
+ * query SMILES by their own rules: JSME emits aromatic lower-case SMILES
+ * (e.g. "c1ccc1" for a drawn cyclobutadiene), and PubChem/CIR both resolve
+ * that antiaromatic 4-ring form to the saturated ring (cyclobutane, CID
+ * 9250)), geometry second (an ion the MMFF94 type space cannot represent
+ * gets a neutral-type conformer — an artifact — and is rejected for the
+ * local pipeline), and for PubChem specifically, record quality third: a
+ * record without PUBCHEM_MMFF94_PARTIAL_CHARGES was never force-field-
+ * relaxed — an unrelaxed template, not MMFF94 geometry. Methyl anion (CID
+ * 881) ships exactly planar (D3h, the inversion transition state) at the
+ * cation's energy with no charge block; CIR SDFs never carry PUBCHEM
+ * blocks, so the CIR leg leaves that check off.
  */
 async function fetchValidated(
   url: string,
@@ -178,9 +177,16 @@ async function fetchValidated(
     if (!text.includes('V2000') && !text.includes('V3000')) return null;
     const molecule = parseMolBlock(text);
     if (molecule.atoms.length === 0) return null;
+    // Multi-stage guard. Identity: the heavy-atom graph AND the net formal
+    // charge must match the sketch (structuresMatch). Geometry trust: a
+    // fetched structure whose ion the MMFF94 type space cannot represent
+    // (unrepresentableCharge) was built from neutral-type parameters, so its
+    // shape is an artifact. Record quality (PubChem only): a record without
+    // MMFF94 partial charges was never force-field-relaxed (requireMmffCharges).
     if (!structuresMatch(molecule, reference)) return null;
     const info = makeInfo(text);
     if (requireMmffCharges && info.mmff94?.partialCharges === undefined) return null;
+    if (unrepresentableCharge(molecule)) return null;
     return { sdf: text, molecule, info };
   } catch {
     return null;
