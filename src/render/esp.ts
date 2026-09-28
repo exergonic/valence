@@ -31,13 +31,27 @@ export function renderEsp(group: THREE.Group, surface: EspSurfaceData, opacity: 
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-  const material = new THREE.MeshPhongMaterial({
+  // Two passes so the translucent surface occludes ITSELF. A single
+  // depthWrite:false translucent mesh lets the far side of the closed
+  // surface blend through the near side — and at the deep creases where
+  // atoms meet (DMS's hydrogen clusters), near + far + the white background
+  // all blend into bright "leaks". The depth-only back-face pass writes the
+  // far side's depth without painting anything; the front pass then blends
+  // only the near surface (the atoms stay visible beneath it).
+  const back = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
+    vertexColors: true,
+    side: THREE.BackSide,
+    colorWrite: false,
+    depthWrite: true,
+  }));
+  group.add(back);
+
+  const front = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
     vertexColors: true,
     transparent: true,
     opacity: Math.max(0.05, Math.min(0.95, opacity)),
     depthWrite: false,
-  });
-  const mesh = new THREE.Mesh(geo, material);
-  mesh.userData = { lobeType: 'esp' };
-  group.add(mesh);
+  }));
+  front.userData = { lobeType: 'esp' };
+  group.add(front);
 }
