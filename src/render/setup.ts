@@ -134,10 +134,10 @@ export function initScene(container: HTMLElement): SceneContext {
       dipoleGroup.rotation.y += 0.005;
     }
     controls.update();
-    // Forward-push the atom labels against the (moved) camera — the dipole
-    // group's "+" marker uses the same per-frame push.
+    // Forward-push the atom labels against the (moved) camera. The dipole
+    // group is all meshes now (its δ+ tail cross is geometry, not a sprite),
+    // so it needs no per-frame push.
     updateLabels(labelGroup, camera);
-    updateLabels(dipoleGroup, camera);
     renderer.render(scene, camera);
   }
   animate();
