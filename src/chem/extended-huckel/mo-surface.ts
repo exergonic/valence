@@ -364,7 +364,14 @@ export function computeMoSurface(
     const gy = abz * acx - abx * acz;
     const gz = abx * acy - aby * acx;
     gradientAt((px[a] + px[b] + px[c]) / 3, (py[a] + py[b] + py[c]) / 3, (pz[a] + pz[b] + pz[c]) / 3, midGradient);
-    const swap = gx * midGradient[0] + gy * midGradient[1] + gz * midGradient[2] < 0;
+    // The outward direction of the |ψ| = c surface is sign(ψ)·∇ψ, not ∇ψ:
+    // comparing against ∇ψ alone winds every triangle of the NEGATIVE sheet
+    // backwards, and a FrontSide pass then culls the whole sheet away — which
+    // is what "the surface is clipping" was. (It was invisible while the
+    // default style drew the surface opaque and DoubleSide.) All three
+    // crossings of one triangle lie on one sheet, so one sign covers it.
+    const sheet = pSign[a];
+    const swap = (gx * midGradient[0] + gy * midGradient[1] + gz * midGradient[2]) * sheet < 0;
     const order = swap ? [a, c, b] : [a, b, c];
     for (const v of order) {
       positions.push(px[v], py[v], pz[v]);

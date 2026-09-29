@@ -155,6 +155,38 @@ describe('the MO isosurface', () => {
     expect(edgeSum / edgeCount).toBeLessThan(0.1);
   });
 
+  it('winds every triangle to agree with its own normals, on both sheets', () => {
+    // The outward direction of the |ψ| = c surface is sign(ψ)·∇ψ. A triangle
+    // wound against its vertex normals is back-facing, and a FrontSide pass
+    // culls it — which punches the whole negative sheet out of the picture.
+    // Reported on water's MO 2 as "the surface is clipping"; the first
+    // version compared against ∇ψ alone and every negative-sheet triangle
+    // (5,574 of 5,574) came out backwards.
+    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Water'))!.mol)!;
+    const raw = embedAndRefine(sketch).molecule;
+    const molecule = { atoms: symmetrizeMolecule(raw).atoms, bonds: raw.bonds };
+    const result = solveExtendedHuckel(molecule)!;
+
+    for (const index of [1, 3]) {
+      const surface = computeMoSurface(molecule, result.basis, result.coefficients[index]);
+      const flipped = { positive: 0, negative: 0 };
+      const total = { positive: 0, negative: 0 };
+      for (let t = 0; t < surface.vertexCount; t += 3) {
+        const at = (v: number, c: number) => surface.positions[(t + v) * 3 + c];
+        const ux = at(1, 0) - at(0, 0), uy = at(1, 1) - at(0, 1), uz = at(1, 2) - at(0, 2);
+        const vx = at(2, 0) - at(0, 0), vy = at(2, 1) - at(0, 1), vz = at(2, 2) - at(0, 2);
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const dot = nx * surface.normals[t * 3] + ny * surface.normals[t * 3 + 1] + nz * surface.normals[t * 3 + 2];
+        const sheet = surface.phases[t] > 0 ? 'positive' : 'negative';
+        total[sheet]++;
+        if (dot < 0) flipped[sheet]++;
+      }
+      expect(total.positive).toBeGreaterThan(0);
+      expect(total.negative).toBeGreaterThan(0);
+      expect(flipped).toEqual({ positive: 0, negative: 0 });
+    }
+  });
+
   it('returns nothing for a coefficient set that is all zero', () => {
     const molecule = { atoms: atom(), bonds: [] };
     const surface = computeMoSurface(molecule, [s1(1)], [0]);
