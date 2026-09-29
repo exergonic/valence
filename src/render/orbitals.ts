@@ -3,8 +3,8 @@ import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
 import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
 import { getElementColor, getCovalentRadius } from './chem-data';
-import type { AtomOrbitals } from '../chem/assign-orbitals';
-import { getLonePairDirections } from '../chem/orient-lone-pairs';
+import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
+import { getLonePairDirections } from '../chem/vsepr/orient-lone-pairs';
 import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
 
 export function renderOrbitals(

@@ -3,7 +3,7 @@
 // at the center of mass, rendered as an arrow from the δ+ end to the δ− end.
 // An ion the type space cannot represent (the carbanion C⁻ — MMFF94 has no
 // carbon-anion type) gets its drawn net charge placed on the charged
-// atom(s) — the residual rule in chem/dipole.ts — and flags it so the
+// atom(s) — the residual rule in chem/charge-model/dipole.ts — and flags it so the
 // readout warns rather than showing a silent 0.00 D.
 //
 // The oracle is water. Measured from the vendored BCI parameters
@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
-import { computeDipole, resolveCharges } from '../src/chem/dipole';
+import { computeDipole, resolveCharges } from '../src/chem/charge-model/dipole';
 
 const waterMol = (): Molecule => {
   const ex = EXAMPLES.find((e) => e.name === 'Water (H₂O)');

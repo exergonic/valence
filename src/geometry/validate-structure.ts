@@ -1,5 +1,5 @@
 import type { Molecule } from '../mol-parser';
-import { chargeModelResult } from '../chem/dipole';
+import { chargeModelResult } from '../chem/charge-model/dipole';
 
 /**
  * Heavy-atom structural fingerprint used to guard fetched 3D structures.

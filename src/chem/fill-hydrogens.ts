@@ -1,5 +1,5 @@
 import type { Molecule } from '../mol-parser';
-import { idealVseprVectors } from './ideal-vsepr-vectors';
+import { idealVseprVectors } from './vsepr/ideal-vsepr-vectors';
 import { vecNormalize, crossProduct, rotateRodrigues } from '../utils/vec3';
 
 // σ bonds an element usually forms in neutral compounds (octet rule) —

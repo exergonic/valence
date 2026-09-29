@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseMolBlock } from '../src/mol-parser';
 import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
-import { assignOrbitals } from '../src/chem/assign-orbitals';
+import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
 
 // A real JSME molfile: benzene drawn with the ring tool, copied from the app
 // (2026-09-23).  This is the app's PRIMARY input format, so the fixture pins

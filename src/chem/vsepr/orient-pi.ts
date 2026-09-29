@@ -1,5 +1,5 @@
-import type { Molecule } from '../mol-parser';
-import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../utils/vec3';
+import type { Molecule } from '../../mol-parser';
+import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../../utils/vec3';
 
 // Maximum |cos| between a promoted lone-pair p orbital and any single σ
 // bond of the promoting atom.  A real p orbital's node plane contains the

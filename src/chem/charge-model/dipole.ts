@@ -21,10 +21,10 @@
  * has seen the physics convention.
  */
 import { assign_atom_types, assign_bci_charges } from 'mmff94-ts';
-import type { Molecule } from '../mol-parser';
-import { toMMFFMol } from '../geometry/mmff-refine';
-import { ATOMIC_MASS } from './assign-mass';
-import { parameterGapInfo } from '../geometry/parameter-warnings';
+import type { Molecule } from '../../mol-parser';
+import { toMMFFMol } from '../../geometry/mmff-refine';
+import { ATOMIC_MASS } from '../assign-mass';
+import { parameterGapInfo } from '../../geometry/parameter-warnings';
 
 /** 1 e·Å = 4.80320427 D. */
 const EA_TO_DEBYE = 4.80320427;

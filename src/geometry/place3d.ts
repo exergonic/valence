@@ -2,7 +2,7 @@ import type { Molecule } from '../mol-parser';
 import { optimizeTorsions } from './torsions';
 import { applyWedgeStereo } from './stereo-wedge';
 import { vecDot, crossProduct, vecNormalize, rotateRodrigues } from '../utils/vec3';
-import { idealVseprVectors } from '../chem/ideal-vsepr-vectors';
+import { idealVseprVectors } from '../chem/vsepr/ideal-vsepr-vectors';
 
 const BOND_LENGTH = 1.0;
 

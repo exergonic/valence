@@ -2,7 +2,7 @@
 // and the examples can produce. Assign each element its mass so every
 // consumer shares one table: the molecular-weight readout
 // (resolve3d.computeFormula) and the dipole's center of mass
-// (chem/dipole.ts).
+// (chem/charge-model/dipole.ts).
 //
 // Fallback: an element not in the table contributes mass 0 (the same
 // convention as the molecular-weight readout). For the center of mass a

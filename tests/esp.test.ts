@@ -1,5 +1,5 @@
 // Phase-1 ESP: the charge-model electrostatic potential surface. The pure
-// pieces (chem/esp.ts) are pinned here — the physics (V = Σ q/|r−rᵢ|, with
+// pieces (chem/charge-model/esp.ts) are pinned here — the physics (V = Σ q/|r−rᵢ|, with
 // the near-point cutoff), the textbook red/green/blue color scale, the
 // symmetric percentile-clipped scale bound, and the fused-surface extractor
 // (marching tetrahedra over the union vdW field; the renderer just turns the
@@ -12,11 +12,11 @@ import {
   unionVdwField,
   computeEspSurface,
   ESP_CUTOFF,
-} from '../src/chem/esp';
+} from '../src/chem/charge-model/esp';
 import type { Molecule } from '../src/mol-parser';
 import { parseMolBlock } from '../src/mol-parser';
 import { embedAndRefine } from '../src/geometry/mmff-refine';
-import { resolveCharges } from '../src/chem/dipole';
+import { resolveCharges } from '../src/chem/charge-model/dipole';
 
 // Water in the app's own fixture geometry (from the examples), with the BCI
 // oracle charges: O −0.86, H +0.43.

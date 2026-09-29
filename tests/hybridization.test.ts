@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { assignHybridization } from '../src/chem/hybridize';
+import { assignHybridization } from '../src/chem/vsepr/hybridize';
 
 // Topology-first hybridization: the inputs are σ-bond count and π-bond
 // count, never measured angles. See hybridize.ts for why.

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { LabelPalette } from './label-colors';
-import type { AtomOrbitals } from '../chem/assign-orbitals';
+import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 
 // Small text sprite for orbital/hybridization labels in the 3D scene.
 // No background circle — just crisp text that always faces the camera.

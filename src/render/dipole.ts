@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { DipoleResult } from '../chem/dipole';
+import type { DipoleResult } from '../chem/charge-model/dipole';
 
 /**
  * The dipole arrow — the textbook crossed-arrow symbol: a small cross at the

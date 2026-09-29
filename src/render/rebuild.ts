@@ -8,11 +8,11 @@ import { renderOrbitalLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
 import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
-import { computeEspSurface } from '../chem/esp';
+import { computeEspSurface } from '../chem/charge-model/esp';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
-import { assignOrbitals } from '../chem/assign-orbitals';
-import { computeDipole, resolveCharges } from '../chem/dipole';
+import { assignOrbitals } from '../chem/vsepr/assign-orbitals';
+import { computeDipole, resolveCharges } from '../chem/charge-model/dipole';
 import { labelPaletteFor } from './label-colors';
 
 // Remove every mesh from a group (recursively into nested groups),
@@ -130,7 +130,7 @@ export function rebuildDisplay(ctx: SceneContext) {
 
   // Charge-model ESP surface — a translucent overlay of the FUSED (united)
 // vdW molecular surface, colored by the potential probed at the fused
-// boundary (see chem/esp.ts). Only when the charges exist (untypeable
+// boundary (see chem/charge-model/esp.ts). Only when the charges exist (untypeable
 // molecules get no surface, like no dipole) and the toggle asks for it. The
 // surface mesh is cached per molecule and extracted lazily on first render —
 // opacity changes reuse it.
@@ -170,7 +170,7 @@ export function buildScene(ctx: SceneContext) {
   // read it instead of recomputing on every display-setting change.
   ctx.atomOrbitals = ctx.currentMolecule ? assignOrbitals(ctx.currentMolecule) : null;
   // Same for the charge-model dipole (BCI charges are geometry-independent:
-  // computed once per molecule — see chem/dipole.ts). The resolved per-atom
+  // computed once per molecule — see chem/charge-model/dipole.ts). The resolved per-atom
   // charges join it — the charge label mode reads them.
   ctx.dipole = ctx.currentMolecule ? computeDipole(ctx.currentMolecule) : null;
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { moleculeToSDF } from '../src/ui/controls';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
-import { assignOrbitals } from '../src/chem/assign-orbitals';
+import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
 
 // Regression (2026-09-23): the SDF export wrote zero charge columns and no
 // M  CHG property lines, so a drawn ion exported as a neutral radical — the

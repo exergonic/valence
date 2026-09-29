@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as THREE from 'three';
 import { renderPiSystems, detectPiSystems } from '../src/render/pi-systems';
-import { assignOrbitals } from '../src/chem/assign-orbitals';
+import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
 import type { Molecule } from '../src/mol-parser';
 
 // A planar collection of carbons on a circle (all C–C in-plane ⇒ all p

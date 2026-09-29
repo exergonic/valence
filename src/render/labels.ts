@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import { getCovalentRadius } from './chem-data';
-import type { AtomOrbitals } from '../chem/assign-orbitals';
+import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 
 // How far each label is pushed toward the camera, as a multiple of the
 // atom's own orbital-cloud radius (covalent radius + padding). The orbital

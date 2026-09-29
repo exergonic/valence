@@ -1,6 +1,6 @@
 import {
   vecSub, vecNormalize, vecDot, crossProduct, findPerpendicular, rotateRodrigues, rotateToward,
-} from '../utils/vec3';
+} from '../../utils/vec3';
 
 // Direction(s) for the σ lone-pair lobes of an atom, given its σ-bond
 // directions and the total number of hybrid orbitals (σ bonds + lone

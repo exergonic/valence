@@ -4,10 +4,10 @@
 // and the p-orbital direction(s) (orient-pi.ts).  The renderer consumes
 // this to draw lobes and labels.
 
-import type { Molecule } from '../mol-parser';
+import type { Molecule } from '../../mol-parser';
 import { assignHybridization } from './hybridize';
 import { computePiDirection, getPiDirectionFromNeighbor, perpendicularToAllBonds } from './orient-pi';
-import { vecDot, crossProduct } from '../utils/vec3';
+import { vecDot, crossProduct } from '../../utils/vec3';
 import * as THREE from 'three';
 
 // One atom's assigned orbitals — what the renderer draws and labels.

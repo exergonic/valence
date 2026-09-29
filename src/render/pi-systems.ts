@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { AtomOrbitals } from '../chem/assign-orbitals';
+import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { Molecule } from '../mol-parser';
 import { getCovalentRadius } from './chem-data';
 

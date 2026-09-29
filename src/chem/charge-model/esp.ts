@@ -22,8 +22,8 @@
  * |V| so a charged species' near-field blow-up cannot wash out the rest of
  * the surface.
  */
-import type { Molecule } from '../mol-parser';
-import { getVdwRadius } from './radii';
+import type { Molecule } from '../../mol-parser';
+import { getVdwRadius } from '../radii';
 
 /** Floor on |r − rᵢ| (Å) — a surface vertex at a nucleus's own position
  *  reads the charge's field at this distance, not at zero. */

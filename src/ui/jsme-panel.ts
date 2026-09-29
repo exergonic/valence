@@ -7,8 +7,8 @@ import { computeLocalGeometry } from '../geometry/local-geometry';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import type { PubChemInfo } from '../geometry/resolve3d';
-import { computeDipole, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE } from '../chem/dipole';
-import type { DipoleResult } from '../chem/dipole';
+import { computeDipole, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE } from '../chem/charge-model/dipole';
+import type { DipoleResult } from '../chem/charge-model/dipole';
 
 declare global {
   interface Window {

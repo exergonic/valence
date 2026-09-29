@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import type { EspSurfaceData } from '../chem/esp';
-import { espColor } from '../chem/esp';
+import type { EspSurfaceData } from '../chem/charge-model/esp';
+import { espColor } from '../chem/charge-model/esp';
 
 /**
  * The charge-model ESP surface: render the fused (united) vdW molecular
- * surface computed by chem/esp.ts — non-indexed triangle soup whose per-
+ * surface computed by chem/charge-model/esp.ts — non-indexed triangle soup whose per-
  * vertex normals come from the union field's gradient and whose colors come
  * from the potential probed at each surface vertex. This function only turns
  * the cached surface data into Three.js geometry; the surface itself is

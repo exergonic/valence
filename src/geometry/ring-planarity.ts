@@ -1,5 +1,5 @@
 import type { Molecule } from '../mol-parser';
-import { assignHybridization } from '../chem/hybridize';
+import { assignHybridization } from '../chem/vsepr/hybridize';
 
 /**
  * Restore the planarity of trigonal centers inside 3-membered rings.
@@ -21,7 +21,7 @@ import { assignHybridization } from '../chem/hybridize';
  * plane (bond length preserved; a neighbor that sat exactly on the ring
  * normal lands on the outward bisector). sp³ ring atoms — cyclopropane's
  * CH₂, a 3-ring carbanion C⁻ — are LEFT alone: their out-of-plane hydrogen
- * geometry is real, and the charge-aware hybridization test (chem/hybridize,
+ * geometry is real, and the charge-aware hybridization test (chem/vsepr/hybridize,
  * the same electron-domain count the renderer uses) separates the two. A
  * carbonyl ring atom (cyclopropenone) is sp² and gets the same treatment.
  */

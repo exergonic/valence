@@ -3,8 +3,8 @@ import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
-import { assignOrbitals } from '../src/chem/assign-orbitals';
-import { getLonePairDirections } from '../src/chem/orient-lone-pairs';
+import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
+import { getLonePairDirections } from '../src/chem/vsepr/orient-lone-pairs';
 
 interface AtomExpectation {
   element: string;

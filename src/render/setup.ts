@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 import { TrackballControls } from 'three/examples/jsm/controls/TrackballControls.js';
 import type { Molecule } from '../mol-parser';
-import type { AtomOrbitals } from '../chem/assign-orbitals';
-import type { DipoleResult, ResolvedCharges } from '../chem/dipole';
-import type { EspSurfaceData } from '../chem/esp';
+import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
+import type { DipoleResult, ResolvedCharges } from '../chem/charge-model/dipole';
+import type { EspSurfaceData } from '../chem/charge-model/esp';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
