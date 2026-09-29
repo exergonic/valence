@@ -56,6 +56,15 @@ export function setupMoPanel(ctx: SceneContext) {
 
   clear?.addEventListener('click', () => select(null));
 
+  const opacity = document.getElementById('ctrl-mo-opacity') as HTMLInputElement | null;
+  if (opacity) {
+    opacity.value = String(ctx.display.moOpacity);
+    opacity.addEventListener('input', () => {
+      ctx.display.moOpacity = parseFloat(opacity.value);
+      ctx.rerender();
+    });
+  }
+
   const smooth = document.getElementById('ctrl-smooth-mo') as HTMLInputElement | null;
   if (smooth) {
     smooth.checked = ctx.display.smoothMo;

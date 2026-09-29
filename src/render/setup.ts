@@ -45,6 +45,8 @@ export interface DisplaySettings {
   /** Draw a selected MO as one continuous isosurface (default) rather than as
    *  the individual atomic orbitals it is built from. */
   smoothMo: boolean;
+  /** Opacity of the MO picture (both views) — 0.15..0.9. */
+  moOpacity: number;
 }
 
 export interface SceneContext {
@@ -215,6 +217,7 @@ export function initScene(container: HTMLElement): SceneContext {
       showEsp: false,
       espOpacity: 0.5,
       smoothMo: true,
+      moOpacity: 0.85,
     },
     atomOrbitals: null,
     dipole: null,

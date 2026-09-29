@@ -128,6 +128,33 @@ describe('the MO isosurface', () => {
     expect(frame.axes.length).toBe(3);
   });
 
+  it('refines the grid for a small molecule instead of using the coarse cap', () => {
+    // A fixed 0.25 Å grid gives ~0.14 Å facets, which on a 1 Å lone pair is
+    // what "jagged" meant. The step adapts to an evaluation budget, so a
+    // three-atom molecule gets a much finer grid than the cap.
+    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Water'))!.mol)!;
+    const raw = embedAndRefine(sketch).molecule;
+    const molecule = { atoms: symmetrizeMolecule(raw).atoms, bonds: raw.bonds };
+    const result = solveExtendedHuckel(molecule)!;
+    const surface = computeMoSurface(molecule, result.basis, result.coefficients[3]);
+
+    let edgeSum = 0;
+    let edgeCount = 0;
+    for (let t = 0; t < surface.vertexCount; t += 3) {
+      for (let e = 0; e < 3; e++) {
+        const a = (t + e) * 3;
+        const b = (t + ((e + 1) % 3)) * 3;
+        edgeSum += Math.hypot(
+          surface.positions[a] - surface.positions[b],
+          surface.positions[a + 1] - surface.positions[b + 1],
+          surface.positions[a + 2] - surface.positions[b + 2],
+        );
+        edgeCount++;
+      }
+    }
+    expect(edgeSum / edgeCount).toBeLessThan(0.1);
+  });
+
   it('returns nothing for a coefficient set that is all zero', () => {
     const molecule = { atoms: atom(), bonds: [] };
     const surface = computeMoSurface(molecule, [s1(1)], [0]);

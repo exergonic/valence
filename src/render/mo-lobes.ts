@@ -37,6 +37,7 @@ export function renderMoOrbitals(
   moIndex: number,
   frame: PrincipalFrame['axes'],
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
+  opacity = 0.75,
 ): void {
   const mo = coefficients[moIndex];
   if (!mo) return;
@@ -62,7 +63,7 @@ export function renderMoOrbitals(
       // an s contribution is a sphere, its phase its color
       const mesh = new THREE.Mesh(
         new THREE.SphereGeometry(0.30 * size, 16, 16),
-        new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.5, depthWrite: false }),
+        new THREE.MeshPhongMaterial({ color, transparent: true, opacity: opacity * 0.67, depthWrite: false }),
       );
       mesh.position.set(origin[0], origin[1], origin[2]);
       mesh.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
@@ -74,7 +75,7 @@ export function renderMoOrbitals(
     // The basis axis is a coordinate axis of the CALCULATION frame, so it is
     // rotated back into the molecule's own coordinates before it is drawn.
     const axis = frameDirectionToWorld(frame, orbital.axis);
-    const near = createLobeMesh(piLobe(), color, 0.75, preset, size);
+    const near = createLobeMesh(piLobe(), color, opacity, preset, size);
     near.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
     orientLobe(near, origin, axis);
     group.add(near);
@@ -82,7 +83,7 @@ export function renderMoOrbitals(
     const far = createLobeMesh(
       piLobe(),
       positive ? MO_PHASE_NEGATIVE : MO_PHASE_POSITIVE,
-      0.75,
+      opacity,
       preset,
       size,
     );

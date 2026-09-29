@@ -162,10 +162,10 @@ export function rebuildDisplay(ctx: SceneContext) {
         ctx.moSurface = computeMoSurface(ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients[mo]);
         ctx.moSurfaceIndex = mo;
       }
-      renderMoIsosurface(ctx.moGroup, ctx.moSurface, ctx.display.orbitalPreset);
+      renderMoIsosurface(ctx.moGroup, ctx.moSurface, ctx.display.orbitalPreset, ctx.display.moOpacity);
     } else {
       // the atomic orbitals themselves: which AO, which phase, how much
-      renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients, mo, ctx.ehResult.frame, ctx.display.orbitalPreset);
+      renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients, mo, ctx.ehResult.frame, ctx.display.orbitalPreset, ctx.display.moOpacity);
     }
     ctx.moGroup.visible = true;
     ctx.orbitalGroup.visible = false;

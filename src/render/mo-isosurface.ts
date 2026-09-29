@@ -26,6 +26,7 @@ export function renderMoIsosurface(
   group: THREE.Group,
   surface: MoSurfaceData,
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
+  opacity = 0.85,
 ): void {
   if (surface.vertexCount === 0) return;
 
@@ -43,37 +44,35 @@ export function renderMoIsosurface(
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-  // the same four looks the atomic-orbital lobes offer, so switching between
-  // the two MO views does not change how the orbital reads
-  const base = 0.7;
+  // The four looks the atomic-orbital lobes offer, so switching between the
+  // two MO views does not change how the orbital reads. Opacity comes from the
+  // panel's slider and is used as given: it is the one thing a chemist reaches
+  // for when a surface hides the atoms, and it should not drift with the style.
   let shininess = 300;
   let specular = 0xffffff;
-  let opacity = Math.min(1, base * 0.85);
   let opaque = false;
   switch (preset) {
     case 'glossy':
       shininess = 60;
       specular = 0x333333;
-      opacity = Math.min(1, base + 0.15);
       break;
     case 'matte':
       shininess = 3;
       specular = 0x000000;
-      opacity = Math.min(1, base + 0.2);
       break;
     case 'metallic':
       shininess = 1000;
-      opacity = 1;
       opaque = true;
       break;
     default:
       break;
   }
+  const alpha = Math.max(0.05, Math.min(1, opacity));
 
   if (opaque) {
     group.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
       vertexColors: true,
-      opacity,
+      opacity: alpha,
       side: THREE.DoubleSide,
       depthWrite: true,
       shininess,
@@ -93,7 +92,7 @@ export function renderMoIsosurface(
   const front = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
     vertexColors: true,
     transparent: true,
-    opacity,
+    opacity: alpha,
     depthWrite: false,
     shininess,
     specular,

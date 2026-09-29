@@ -28,9 +28,24 @@ import type { Molecule } from '../../mol-parser';
 import type { BasisFunction } from './assign-basis';
 import { alignToPrincipalAxes } from './align-principal-axes';
 
-/** Grid spacing (Å) and the margin (Å) around the contributing atoms. */
+/** The coarsest grid spacing (Å) — the caller's preference, used when the
+ *  budget does not allow finer. The actual step adapts down from here: see
+ *  MAX_EVALUATIONS. */
 export const MO_SURFACE_SPACING = 0.25;
+
+/** The finest grid spacing (Å), whatever the budget. Below this the surface
+ *  gains nothing a screen can show. */
+export const MO_SURFACE_MIN_SPACING = 0.1;
+
+/** Margin around the contributing atoms (Å). */
 export const MO_SURFACE_MARGIN = 2.5;
+
+/** Amplitudes evaluated per surface, i.e. grid points × orbitals. The step is
+ *  chosen to stay inside this: a small molecule gets a fine grid (water lands
+ *  at 0.1 Å, ~30 ms) and a large one a coarser grid rather than a stall. The
+ *  facets were the complaint — at 0.25 Å a 1 Å lobe shows a dozen flat faces,
+ *  which is what "jagged" was. */
+const MAX_EVALUATIONS = 4_000_000;
 
 /** The isovalue as a fraction of the MO's largest amplitude on the grid. A
  *  fraction rather than an absolute value so the pictures are comparable as
@@ -245,11 +260,19 @@ export function computeMoSurface(
   }
   if (contributing === 0) return empty;
 
+  const prepared = prepareOrbitals(atoms, basis, coefficients);
+
   minX -= margin; minY -= margin; minZ -= margin;
   maxX += margin; maxY += margin; maxZ += margin;
 
-  // coarsen rather than stall: a large delocalized MO gets a bigger step
-  let step = spacing;
+  // Choose the step from the budget rather than fixing it: a small molecule
+  // can afford a fine grid, and its lobes are small enough that a coarse one
+  // looks faceted. Never finer than MIN_SPACING, never coarser than the
+  // caller's preference.
+  const volume = (maxX - minX) * (maxY - minY) * (maxZ - minZ);
+  const orbitals = Math.max(1, prepared.length / STRIDE);
+  const budget = Math.max(20_000, MAX_EVALUATIONS / orbitals);
+  let step = Math.min(spacing, Math.max(MO_SURFACE_MIN_SPACING, Math.cbrt(volume / budget)));
   for (let guard = 0; guard < 8; guard++) {
     const nx = Math.ceil((maxX - minX) / step) + 1;
     const ny = Math.ceil((maxY - minY) / step) + 1;
@@ -268,7 +291,6 @@ export function computeMoSurface(
   const field = new Float32Array(count);
   const gradient = new Float32Array(count * 3);
   const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
-  const prepared = prepareOrbitals(atoms, basis, coefficients);
   let peak = 0;
   for (let gz = 0; gz < nz; gz++) {
     for (let gy = 0; gy < ny; gy++) {
@@ -290,58 +312,25 @@ export function computeMoSurface(
   const normals: number[] = [];
   const phases: number[] = [];
 
-  const cornerPosition = (gx: number, gy: number, gz: number, corner: number): Vec3 => [
-    minX + (gx + CORNER[corner][0]) * step,
-    minY + (gy + CORNER[corner][1]) * step,
-    minZ + (gz + CORNER[corner][2]) * step,
-  ];
+  // Scratch for one tetrahedron and its crossings, allocated once: the
+  // extraction visits a million of them on a fine grid, and a per-tet object
+  // or closure was most of the cost.
+  const cx = new Float64Array(4);
+  const cy = new Float64Array(4);
+  const cz = new Float64Array(4);
+  const cf = new Float64Array(4); // |ψ|
+  const cSigned = new Float64Array(4); // ψ, for the phase
+  const px = new Float64Array(4);
+  const py = new Float64Array(4);
+  const pz = new Float64Array(4);
+  const pSign = new Float64Array(4);
 
-  // a crossing on an edge of the |ψ| field: the sign tells which sheet
-  const crossing = (
-    u: Vec3, fu: number, su: number, v: Vec3, fv: number, sv: number,
-  ): { p: Vec3; sign: number } => {
-    // |ψ| = isovalue between the two corners. (The zero-crossing form
-    // fu/(fu−fv) is for a field crossing zero — the ESP's — and extrapolates
-    // every vertex outside the grid here.)
-    const denom = fv - fu;
-    const t = denom === 0 ? 0.5 : (isovalue - fu) / denom;
-    // the phase is the sign of the *signed* ψ interpolated to the crossing,
-    // not the sign of the |ψ| the marching runs on
-    return {
-      p: [u[0] + t * (v[0] - u[0]), u[1] + t * (v[1] - u[1]), u[2] + t * (v[2] - u[2])],
-      sign: su + t * (sv - su) >= 0 ? 1 : -1,
-    };
-  };
-
-  const emit = (a: { p: Vec3; sign: number }, b: { p: Vec3; sign: number }, c: { p: Vec3; sign: number }) => {
-    // the geometric normal of the winding; if it disagrees with the outward
-    // direction (the sign of ∇|ψ|, which is sign(ψ)·∇ψ) the two vertices are
-    // swapped — cheaper and more robust than a per-case winding table
-    const ab: Vec3 = [b.p[0] - a.p[0], b.p[1] - a.p[1], b.p[2] - a.p[2]];
-    const ac: Vec3 = [c.p[0] - a.p[0], c.p[1] - a.p[1], c.p[2] - a.p[2]];
-    const nx3 = ab[1] * ac[2] - ab[2] * ac[1];
-    const ny3 = ab[2] * ac[0] - ab[0] * ac[2];
-    const nz3 = ab[0] * ac[1] - ab[1] * ac[0];
-    const mid: Vec3 = [(a.p[0] + b.p[0] + c.p[0]) / 3, (a.p[1] + b.p[1] + c.p[1]) / 3, (a.p[2] + b.p[2] + c.p[2]) / 3];
-    const outward = gradientAt(mid);
-    const swap = nx3 * outward[0] + ny3 * outward[1] + nz3 * outward[2] < 0;
-    const order = swap ? [a, c, b] : [a, b, c];
-    for (const vertex of order) {
-      positions.push(vertex.p[0], vertex.p[1], vertex.p[2]);
-      const g = gradientAt(vertex.p);
-      const length = Math.hypot(g[0], g[1], g[2]) || 1;
-      const s = vertex.sign;
-      normals.push((s * g[0]) / length, (s * g[1]) / length, (s * g[2]) / length);
-      phases.push(s);
-    }
-  };
-
-  /** ∇ψ at a point by trilinear interpolation of the stored grid gradients —
+  /** ∇ψ at a point, trilinear interpolation of the stored grid gradients —
    *  smooth, and consistent with the field the crossings came from. */
-  function gradientAt(p: Vec3): Vec3 {
-    const fx = (p[0] - minX) / step;
-    const fy = (p[1] - minY) / step;
-    const fz = (p[2] - minZ) / step;
+  function gradientAt(x: number, y: number, z: number, out: Vec3): void {
+    const fx = (x - minX) / step;
+    const fy = (y - minY) / step;
+    const fz = (z - minZ) / step;
     const x0 = Math.min(nx - 1, Math.max(0, Math.floor(fx)));
     const y0 = Math.min(ny - 1, Math.max(0, Math.floor(fy)));
     const z0 = Math.min(nz - 1, Math.max(0, Math.floor(fz)));
@@ -351,7 +340,6 @@ export function computeMoSurface(
     const tx = fx - x0;
     const ty = fy - y0;
     const tz = fz - z0;
-    const out: Vec3 = [0, 0, 0];
     for (let k = 0; k < 3; k++) {
       const at = (i: number, j: number, l: number) => gradient[(i + j * nx + l * nx * ny) * 3 + k];
       const c00 = at(x0, y0, z0) * (1 - tx) + at(x1, y0, z0) * tx;
@@ -360,37 +348,74 @@ export function computeMoSurface(
       const c11 = at(x0, y1, z1) * (1 - tx) + at(x1, y1, z1) * tx;
       out[k] = (c00 * (1 - ty) + c10 * ty) * (1 - tz) + (c01 * (1 - ty) + c11 * ty) * tz;
     }
-    return out;
   }
 
+  const geometric: Vec3 = [0, 0, 0];
+  const midGradient: Vec3 = [0, 0, 0];
 
+  /** Append one triangle of crossings a, b, c (indices into the scratch). */
+  function emit(a: number, b: number, c: number): void {
+    // the geometric normal of the winding; if it disagrees with the outward
+    // direction (the sign of ∇|ψ|, which is sign(ψ)·∇ψ) two vertices are
+    // swapped — cheaper and more robust than a per-case winding table
+    const abx = px[b] - px[a], aby = py[b] - py[a], abz = pz[b] - pz[a];
+    const acx = px[c] - px[a], acy = py[c] - py[a], acz = pz[c] - pz[a];
+    const gx = aby * acz - abz * acy;
+    const gy = abz * acx - abx * acz;
+    const gz = abx * acy - aby * acx;
+    gradientAt((px[a] + px[b] + px[c]) / 3, (py[a] + py[b] + py[c]) / 3, (pz[a] + pz[b] + pz[c]) / 3, midGradient);
+    const swap = gx * midGradient[0] + gy * midGradient[1] + gz * midGradient[2] < 0;
+    const order = swap ? [a, c, b] : [a, b, c];
+    for (const v of order) {
+      positions.push(px[v], py[v], pz[v]);
+      gradientAt(px[v], py[v], pz[v], geometric);
+      const length = Math.hypot(geometric[0], geometric[1], geometric[2]) || 1;
+      const sign = pSign[v];
+      normals.push((sign * geometric[0]) / length, (sign * geometric[1]) / length, (sign * geometric[2]) / length);
+      phases.push(sign);
+    }
+  }
 
+  const EDGE: number[][] = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
 
   for (let gz = 0; gz < nz - 1; gz++) {
     for (let gy = 0; gy < ny - 1; gy++) {
       for (let gx = 0; gx < nx - 1; gx++) {
         for (const tet of TETRAHEDRA) {
-          const corners = tet.map((corner) => {
+          let mask = 0;
+          for (let c = 0; c < 4; c++) {
+            const corner = tet[c];
             const index = (gx + CORNER[corner][0]) + (gy + CORNER[corner][1]) * nx + (gz + CORNER[corner][2]) * nx * ny;
             const signed = field[index];
-            return { p: cornerPosition(gx, gy, gz, corner), f: Math.abs(signed), s: signed };
-          });
-          const inside = corners.map((c) => c.f > isovalue);
-          const insideCount = inside.filter(Boolean).length;
-          if (insideCount === 0 || insideCount === 4) continue;
-
-          const edges: Array<[number, number]> = [];
-          for (let i = 0; i < 4; i++) {
-            for (let j = i + 1; j < 4; j++) if (inside[i] !== inside[j]) edges.push([i, j]);
+            const magnitude = Math.abs(signed);
+            cx[c] = minX + (gx + CORNER[corner][0]) * step;
+            cy[c] = minY + (gy + CORNER[corner][1]) * step;
+            cz[c] = minZ + (gz + CORNER[corner][2]) * step;
+            cf[c] = magnitude;
+            cSigned[c] = signed;
+            if (magnitude > isovalue) mask |= 1 << c;
           }
-          const points = edges.map(([i, j]) =>
-            crossing(corners[i].p, corners[i].f, corners[i].s, corners[j].p, corners[j].f, corners[j].s));
-          if (points.length === 3) {
-            emit(points[0], points[1], points[2]);
-          } else if (points.length === 4) {
+          if (mask === 0 || mask === 15) continue;
+
+          let crossings = 0;
+          for (const [i, j] of EDGE) {
+            const insideI = (mask >> i) & 1;
+            const insideJ = (mask >> j) & 1;
+            if (insideI === insideJ) continue;
+            const denom = cf[j] - cf[i];
+            const t = denom === 0 ? 0.5 : (isovalue - cf[i]) / denom;
+            px[crossings] = cx[i] + t * (cx[j] - cx[i]);
+            py[crossings] = cy[i] + t * (cy[j] - cy[i]);
+            pz[crossings] = cz[i] + t * (cz[j] - cz[i]);
+            pSign[crossings] = cSigned[i] + t * (cSigned[j] - cSigned[i]) >= 0 ? 1 : -1;
+            crossings++;
+          }
+          if (crossings === 3) {
+            emit(0, 1, 2);
+          } else if (crossings === 4) {
             // the quad in edge order (a-c, a-d, b-d, b-c for inside a,b)
-            emit(points[0], points[1], points[3]);
-            emit(points[0], points[3], points[2]);
+            emit(0, 1, 3);
+            emit(0, 3, 2);
           }
           // 6 crossings would mean a degenerate tet; the 6-tet decomposition
           // cannot produce one, and emitting nothing keeps the mesh closed
