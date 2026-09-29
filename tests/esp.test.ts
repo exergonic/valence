@@ -16,7 +16,7 @@ import {
 import type { Molecule } from '../src/mol-parser';
 import { parseMolBlock } from '../src/mol-parser';
 import { embedAndRefine } from '../src/geometry/mmff-refine';
-import { resolveCharges } from '../src/chem/charge-model/dipole';
+import { resolveCharges } from '../src/chem/charge-model/bci-charges';
 
 // Water in the app's own fixture geometry (from the examples), with the BCI
 // oracle charges: O −0.86, H +0.43.

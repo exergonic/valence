@@ -12,7 +12,8 @@ import { computeEspSurface } from '../chem/charge-model/esp';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/vsepr/assign-orbitals';
-import { computeDipole, resolveCharges } from '../chem/charge-model/dipole';
+import { computeDipole } from '../chem/charge-model/dipole';
+import { resolveCharges } from '../chem/charge-model/bci-charges';
 import { labelPaletteFor } from './label-colors';
 
 // Remove every mesh from a group (recursively into nested groups),

@@ -17,7 +17,8 @@ import { describe, it, expect } from 'vitest';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
-import { computeDipole, resolveCharges } from '../src/chem/charge-model/dipole';
+import { computeDipole } from '../src/chem/charge-model/dipole';
+import { resolveCharges } from '../src/chem/charge-model/bci-charges';
 
 const waterMol = (): Molecule => {
   const ex = EXAMPLES.find((e) => e.name === 'Water (H₂O)');
