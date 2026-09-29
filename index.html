@@ -55,6 +55,8 @@
           <dl id="mol-data-rows"></dl>
         </details>
 
+        <!-- Right dock: the controls panel on top, the MO panel below it -->
+        <div id="right-dock">
         <!-- Tabbed controls panel -->
         <div id="controls-panel">
           <div id="controls-tabs">
@@ -62,7 +64,6 @@
             <button class="tab-btn" data-tab="style">Style</button>
             <button class="tab-btn" data-tab="export">Export</button>
             <button class="tab-btn" data-tab="measure">Measure</button>
-            <button class="tab-btn" data-tab="mo">MO</button>
           </div>
           <div id="tab-build" class="tab-content active">
             <div class="ctrl-section">
@@ -245,23 +246,6 @@
             </div>
           </div>
 
-          <div id="tab-mo" class="tab-content">
-            <div class="ctrl-section">
-              <span class="ctrl-label">Orbital Energies — extended Hückel</span>
-              <div id="mo-diagram"></div>
-              <div id="mo-readout" class="mo-readout"></div>
-              <div class="export-row">
-                <button id="ctrl-mo-clear" class="export-btn">Clear MO</button>
-              </div>
-              <p class="measure-hint">
-                Semiempirical: Alvarez parameters, Wolfsberg–Helmholz K = 1.75,
-                no self-consistency. Click a level to draw that MO over the
-                molecule — blue and orange are the two orbital phases.
-              </p>
-              <p id="mo-note" class="measure-hint"></p>
-            </div>
-          </div>
-
           <!-- Model Info log — verbose caveats the one-line header cannot
                fit (dipole on generic parameters, an ion the type space
                cannot represent, ...). It exists only when a molecule
@@ -270,6 +254,31 @@
             <span class="panel-info-title">Info</span>
             <div id="panel-info-items"></div>
           </div>
+        </div>
+
+        <!-- MO panel: the extended-Hückel ladder, sized to be read and
+             clicked — twice the controls panel's width, and tall enough for
+             one row per orbital. Clicking a level draws that MO over the
+             molecule. -->
+        <div id="mo-panel">
+          <div class="mo-head">
+            <span class="ctrl-label">Molecular Orbitals — extended Hückel</span>
+            <button id="mo-collapse" class="mo-collapse" title="Collapse">&minus;</button>
+          </div>
+          <div id="mo-body">
+            <div id="mo-diagram"></div>
+            <div id="mo-readout" class="mo-readout"></div>
+            <div id="mo-composition" class="mo-composition"></div>
+            <div class="export-row">
+              <button id="ctrl-mo-clear" class="export-btn">Clear MO</button>
+            </div>
+            <p class="measure-hint">
+              Semiempirical: Alvarez parameters, Wolfsberg–Helmholz K = 1.75,
+              no self-consistency. Blue and orange are the two orbital phases.
+            </p>
+            <p id="mo-note" class="measure-hint"></p>
+          </div>
+        </div>
         </div>
 
         <!-- Floating action buttons -->

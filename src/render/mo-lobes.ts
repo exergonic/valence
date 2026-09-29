@@ -49,7 +49,7 @@ export function renderMoOrbitals(
     const origin: [number, number, number] = [atom.x, atom.y, atom.z];
     const positive = coefficient >= 0;
     const color = positive ? MO_PHASE_POSITIVE : MO_PHASE_NEGATIVE;
-    const size = 0.30 + 0.42 * weight;
+    const size = 0.50 + 0.62 * weight;
     // the basis label already reads "2px" / "2s" — reuse its tail
     const shortName = orbital.label.split(' ').pop() ?? '';
     const label = `${shortName} ${coefficient >= 0 ? '+' : '−'}${Math.abs(coefficient).toFixed(2)}`;

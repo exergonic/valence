@@ -215,4 +215,5 @@ export function buildScene(ctx: SceneContext) {
   ctx.camera.lookAt(center);
   ctx.controls.target.set(center.x, center.y, center.z);
   ctx.controls.update();
+  ctx.onSceneBuilt();
 }

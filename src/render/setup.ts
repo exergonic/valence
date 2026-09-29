@@ -75,6 +75,10 @@ export interface SceneContext {
    *  parameter table. */
   ehResult: ExtendedHuckelResult | null;
   rerender: () => void;
+  /** Called at the end of buildScene, i.e. when a new molecule is in the
+   *  scene — panels that read per-molecule data (the MO ladder) redraw here
+   *  rather than polling or guessing. */
+  onSceneBuilt: () => void;
   teardown: () => void;
   autoRotate: boolean;
   setAutoRotate: (on: boolean) => void;
@@ -209,6 +213,7 @@ export function initScene(container: HTMLElement): SceneContext {
     espSurface: null,
     ehResult: null,
     rerender: () => {},
+    onSceneBuilt: () => {},
     teardown,
     get autoRotate() { return autoRotate; },
     setAutoRotate: (on: boolean) => { autoRotate = on; },

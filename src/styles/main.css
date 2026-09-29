@@ -415,11 +415,28 @@ html, body {
 
 /* ── Tabbed Controls Panel ── */
 
-#controls-panel {
+#right-dock {
   position: absolute;
   top: 12px;
   right: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  z-index: 10;
+  /* the gaps between the panels stay click-through to the canvas */
+  pointer-events: none;
+}
+
+#controls-panel {
+  position: relative;
   width: 190px;
+  /* the MO panel below owns most of the dock: it has to hold one row per
+     orbital, the controls panel scrolls */
+  max-height: 34%;
+  overflow-y: auto;
+  pointer-events: auto;
   background: rgba(30, 30, 35, 0.92);
   border-radius: 8px;
   padding: 0;
@@ -1135,10 +1152,66 @@ html, body {
 
 #copy-toast.hidden { display: none; }
 
-/* ── MO diagram (the extended-Hückel ladder) ── */
+/* ── MO panel (the extended-Hückel ladder) ── */
+
+#mo-panel {
+  width: 380px;
+  flex: 1;
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(30, 30, 35, 0.92);
+  border-radius: 8px;
+  color: #ddd;
+  font-size: 12px;
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+  overflow: hidden;
+}
+
+#mo-panel.collapsed {
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+#mo-panel.collapsed #mo-body { display: none; }
+
+.mo-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex-shrink: 0;
+}
+
+.mo-collapse {
+  width: 20px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+  background: transparent;
+  color: #bbb;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mo-collapse:hover { color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+
+#mo-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px 10px 10px;
+  overflow-y: auto;
+}
 
 #mo-diagram {
-  margin: 6px 0 4px;
+  flex: 1;
+  min-height: 240px;
+  margin-bottom: 6px;
 }
 
 .mo-svg {
@@ -1220,3 +1293,23 @@ html, body {
 }
 
 #mo-note:empty { display: none; }
+
+/* MO panel: bigger type and hit areas now that there is room */
+.mo-svg .mo-tick-label { font-size: 11px; }
+.mo-svg .mo-arrows { font-size: 13px; }
+.mo-svg .mo-edge { font-size: 11px; }
+.mo-svg .mo-tag { font-size: 10px; }
+.mo-svg .mo-level .mo-bar { stroke-width: 3; }
+.mo-svg .mo-level.occupied .mo-bar { stroke-width: 4; }
+.mo-svg .mo-level.selected .mo-bar { stroke-width: 6; }
+.mo-svg .mo-level .mo-hit { stroke-width: 16; }
+
+.mo-composition {
+  font-size: 11px;
+  color: #9ab;
+  margin-bottom: 6px;
+  line-height: 1.5;
+  min-height: 0;
+}
+
+.mo-composition:empty { display: none; }
