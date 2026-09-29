@@ -37,6 +37,10 @@ export interface PrincipalFrame {
   /** The molecule's atoms expressed IN the frame (the geometry the overlap
    *  integrals and the Hamiltonian are built from). */
   atoms: Molecule['atoms'];
+  /** The centre of mass the frame is centred on — frame coordinates are
+   *  relative to it, so this is what maps a frame point back to the
+   *  molecule's own coordinates. */
+  origin: [number, number, number];
 }
 
 type Vec3 = [number, number, number];
@@ -60,7 +64,7 @@ function canonicalSign(v: Vec3): Vec3 {
 export function alignToPrincipalAxes(molecule: Molecule): PrincipalFrame {
   const atoms = molecule.atoms;
   if (atoms.length === 0) {
-    return { axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], atoms };
+    return { axes: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], atoms, origin: [0, 0, 0] };
   }
 
   // centre of mass (an unknown element contributes no mass, as elsewhere)
@@ -101,7 +105,7 @@ export function alignToPrincipalAxes(molecule: Molecule): PrincipalFrame {
     const r: Vec3 = [a.x - com[0], a.y - com[1], a.z - com[2]];
     return { ...a, x: dot(r, xAxis), y: dot(r, yAxis), z: dot(r, zAxis) };
   });
-  return { axes, atoms: framed };
+  return { axes, atoms: framed, origin: com };
 }
 
 /** A direction expressed in the frame, back in the molecule's coordinates. */

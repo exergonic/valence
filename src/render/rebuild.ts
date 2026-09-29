@@ -10,6 +10,8 @@ import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
 import { renderMoOrbitals } from './mo-lobes';
 import { computeEspSurface } from '../chem/charge-model/esp';
+import { computeMoSurface } from '../chem/extended-huckel/mo-surface';
+import { renderMoIsosurface } from './mo-isosurface';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/vsepr/assign-orbitals';
@@ -153,7 +155,18 @@ export function rebuildDisplay(ctx: SceneContext) {
   // question differently, so the MO takes the stage while it is selected.
   const mo = ctx.display.moIndex;
   if (mo !== null && ctx.ehResult) {
-    renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients, mo, ctx.ehResult.frame);
+    if (ctx.display.smoothMo) {
+      // one continuous surface of constant amplitude — the picture other
+      // programs draw. Cached per selection: it costs ~50 ms to extract.
+      if (!ctx.moSurface || ctx.moSurfaceIndex !== mo) {
+        ctx.moSurface = computeMoSurface(ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients[mo]);
+        ctx.moSurfaceIndex = mo;
+      }
+      renderMoIsosurface(ctx.moGroup, ctx.moSurface, ctx.display.orbitalPreset);
+    } else {
+      // the atomic orbitals themselves: which AO, which phase, how much
+      renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients, mo, ctx.ehResult.frame, ctx.display.orbitalPreset);
+    }
     ctx.moGroup.visible = true;
     ctx.orbitalGroup.visible = false;
   } else {
@@ -193,6 +206,8 @@ export function buildScene(ctx: SceneContext) {
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
+  ctx.moSurface = null;
+  ctx.moSurfaceIndex = null;
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is
   // computed once here and cached; null when an element is outside the
   // parameter table. A new molecule also clears any selected MO.

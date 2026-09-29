@@ -5,6 +5,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
+import type { MoSurfaceData } from '../chem/extended-huckel/mo-surface';
 import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
@@ -41,6 +42,9 @@ export interface DisplaySettings {
   showEsp: boolean;
   /** ESP surface translucency — 0.05..0.95 (1 − opacity reads as see-through). */
   espOpacity: number;
+  /** Draw a selected MO as one continuous isosurface (default) rather than as
+   *  the individual atomic orbitals it is built from. */
+  smoothMo: boolean;
 }
 
 export interface SceneContext {
@@ -70,6 +74,10 @@ export interface SceneContext {
   /** Cached fused vdW ESP surface for the current molecule (computed lazily
    *  on the first ESP render; null until then or for an untypeable molecule). */
   espSurface: EspSurfaceData | null;
+  /** The isosurface of the selected MO, cached until the selection or the
+   *  molecule changes (the surface does not depend on opacity or style). */
+  moSurface: MoSurfaceData | null;
+  moSurfaceIndex: number | null;
   /** Cached extended-Hückel result for the current molecule (computed once in
    *  buildScene, like the dipole); null when an element is outside the
    *  parameter table. */
@@ -206,11 +214,14 @@ export function initScene(container: HTMLElement): SceneContext {
       showOrbitals: true,
       showEsp: false,
       espOpacity: 0.5,
+      smoothMo: true,
     },
     atomOrbitals: null,
     dipole: null,
     charges: null,
     espSurface: null,
+    moSurface: null,
+    moSurfaceIndex: null,
     ehResult: null,
     rerender: () => {},
     onSceneBuilt: () => {},

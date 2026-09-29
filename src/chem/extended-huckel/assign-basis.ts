@@ -18,8 +18,10 @@ export interface BasisFunction {
   atomIndex: number;
   /** 's' or 'p' — this basis has no d orbitals yet (PLAN.md Phase 2, s+p). */
   angular: 's' | 'p';
-  /** Unit vector along the p orbital's axis, in molecular coordinates
-   *  (x, y, z); [0,0,0] for an s orbital. */
+  /** Unit vector along the p orbital's axis, in the *calculation frame* —
+   *  the same coordinates the integrals are built in (see solve.ts), which
+   *  are the molecule's own axes only when the two happen to coincide.
+   *  [0,0,0] for an s orbital. */
   axis: [number, number, number];
   /** Principal quantum number (labels the orbital: 2s, 2p). */
   n: number;

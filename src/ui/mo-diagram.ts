@@ -55,6 +55,15 @@ export function setupMoPanel(ctx: SceneContext) {
   };
 
   clear?.addEventListener('click', () => select(null));
+
+  const smooth = document.getElementById('ctrl-smooth-mo') as HTMLInputElement | null;
+  if (smooth) {
+    smooth.checked = ctx.display.smoothMo;
+    smooth.addEventListener('change', () => {
+      ctx.display.smoothMo = smooth.checked;
+      ctx.rerender();
+    });
+  }
   collapse?.addEventListener('click', () => {
     const collapsed = panel.classList.toggle('collapsed');
     collapse.textContent = collapsed ? '+' : '−';
