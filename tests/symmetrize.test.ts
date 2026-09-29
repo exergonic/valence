@@ -83,6 +83,67 @@ describe('the symmetrizer', () => {
     expect(offset).toBeGreaterThan(0.045);
   });
 
+  it('labels a molecule whose only symmetry is a twofold rotation', () => {
+    // The symbol table had no pure-C2 case, which is how a bug slipped through:
+    // the order-2 branch looked for the *improper* member of the group, found
+    // none for a pure rotation, and fell through to 'Cs' — a mirror the
+    // molecule does not have.
+    //
+    // Building one takes a little care, because ethene is symmetric enough
+    // that most perturbations keep a mirror: pushing the two carbons out of
+    // plane leaves the plane through the C=C axis, and pushing the H's on each
+    // carbon symmetrically leaves the other. Taking one H on each carbon —
+    // the pair related by the in-plane twofold axis — and pushing them
+    // *oppositely* out of the molecular plane breaks every mirror and leaves
+    // exactly that C2.
+    const molecule = embedded('Ethene');
+    const atoms = molecule.atoms;
+    const carbons = atoms.filter((a) => a.element === 'C');
+    const hydrogens = atoms.filter((a) => a.element === 'H');
+    const [c1, c2] = carbons;
+
+    const sub = (a: typeof c1, b: typeof c1) => [a.x - b.x, a.y - b.y, a.z - b.z] as [number, number, number];
+    const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const cross = (a: number[], b: number[]) => [
+      a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0],
+    ] as [number, number, number];
+    const unit = (a: number[]) => { const n = Math.hypot(...a); return a.map((x) => x / n) as [number, number, number]; };
+
+    const axis = unit(sub(c2, c1));
+    const nearestTo = (c: typeof c1) => hydrogens
+      .map((h) => ({ h, d: Math.hypot(...sub(h, c)) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 2)
+      .map((e) => e.h);
+    const [h1a, h1b] = nearestTo(c1);
+    // an in-plane direction perpendicular to the C=C axis, from the first H
+    const perp = unit((() => {
+      const v = sub(h1a, c1);
+      const along = dot(v, axis);
+      return [v[0] - along * axis[0], v[1] - along * axis[1], v[2] - along * axis[2]];
+    })());
+    const normal = unit(cross(axis, perp));
+
+    // the H on each carbon on the same side of the C=C axis: the C2 maps one
+    // to the other, so their out-of-plane displacements must be opposite
+    const pick = (c: typeof c1) => nearestTo(c).find((h) => dot(sub(h, c), perp) > 0)!;
+    const chosen = new Set([pick(c1), pick(c2)]);
+    const delta = 0.12;
+    const sign = (h: typeof c1) => (h === pick(c1) ? 1 : -1);
+    const twisted = atoms.map((a) => (chosen.has(a)
+      ? { ...a, x: a.x + sign(a) * delta * normal[0], y: a.y + sign(a) * delta * normal[1], z: a.z + sign(a) * delta * normal[2] }
+      : a));
+
+    // sanity: the perturbation is real (the mirrors are gone), so a wrong
+    // construction shows up as a wrong symbol rather than a passing accident
+    expect(h1a).toBeDefined();
+    expect(h1b).toBeDefined();
+    const result = symmetrizeMolecule({ atoms: twisted, bonds: molecule.bonds });
+    expect(result.symbol).toBe('C2');
+    expect(result.order).toBe(2);
+    expect(result.maxShift).toBeLessThanOrEqual(SYMMETRY_TOLERANCE);
+  });
+
   it('leaves a geometry with no symmetry alone', () => {
     // every atom nudged ~0.03 Å in a deterministic pseudo-random direction:
     // past the tolerance, so nothing may be snapped

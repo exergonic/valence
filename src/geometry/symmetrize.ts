@@ -299,10 +299,16 @@ function rotationAngle(m: Mat3): number {
 /** Schoenflies symbol from the census of the closed group. */
 function symbolOf(group: Operation[]): string {
   if (group.length === 1) return 'C1';
-  // Cs and Ci have no proper rotation to hang a principal axis on
+  // Order 2 is E plus one other operation, and all three possibilities have no
+  // principal axis to hang anything on: a proper rotation (C2, a skewed H2O2),
+  // a mirror (Cs) or the inversion (Ci). Searching for the *improper* member —
+  // as this did — finds nothing for a pure C2 and falls through to 'Cs', so a
+  // C2-only molecule was labelled with a mirror it does not have.
   if (group.length === 2) {
-    const only = group.find((op) => determinant(op.m) < 0);
-    return only && sameMatrix(only.m, INVERSION) ? 'Ci' : 'Cs';
+    const only = group.find((op) => !sameMatrix(op.m, IDENTITY_MATRIX));
+    if (!only) return 'C1';
+    if (determinant(only.m) > 0) return 'C2';
+    return sameMatrix(only.m, INVERSION) ? 'Ci' : 'Cs';
   }
 
   let highestOrder = 1;
@@ -346,9 +352,13 @@ function symbolOf(group: Operation[]): string {
   const perpendicularC2 = properC2.filter((axis) => Math.abs(dot(axis, highestAxis)) < 1e-6).length;
   const hasSigmaH = mirrorNormals.some((normal) => Math.abs(dot(normal, highestAxis)) > 1 - 1e-6);
   const hasSigmaV = mirrorNormals.some((normal) => Math.abs(dot(normal, highestAxis)) < 1e-6);
+  // Improper *rotations* only: a pure mirror has angle 0, and dividing by the
+  // 1e-6 floor below would print it as "S6283185". A mirror always lies either
+  // in or perpendicular to the principal axis, so hasSigmaH/hasSigmaV catch it
+  // first and this branch is unreachable with one — but the guard is free.
   const improperOrders = group
-    .filter((op) => determinant(op.m) < 0 && !sameMatrix(op.m, INVERSION))
-    .map((op) => Math.round((2 * Math.PI) / Math.max(rotationAngle(op.m), 1e-6)));
+    .filter((op) => determinant(op.m) < 0 && !sameMatrix(op.m, INVERSION) && rotationAngle(op.m) > 1e-6)
+    .map((op) => Math.round((2 * Math.PI) / rotationAngle(op.m)));
   const improperMax = improperOrders.length > 0 ? Math.max(...improperOrders) : 0;
 
   if (perpendicularC2 > 0) {
