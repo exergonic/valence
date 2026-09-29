@@ -195,19 +195,24 @@ export function computeEspSurface(
     return [u[0] + t * (v[0] - u[0]), u[1] + t * (v[1] - u[1]), u[2] + t * (v[2] - u[2])];
   };
 
-  const emit = (tri: Array<[number, number, number]>) => {
-    // Orient the triangle outward using the field gradient at its centroid,
-    // then emit its three vertices with per-vertex normals and potentials.
-    // Degenerate slivers are emitted too (their winding settled by the BFS
-    // below): skipping them left zero-width slits, and the surface must stay
-    // closed for backface culling.
+  const emit = (tri: Array<[number, number, number]>, insidePt: [number, number, number]) => {
+    // Orient the triangle AWAY from a corner the field sampled as inside.
+    // That corner and the crossing triangle sit on opposite sides of the
+    // zero plane by the linear interpolation itself, so the sign is exact —
+    // unlike a sampled gradient, which is ambiguous where a triangle
+    // straddles a sphere-union crease. Orienting on that ambiguous gradient
+    // (2026-09-28 CCl4 report) left whole connected patches wound inward;
+    // backface culling then punched them out as the missing near side.
+    // Degenerate slivers are emitted too: skipping them left zero-width
+    // slits, and the surface must stay closed for backface culling.
     const [a, b, c] = tri;
-    const cx = (a[0] + b[0] + c[0]) / 3, cy = (a[1] + b[1] + c[1]) / 3, cz = (a[2] + b[2] + c[2]) / 3;
     const e1 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
     const e2 = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
     const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
-    const g = outwardNormal(cx, cy, cz);
-    if (n[0] * g[0] + n[1] * g[1] + n[2] * g[2] < 0) {
+    const ox = (a[0] + b[0] + c[0]) / 3 - insidePt[0];
+    const oy = (a[1] + b[1] + c[1]) / 3 - insidePt[1];
+    const oz = (a[2] + b[2] + c[2]) / 3 - insidePt[2];
+    if (n[0] * ox + n[1] * oy + n[2] * oz < 0) {
       const tmp = tri[1]; tri[1] = tri[2]; tri[2] = tmp; // flip winding
     }
     for (const p of tri) {
@@ -234,18 +239,24 @@ export function computeEspSurface(
         if (lo >= 0 || hi <= 0) continue; // cell entirely out/inside — no boundary
 
         // A tet's isosurface within the cube: 1 or 3 inside corners give a
-        // triangle, 2 give a quad (two triangles).
+        // triangle, 2 give a quad (two triangles). Whichever corner the field
+        // puts deepest INSIDE the molecule is the orientation reference: the
+        // crossing plane separates it from the outside, so pointing the
+        // triangle away from it is pointing it outward.
         const checkTet = (vals: number[], pts: Array<[number, number, number]>) => {
           const inside: number[] = [];
           const outside: number[] = [];
           for (let t = 0; t < 4; t++) (vals[t] <= 0 ? inside : outside).push(t);
           if (inside.length === 0 || inside.length === 4) return;
+          let deep = inside[0];
+          for (const t of inside) if (vals[t] < vals[deep]) deep = t;
+          const ref = pts[deep];
           if (inside.length === 1) {
             const i = inside[0];
-            emit(outside.map((o) => cross(pts[i], vals[i], pts[o], vals[o])));
+            emit(outside.map((o) => cross(pts[i], vals[i], pts[o], vals[o])), ref);
           } else if (inside.length === 3) {
             const o = outside[0];
-            emit(inside.map((i) => cross(pts[o], vals[o], pts[i], vals[i])));
+            emit(inside.map((i) => cross(pts[o], vals[o], pts[i], vals[i])), ref);
           } else {
             const [i1, i2] = inside;
             const [o1, o2] = outside;
@@ -253,8 +264,8 @@ export function computeEspSurface(
             const b = cross(pts[i1], vals[i1], pts[o2], vals[o2]);
             const c = cross(pts[i2], vals[i2], pts[o1], vals[o1]);
             const d = cross(pts[i2], vals[i2], pts[o2], vals[o2]);
-            emit([a, b, d]);
-            emit([a, d, c]);
+            emit([a, b, d], ref);
+            emit([a, d, c], ref);
           }
         };
 
@@ -273,88 +284,6 @@ export function computeEspSurface(
           }
         }
       }
-    }
-  }
-
-// Orientation consistency. Even with the field-argmin gradient above, the
-  // per-triangle flip can disagree with a neighbor where a triangle straddles
-  // a sphere-union crease — measured 2026-09-28: on a V8-refined DMS geometry
-  // the argmin fix alone left 10 same-direction (culled) edges; a geometry
-  // refined by JSC gave 0, so this is engine-sensitive. Propagate one
-  // orientation across shared edges (BFS over the triangle adjacency), then
-  // point the whole mesh outward — a guarantee, not a heuristic.
-  {
-    const triCount = positions.length / 9;
-    const vkey = (k: number) =>
-      `${Math.round(positions[k * 3] * 1e5)},${Math.round(positions[k * 3 + 1] * 1e5)},${Math.round(positions[k * 3 + 2] * 1e5)}`;
-    const edgeTris = new Map<string, { tri: number; dir: number }[]>();
-    for (let t = 0; t < triCount; t++) {
-      const keys = [vkey(3 * t), vkey(3 * t + 1), vkey(3 * t + 2)];
-      for (let e = 0; e < 3; e++) {
-        const ka = keys[e];
-        const kb = keys[(e + 1) % 3];
-        const ek = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
-        const list = edgeTris.get(ek);
-        const dir = ka < kb ? 1 : -1;
-        if (list) list.push({ tri: t, dir });
-        else edgeTris.set(ek, [{ tri: t, dir }]);
-      }
-    }
-
-    const flip = new Uint8Array(triCount);
-    const seen = new Uint8Array(triCount);
-    for (let seed = 0; seed < triCount; seed++) {
-      if (seen[seed]) continue;
-      seen[seed] = 1;
-      const stack = [seed];
-      while (stack.length > 0) {
-        const t = stack.pop()!;
-        const keys = [vkey(3 * t), vkey(3 * t + 1), vkey(3 * t + 2)];
-        for (let e = 0; e < 3; e++) {
-          const ka = keys[e];
-          const kb = keys[(e + 1) % 3];
-          const ek = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
-          const dir = ka < kb ? 1 : -1;
-          const effDir = flip[t] ? -dir : dir;
-          for (const other of edgeTris.get(ek)!) {
-            if (other.tri === t || seen[other.tri]) continue;
-            seen[other.tri] = 1;
-            // A shared edge must be traversed in OPPOSITE directions by its
-            // two triangles; the neighbor's emitted winding decides its flip.
-            flip[other.tri] = other.dir === effDir ? 1 : 0;
-            stack.push(other.tri);
-          }
-        }
-      }
-    }
-
-    const swapVerts = (a: number, b: number) => {
-      for (let c = 0; c < 3; c++) {
-        let tmp = positions[a * 3 + c]; positions[a * 3 + c] = positions[b * 3 + c]; positions[b * 3 + c] = tmp;
-        tmp = normals[a * 3 + c]; normals[a * 3 + c] = normals[b * 3 + c]; normals[b * 3 + c] = tmp;
-      }
-      const tmpQ = potentials[a]; potentials[a] = potentials[b]; potentials[b] = tmpQ;
-    };
-    for (let t = 0; t < triCount; t++) {
-      if (flip[t]) swapVerts(3 * t + 1, 3 * t + 2);
-    }
-
-    // The propagation fixes relative orientation; make it outward globally by
-    // the stored radial normals — a triangle's geometric normal should agree
-    // with its vertices' outward normals on the whole mesh.
-    let agreement = 0;
-    for (let t = 0; t < triCount; t++) {
-      const i0 = 3 * t, i1 = 3 * t + 1, i2 = 3 * t + 2;
-      const e1x = positions[i1 * 3] - positions[i0 * 3], e1y = positions[i1 * 3 + 1] - positions[i0 * 3 + 1], e1z = positions[i1 * 3 + 2] - positions[i0 * 3 + 2];
-      const e2x = positions[i2 * 3] - positions[i0 * 3], e2y = positions[i2 * 3 + 1] - positions[i0 * 3 + 1], e2z = positions[i2 * 3 + 2] - positions[i0 * 3 + 2];
-      const nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
-      const gx = normals[i0 * 3] + normals[i1 * 3] + normals[i2 * 3];
-      const gy = normals[i0 * 3 + 1] + normals[i1 * 3 + 1] + normals[i2 * 3 + 1];
-      const gz = normals[i0 * 3 + 2] + normals[i1 * 3 + 2] + normals[i2 * 3 + 2];
-      agreement += nx * gx + ny * gy + nz * gz;
-    }
-    if (agreement < 0) {
-      for (let t = 0; t < triCount; t++) swapVerts(3 * t + 1, 3 * t + 2);
     }
   }
 

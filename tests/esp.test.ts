@@ -209,9 +209,9 @@ describe('computeEspSurface — the fused molecular surface', () => {
     // field's gradient is radial from the argmin of |p−aᵢ| − rᵢ — they
     // disagree at heteronuclear cusps, flipping triangles inward (culled →
     // cracks); (2) the degenerate-sliver skip left zero-width slits,
-    // breaking closure. Fixed by the argmin mis-normal, the BFS winding
-    // guarantee, and emitting the slivers. Every directed edge must now be
-    // traversed once in each direction: no flipped pairs, no holes.
+    // cracking closure. Fixed by the argmin mis-normal and by emitting the
+    // slivers. Every directed edge must now be traversed once in each
+    // direction: no flipped pairs, no holes.
     const mol = embedAndRefine(parseMolBlock(`JME 2024-04-29 Mon Sep 28 13:02:00 GMT-400 2026
 
   3  2  0  0  0  0  0  0  0  0999 V2000
@@ -246,6 +246,52 @@ M  END
     }
     expect(missingReverse).toBe(0);
     expect(sameDirection).toBe(0);
+  });
+
+  it('the mmff94-ts CCl4 geometry comes out wound outward, not half inside-out', () => {
+    // Reported 2026-09-28: carbon tetrachloride's ESP surface lost its whole
+    // near side, leaving the far side showing through. Only the LOCAL
+    // pipeline geometry (mmff94-ts) triggered it — the same molecule fetched
+    // from PubChem rendered whole, which pointed at the geometry, not the
+    // renderer. The orientation pass was the cause: it propagated one winding
+    // across shared edges and on this geometry (a Cl on the +z axis) inverted
+    // 46% of the triangles, and a global vote cannot repair a PARTIAL
+    // inversion; backface culling then punched that half out. Orientation now
+    // comes from each tet's own inside/outside sign, so it is outward by
+    // construction. The signed volume is the number that collapses when a
+    // mesh is half inside-out: 3.2 Å³ before, 84.5 Å³ after, against the
+    // ceiling of four overlapping Cl spheres (89.8 Å³) with the carbon buried
+    // inside. A guessed ring of 2D sketch coordinates is enough input: the
+    // embedder is what produces the tetrahedron.
+    const mol = embedAndRefine(parseMolBlock(`JME 2024-04-29 Mon Sep 28 13:02:00 GMT-400 2026
+
+  5  4  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0000    0.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    1.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000   -1.0000    0.0000 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+`)).molecule;
+    const surf = computeEspSurface(mol, mol.atoms.map(() => 0));
+
+    let volume6 = 0;
+    for (let t = 0; t < surf.vertexCount; t += 3) {
+      const p = [0, 1, 2].map((v) => {
+        const k = (t + v) * 3;
+        return [surf.positions[k], surf.positions[k + 1], surf.positions[k + 2]];
+      });
+      volume6 += p[0][0] * (p[1][1] * p[2][2] - p[1][2] * p[2][1])
+        - p[0][1] * (p[1][0] * p[2][2] - p[1][2] * p[2][0])
+        + p[0][2] * (p[1][0] * p[2][1] - p[1][1] * p[2][0]);
+    }
+    const clSphere = (4 / 3) * Math.PI * 1.75 ** 3; // 22.45 Å³
+    expect(volume6 / 6).toBeGreaterThan(clSphere);
+    expect(volume6 / 6).toBeLessThan(4 * clSphere);
   });
 
   it('every area-bearing triangle points outward against the finite-difference field gradient', () => {
