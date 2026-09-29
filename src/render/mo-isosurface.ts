@@ -44,13 +44,13 @@ export function renderMoIsosurface(
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
-  // The four looks the atomic-orbital lobes offer, so switching between the
-  // two MO views does not change how the orbital reads. Opacity comes from the
-  // panel's slider and is used as given: it is the one thing a chemist reaches
-  // for when a surface hides the atoms, and it should not drift with the style.
+  // The style sets the gloss. The OPACITY comes from the panel's slider and is
+  // used as given — including in the metallic style, which is the app's
+  // default: keying transparency off the style instead (as this did first)
+  // makes the slider silently inert in the default configuration, which is
+  // exactly how it was reported.
   let shininess = 300;
   let specular = 0xffffff;
-  let opaque = false;
   switch (preset) {
     case 'glossy':
       shininess = 60;
@@ -62,17 +62,16 @@ export function renderMoIsosurface(
       break;
     case 'metallic':
       shininess = 1000;
-      opaque = true;
       break;
     default:
       break;
   }
   const alpha = Math.max(0.05, Math.min(1, opacity));
 
-  if (opaque) {
+  if (alpha >= 1) {
+    // fully opaque: one pass, no blending, no need for the far-side depth
     group.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
       vertexColors: true,
-      opacity: alpha,
       side: THREE.DoubleSide,
       depthWrite: true,
       shininess,

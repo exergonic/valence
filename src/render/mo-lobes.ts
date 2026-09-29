@@ -24,6 +24,19 @@ import { createLobeMesh, orientLobe, piLobe } from './lobes';
 export const MO_PHASE_POSITIVE = 0x4488ff;
 export const MO_PHASE_NEGATIVE = 0xff6644;
 
+/**
+ * Give a lobe the MO picture's opacity, whatever the style preset chose. The
+ * preset's opacity belongs to the hybrid-orbital picture; here the slider is
+ * the authority, in both MO views and every style — otherwise the control goes
+ * dead in the app's default (metallic) style.
+ */
+function applyMoOpacity(mesh: THREE.Mesh, opacity: number): void {
+  const material = mesh.material as THREE.MeshPhongMaterial;
+  material.transparent = opacity < 1;
+  material.opacity = opacity;
+  material.needsUpdate = true;
+}
+
 /** Contributions smaller than this fraction of the MO's largest are not
  *  drawn — and the MO panel's composition line lists the same set, so the
  *  numbers and the picture always agree. */
@@ -63,8 +76,9 @@ export function renderMoOrbitals(
       // an s contribution is a sphere, its phase its color
       const mesh = new THREE.Mesh(
         new THREE.SphereGeometry(0.30 * size, 16, 16),
-        new THREE.MeshPhongMaterial({ color, transparent: true, opacity: opacity * 0.67, depthWrite: false }),
+        new THREE.MeshPhongMaterial({ color, transparent: true, opacity, depthWrite: false }),
       );
+      applyMoOpacity(mesh, opacity);
       mesh.position.set(origin[0], origin[1], origin[2]);
       mesh.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
       group.add(mesh);
@@ -76,6 +90,7 @@ export function renderMoOrbitals(
     // rotated back into the molecule's own coordinates before it is drawn.
     const axis = frameDirectionToWorld(frame, orbital.axis);
     const near = createLobeMesh(piLobe(), color, opacity, preset, size);
+    applyMoOpacity(near, opacity);
     near.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
     orientLobe(near, origin, axis);
     group.add(near);
@@ -87,6 +102,7 @@ export function renderMoOrbitals(
       preset,
       size,
     );
+    applyMoOpacity(far, opacity);
     far.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
     orientLobe(far, origin, [-axis[0], -axis[1], -axis[2]]);
     group.add(far);

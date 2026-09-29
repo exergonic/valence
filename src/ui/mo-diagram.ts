@@ -103,6 +103,10 @@ export function setupMoPanel(ctx: SceneContext) {
     note.textContent = '';
     readout.textContent = '';
     composition.textContent = '';
+    // The picture controls only mean something with a level selected — say so
+    // rather than letting a drag do nothing.
+    const hasSelection = selected !== null && !!result;
+    for (const control of [smooth, opacity]) if (control) control.disabled = !hasSelection;
     if (panel.classList.contains('collapsed')) return;
 
     if (!result) {
