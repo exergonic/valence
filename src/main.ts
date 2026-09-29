@@ -3,6 +3,7 @@ import { initScene, buildScene, ATOM_LAYER } from './render';
 import { mountJsmePanel } from './ui/jsme-panel';
 import { setupControls } from './ui/controls';
 import { setupTooltip } from './ui/tooltip';
+import { setupContextMenu } from './ui/context-menu';
 import { setupAnnotations } from './ui/annotations';
 import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, applyViewState } from './ui/view-state';
 import { parseMolBlock } from './mol-parser';
@@ -204,6 +205,7 @@ async function main() {
     scene.camera,
     scene.orbitalGroup,
   );
+  setupContextMenu(scene, document.getElementById('canvas-container')!);
   setupKeyboardShortcuts(scene);
   setupMeasureMode(scene);
   setupViewStateUI(scene, annotations);

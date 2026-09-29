@@ -205,20 +205,8 @@ export function setupControls(ctx: SceneContext) {
 
   // Export PNG
   const exportBtn = document.getElementById('ctrl-export-png')!;
-  exportBtn.addEventListener('click', () => {
-    const scale = 2;
-    const w = ctx.renderer.domElement.width;
-    const h = ctx.renderer.domElement.height;
-    ctx.renderer.setSize(w * scale, h * scale, false);
-    ctx.renderer.render(ctx.scene, ctx.camera);
-    const dataUrl = ctx.renderer.domElement.toDataURL('image/png');
-    ctx.renderer.setSize(w, h, false);
-    ctx.renderer.render(ctx.scene, ctx.camera);
-
-    const a = document.createElement('a');
-    a.href = dataUrl;
-    a.download = 'molecule.png';
-    a.click();
+  exportBtn.addEventListener('click', async () => {
+    downloadBlob(await capturePng(ctx), 'molecule.png');
   });
 
   // Export SDF
@@ -360,13 +348,39 @@ export function setupControls(ctx: SceneContext) {
 // ── Helpers ──
 
 function downloadFile(content: string, filename: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
+  downloadBlob(new Blob([content], { type: mimeType }), filename);
+}
+
+function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * One frame of the live view as a PNG, rendered at 2x so the export is
+ * sharper than the window. The canvas is not created with
+ * `preserveDrawingBuffer`, so the pixels are read in the same task as the
+ * render that produced them — the callback takes a copy, and the drawing
+ * buffer is restored to the display size immediately after.
+ */
+export function capturePng(ctx: SceneContext): Promise<Blob> {
+  const w = ctx.renderer.domElement.width;
+  const h = ctx.renderer.domElement.height;
+  ctx.renderer.setSize(w * 2, h * 2, false);
+  ctx.renderer.render(ctx.scene, ctx.camera);
+  const png = new Promise<Blob>((resolve, reject) => {
+    ctx.renderer.domElement.toBlob(
+      (blob) => (blob ? resolve(blob) : reject(new Error('canvas.toBlob returned null'))),
+      'image/png',
+    );
+  });
+  ctx.renderer.setSize(w, h, false);
+  ctx.renderer.render(ctx.scene, ctx.camera);
+  return png;
 }
 
 export function moleculeToSDF(mol: { atoms: any[]; bonds: any[] }): string {
@@ -404,7 +418,7 @@ export function moleculeToSDF(mol: { atoms: any[]; bonds: any[] }): string {
   return lines.join('\n') + '\n';
 }
 
-function moleculeToXYZ(mol: { atoms: any[] }): string {
+export function moleculeToXYZ(mol: { atoms: any[] }): string {
   const lines: string[] = [];
   lines.push(mol.atoms.length.toString());
   lines.push('Valence export');
