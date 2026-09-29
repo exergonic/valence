@@ -1313,3 +1313,13 @@ html, body {
 }
 
 .mo-composition:empty { display: none; }
+
+.context-item:disabled {
+  color: #666;
+  cursor: default;
+}
+
+.context-item:disabled:hover {
+  background: transparent;
+  color: #666;
+}

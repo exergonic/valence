@@ -1,5 +1,6 @@
 import type { SceneContext } from '../render';
 import { capturePng, moleculeToSDF, moleculeToXYZ } from './controls';
+import { moDataText } from './mo-data';
 
 /**
  * Right-click on the molecular display: put the three things a debugging
@@ -60,9 +61,15 @@ export function setupContextMenu(ctx: SceneContext, container: HTMLElement) {
       }
     });
     menu.appendChild(item);
+    return item;
   }
 
   addItem('XYZ', () => navigator.clipboard.writeText(moleculeToXYZ(ctx.currentMolecule!)));
+  // The LCAO printout: what a chemist needs to compare this app's orbitals
+  // against another program's, frame and basis order included.
+  const moItem = addItem('MO data', () => navigator.clipboard.writeText(
+    moDataText(ctx.currentMolecule!, ctx.ehResult!),
+  ));
   addItem('SDF', () => navigator.clipboard.writeText(moleculeToSDF(ctx.currentMolecule!)));
   // The PNG rides into the clipboard as a promise: a write handed to Safari
   // must be started by the click itself, not after a capture is awaited.
@@ -72,6 +79,8 @@ export function setupContextMenu(ctx: SceneContext, container: HTMLElement) {
     e.preventDefault();
     // Nothing to copy from an empty display — no menu full of dead items.
     if (!ctx.currentMolecule) return;
+    // MO data needs orbitals: an element outside the parameter table has none.
+    moItem.disabled = !ctx.ehResult;
     menu.classList.remove('hidden');
     menu.style.left = '0px';
     menu.style.top = '0px';
