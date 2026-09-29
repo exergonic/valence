@@ -34,6 +34,11 @@ const ABOVE_OCCUPIED = 6;
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
 
+/** Two orbitals within this energy are drawn as one degenerate group (a
+ *  symmetric molecule's pair splits by ~1e-4 eV in a 4-decimal geometry, so
+ *  the tolerance is well above that and far below any chemical gap). */
+const DEGENERATE_TOLERANCE = 0.005;
+
 export function setupMoPanel(ctx: SceneContext) {
   const panel = document.getElementById('mo-panel')!;
   const diagram = document.getElementById('mo-diagram')!;
@@ -128,28 +133,79 @@ export function setupMoPanel(ctx: SceneContext) {
     // click could land on the neighbouring orbital
     const spacing = (height - PAD.top - PAD.bottom) / Math.max(1, levels.length);
     const hit = Math.max(6, Math.min(16, spacing)).toFixed(1);
-    for (const level of levels) {
-      const clipped = level.energy < lo || level.energy > hi;
-      const ly = clipped ? (level.energy > hi ? PAD.top : height - PAD.bottom) : y(level.energy);
+
+    /** One clickable bar — a segment of a degenerate group, or a lone level. */
+    const bar = (
+      level: (typeof levels)[number], sx0: number, sx1: number, ly: number,
+      opts: { clipped: boolean; tag: string; hitWidth: number },
+    ) => {
       const classes = ['mo-level'];
       if (level.occupied) classes.push('occupied');
       if (level.index === selected) classes.push('selected');
-      if (clipped) classes.push('clipped');
-      const marker = clipped
-        ? `<text class="mo-edge" x="${x1}" y="${(ly + 4).toFixed(1)}">${level.energy.toFixed(1)}</text>`
-        : level.occupied
-          ? `<text class="mo-arrows" x="${x1 + 6}" y="${(ly + 5).toFixed(1)}">↑↓</text>`
-          : '';
-      const tag = level.homo ? 'HOMO' : level.lumo ? 'LUMO' : '';
+      if (opts.clipped) classes.push('clipped');
+      const arrows = level.occupied && !opts.clipped
+        ? `<text class="mo-arrows" x="${(sx1 + 4).toFixed(1)}" y="${(ly + 5).toFixed(1)}">↑↓</text>`
+        : '';
       parts.push(
         `<g class="${classes.join(' ')}" data-index="${level.index}">`
-        + `<line class="mo-hit" stroke-width="${hit}" x1="${x0}" y1="${ly.toFixed(1)}" x2="${x1}" y2="${ly.toFixed(1)}"/>`
-        + `<line class="mo-bar" x1="${x0}" y1="${ly.toFixed(1)}" x2="${x1}" y2="${ly.toFixed(1)}"/>`
-        + marker
-        + (tag ? `<text class="mo-tag" x="${x1 + 24}" y="${(ly + 5).toFixed(1)}">${tag}</text>` : '')
+        + `<line class="mo-hit" stroke-width="${opts.hitWidth.toFixed(1)}" x1="${sx0.toFixed(1)}" y1="${ly.toFixed(1)}" x2="${sx1.toFixed(1)}" y2="${ly.toFixed(1)}"/>`
+        + `<line class="mo-bar" x1="${sx0.toFixed(1)}" y1="${ly.toFixed(1)}" x2="${sx1.toFixed(1)}" y2="${ly.toFixed(1)}"/>`
+        + arrows
+        + (opts.tag ? `<text class="mo-tag" x="${x1 + 24}" y="${(ly + 5).toFixed(1)}">${opts.tag}</text>` : '')
         + `<title>MO ${level.index + 1}: ${level.energy.toFixed(3)} eV</title>`
         + '</g>',
       );
+    };
+
+    // In the window: one row per energy, and degenerate orbitals as
+    // side-by-side bars — each its own click target, the way a textbook
+    // orbital diagram shows them. Drawn as a single line, all but the last are
+    // unreachable, which is what the reporter hit.
+    const inWindow = levels.filter((l) => l.energy >= lo && l.energy <= hi);
+    const groups: typeof levels[] = [];
+    for (const level of inWindow) {
+      const last = groups[groups.length - 1];
+      if (last && Math.abs(last[0].energy - level.energy) < DEGENERATE_TOLERANCE) last.push(level);
+      else groups.push([level]);
+    }
+    for (const group of groups) {
+      const first = group[0];
+      const ly = y(first.energy);
+      const tag = first.homo ? 'HOMO' : first.lumo ? 'LUMO' : '';
+      const gap = 4;
+      const segmentWidth = (x1 - x0 - (group.length - 1) * gap) / group.length;
+      group.forEach((level, k) => {
+        const sx0 = x0 + k * (segmentWidth + gap);
+        bar(level, sx0, sx0 + segmentWidth, ly, {
+          clipped: false,
+          tag: k === group.length - 1 ? tag : '',
+          hitWidth: Number(hit),
+        });
+      });
+    }
+
+    // Outside the window: stacked in a compact band at the edge, off-scale but
+    // still clickable (the readout names the energy). Grouping these by energy
+    // would be wrong — they are not degenerate, just far away.
+    const band = Math.min(30, (height - PAD.top - PAD.bottom) / 5);
+    const outside: Array<[typeof levels, boolean]> = [
+      [levels.filter((l) => l.energy > hi), true],
+      [levels.filter((l) => l.energy < lo), false],
+    ];
+    for (const [list, atTop] of outside) {
+      const step = band / Math.max(1, list.length);
+      list.forEach((level, i) => {
+        const ly = atTop
+          ? PAD.top + 2 + i * step
+          : height - PAD.bottom - 2 - (list.length - 1 - i) * step;
+        bar(level, x0 + 12, x1 - 12, ly, {
+          clipped: true,
+          tag: '',
+          // the band is tight: cap the target to the band's own spacing so
+          // each off-scale level is still reachable
+          hitWidth: Math.max(3, Math.min(Number(hit), step)),
+        });
+      });
     }
 
     diagram.innerHTML =
@@ -162,10 +218,23 @@ export function setupMoPanel(ctx: SceneContext) {
     if (selected !== null && result.energies[selected] !== undefined) {
       const energy = result.energies[selected];
       const occupancy = occupations ? occupations[selected] : null;
+      const partners = result.energies
+        .map((e, i) => ({ e, i }))
+        .filter(({ e, i }) => i !== selected && Math.abs(e - energy) < DEGENERATE_TOLERANCE)
+        .map(({ i }) => i + 1);
       readout.textContent = `MO ${selected + 1} · ${energy.toFixed(3)} eV`
         + (occupancy === null ? '' : occupancy > 0 ? ' · occupied' : ' · empty')
+        + (partners.length > 0 ? ` · degenerate with MO ${partners.join(', ')}` : '')
         + ' — click it again to hide';
       composition.textContent = describeComposition(result, selected);
+      if (partners.length > 0) {
+        // Worth saying out loud: the solver returns *a* basis of a degenerate
+        // set, not *the* basis. Two programs will pick different mixtures, and
+        // comparing them one-to-one compares arbitrary representatives — the
+        // set, its energy and its symmetry are what is physical.
+        note.textContent = `Degenerate set of ${partners.length + 1}: any orthogonal combination of these orbitals is an equally valid description, so this one need not look like another program's MO of the same index.`;
+        return;
+      }
     } else {
       readout.textContent = `${result.energies.length} MOs · click a level to draw it`;
     }
@@ -175,7 +244,7 @@ export function setupMoPanel(ctx: SceneContext) {
     } else {
       const hidden = levels.filter((l) => l.energy < lo || l.energy > hi).length;
       if (hidden > 0) {
-        note.textContent = `${hidden} level${hidden === 1 ? '' : 's'} outside the window (marked at the edge with its energy).`;
+        note.textContent = `${hidden} level${hidden === 1 ? '' : 's'} outside the window, stacked at the edge — click one to read its energy.`;
       }
     }
   }
