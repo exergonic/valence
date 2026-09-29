@@ -23,6 +23,7 @@
  */
 import type { SceneContext } from '../render';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
+import { MO_SIGNIFICANT } from '../render/mo-lobes';
 
 const PAD = { top: 16, bottom: 20, left: 44, right: 58 };
 
@@ -187,9 +188,13 @@ export function setupMoPanel(ctx: SceneContext) {
 function describeComposition(result: { basis: Array<{ label: string }>; coefficients: number[][] }, mo: number): string {
   const coefficients = result.coefficients[mo];
   if (!coefficients) return '';
+  const largest = Math.max(...coefficients.map(Math.abs));
   const ranked = coefficients
     .map((c, i) => ({ c, label: result.basis[i].label }))
-    .filter((e) => Math.abs(e.c) > 1e-6)
+    // the same threshold the lobes are drawn with: the line describes the
+    // picture, so a numerically-tiny coefficient is not listed as a
+    // "contribution" (a π MO has 24 of those, all rounding noise)
+    .filter((e) => largest > 0 && Math.abs(e.c) / largest >= MO_SIGNIFICANT)
     .sort((a, b) => Math.abs(b.c) - Math.abs(a.c));
   const shown = ranked.slice(0, TOP_CONTRIBUTORS).map((e) => {
     // "C( 2) 2pz" -> "C2 2pz"

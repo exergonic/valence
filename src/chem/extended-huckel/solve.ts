@@ -19,6 +19,7 @@
 import type { Molecule } from '../../mol-parser';
 import { solveGeneralized } from '../../utils/eigen';
 import { countValenceElectrons } from '../valence-electrons';
+import { alignToPrincipalAxes, type PrincipalFrame } from './align-principal-axes';
 import { assignBasis, type BasisFunction } from './assign-basis';
 import { hamiltonianMatrix } from './hamiltonian';
 import { overlapMatrix } from './slater-overlap';
@@ -37,6 +38,10 @@ export interface ExtendedHuckelResult {
   coefficients: number[][];
   /** The molecule's valence electron count (formal charge included). */
   electronCount: number;
+  /** The frame the calculation ran in — the basis axes are this frame's
+   *  coordinate axes, so a renderer must map them back to the molecule's own
+   *  coordinates (see frameDirectionToWorld). */
+  frame: PrincipalFrame['axes'];
 }
 
 export function solveExtendedHuckel(molecule: Molecule): ExtendedHuckelResult | null {
@@ -46,7 +51,11 @@ export function solveExtendedHuckel(molecule: Molecule): ExtendedHuckelResult | 
   const electronCount = countValenceElectrons(molecule.atoms);
   if (electronCount === null) return null;
 
-  const overlap = overlapMatrix(basis, molecule.atoms);
+  // Run in the molecule's principal-axis frame: the AO basis is tied to the
+  // coordinate axes, so a ring that is not in a coordinate plane would give
+  // π orbitals as px/py/pz mixtures (see align-principal-axes.ts).
+  const frame = alignToPrincipalAxes(molecule);
+  const overlap = overlapMatrix(basis, frame.atoms);
   const hamiltonian = hamiltonianMatrix(basis, overlap);
   const solved = solveGeneralized(hamiltonian, overlap);
   if (!solved) return null;
@@ -54,7 +63,7 @@ export function solveExtendedHuckel(molecule: Molecule): ExtendedHuckelResult | 
   // solveGeneralized returns eigenvectors as columns; the rest of the app
   // reads orbitals, so transpose to MO-major here, once.
   const coefficients = solved.values.map((_, mo) => solved.vectors.map((row) => row[mo]));
-  return { basis, overlap, hamiltonian, energies: solved.values, coefficients, electronCount };
+  return { basis, overlap, hamiltonian, energies: solved.values, coefficients, electronCount, frame: frame.axes };
 }
 
 /**

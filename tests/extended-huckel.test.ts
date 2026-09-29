@@ -25,6 +25,8 @@ import { abFunctions, radialComponent, overlapMatrix } from '../src/chem/extende
 import { assignBasis } from '../src/chem/extended-huckel/assign-basis';
 import { hamiltonianMatrix, WOLFSBERG_HELMHOLZ_K } from '../src/chem/extended-huckel/hamiltonian';
 import { solveExtendedHuckel, closedShellOccupations } from '../src/chem/extended-huckel/solve';
+import { alignToPrincipalAxes, frameDirectionToWorld } from '../src/chem/extended-huckel/align-principal-axes';
+import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 
 interface Fixture {
@@ -125,6 +127,96 @@ describe('extended Hückel against the YAeHMOP oracle', () => {
     // solver's.
     expect(Math.abs(homo - nextDown)).toBeLessThan(1e-3);
     expect(homo).toBeCloseTo(-12.797, 2);
+  });
+});
+
+describe('the calculation frame', () => {
+  // The AO basis is tied to the coordinate axes, so the frame decides what
+  // "pz" means. Reported 2026-09-29: a local-pipeline benzene (whose ring
+  // lands in an arbitrary plane) showed skewed lobes and px/py mixing in a
+  // π orbital — 6 of the 12 drawn AOs were not pz. The solver now runs in
+  // the molecule's principal-axis frame.
+  const benzene = parseMolBlock(`Valence export
+  converter
+
+ 12 12  0  0  0  0  0  0  0  0999 V2000
+    2.2860    0.7785    0.0662 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3086    2.1651   -0.0831 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1309    2.8550   -0.3703 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0695    2.1582   -0.5084 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0924    0.7718   -0.3580 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0854    0.0819   -0.0707 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.2037    0.2410    0.2893 H   0  0  0  0  0  0  0  0  0  0  0  0
+    3.2439    2.7080    0.0243 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1486    3.9354   -0.4866 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.9870    2.6956   -0.7331 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0278    0.2290   -0.4648 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0675   -0.9984    0.0464 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  2  0  0  0  0
+  3  4  1  0  0  0  0
+  4  5  2  0  0  0  0
+  5  6  1  0  0  0  0
+  6  1  2  0  0  0  0
+  1  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+  3  9  1  0  0  0  0
+  4 10  1  0  0  0  0
+  5 11  1  0  0  0  0
+  6 12  1  0  0  0  0
+M  END
+`);
+
+  it('the reported geometry gives a clean pz π HOMO, not a px/py mixture', () => {
+    const result = solveExtendedHuckel(benzene)!;
+    const mo = result.coefficients[14];
+    const largest = Math.max(...mo.map(Math.abs));
+    const drawn = result.basis.filter((_, i) => Math.abs(mo[i]) / largest >= 0.08);
+    expect(drawn.length).toBe(6);
+    for (const orbital of drawn) expect(orbital.label.endsWith('2pz')).toBe(true);
+  });
+
+  it('the drawn pz lobes are perpendicular to the ring plane', () => {
+    const result = solveExtendedHuckel(benzene)!;
+    // the ring normal from three ring carbons
+    const [p0, p1, p2] = [0, 1, 2].map((i) => benzene.atoms[i]);
+    const v1 = [p1.x - p0.x, p1.y - p0.y, p1.z - p0.z];
+    const v2 = [p2.x - p0.x, p2.y - p0.y, p2.z - p0.z];
+    const n = [v1[1] * v2[2] - v1[2] * v2[1], v1[2] * v2[0] - v1[0] * v2[2], v1[0] * v2[1] - v1[1] * v2[0]];
+    const len = Math.hypot(n[0], n[1], n[2]);
+    const world = frameDirectionToWorld(result.frame, [0, 0, 1]);
+    const cos = Math.abs((world[0] * n[0] + world[1] * n[1] + world[2] * n[2]) / len);
+    expect(cos).toBeCloseTo(1, 6);
+  });
+
+  it('rotating a molecule does not move its levels — the physics is frame-free', () => {
+    const water = fixtures.molecules.find((m) => m.name.startsWith('Water'))!;
+    const mol = moleculeOf(water.atoms);
+    const a = 0.7, b = 0.9;
+    const rotate = (p: { x: number; y: number; z: number }) => ({
+      x: p.x * Math.cos(a) + p.z * Math.sin(a),
+      y: p.x * Math.sin(a) * Math.sin(b) + p.y * Math.cos(b) - p.z * Math.cos(a) * Math.sin(b),
+      z: -p.x * Math.sin(a) * Math.cos(b) + p.y * Math.sin(b) + p.z * Math.cos(a) * Math.cos(b),
+    });
+    const rotated = { atoms: mol.atoms.map((atom) => ({ ...rotate(atom), element: atom.element, charge: 0 })), bonds: [] };
+    const straight = solveExtendedHuckel(mol)!.energies;
+    const turned = solveExtendedHuckel(rotated)!.energies;
+    expect(turned.length).toBe(straight.length);
+    for (let i = 0; i < straight.length; i++) expect(Math.abs(turned[i] - straight[i])).toBeLessThan(1e-9);
+  });
+
+  it('the frame axes are orthonormal and right-handed', () => {
+    const frame = alignToPrincipalAxes(benzene).axes;
+    for (let i = 0; i < 3; i++) {
+      expect(Math.hypot(...frame[i])).toBeCloseTo(1, 12);
+      for (let j = i + 1; j < 3; j++) {
+        expect(frame[i][0] * frame[j][0] + frame[i][1] * frame[j][1] + frame[i][2] * frame[j][2]).toBeCloseTo(0, 12);
+      }
+    }
+    const [x, y, z] = frame;
+    expect(x[1] * y[2] - x[2] * y[1]).toBeCloseTo(z[0], 12);
+    expect(x[2] * y[0] - x[0] * y[2]).toBeCloseTo(z[1], 12);
+    expect(x[0] * y[1] - x[1] * y[0]).toBeCloseTo(z[2], 12);
   });
 });
 

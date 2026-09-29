@@ -17,14 +17,17 @@
 import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import type { BasisFunction } from '../chem/extended-huckel/assign-basis';
+import { frameDirectionToWorld, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
 import { createLobeMesh, orientLobe, piLobe } from './lobes';
 
 /** The textbook phase pair: the app's π blue against a warm contrast. */
 export const MO_PHASE_POSITIVE = 0x4488ff;
 export const MO_PHASE_NEGATIVE = 0xff6644;
 
-/** Contributions smaller than this fraction of the MO's largest are not drawn. */
-const SIGNIFICANT = 0.08;
+/** Contributions smaller than this fraction of the MO's largest are not
+ *  drawn — and the MO panel's composition line lists the same set, so the
+ *  numbers and the picture always agree. */
+export const MO_SIGNIFICANT = 0.08;
 
 export function renderMoOrbitals(
   group: THREE.Group,
@@ -32,6 +35,7 @@ export function renderMoOrbitals(
   basis: BasisFunction[],
   coefficients: number[][],
   moIndex: number,
+  frame: PrincipalFrame['axes'],
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
 ): void {
   const mo = coefficients[moIndex];
@@ -43,7 +47,7 @@ export function renderMoOrbitals(
   for (let i = 0; i < basis.length; i++) {
     const coefficient = mo[i];
     const weight = Math.abs(coefficient) / largest;
-    if (weight < SIGNIFICANT) continue;
+    if (weight < MO_SIGNIFICANT) continue;
     const orbital = basis[i];
     const atom = molecule.atoms[orbital.atomIndex];
     const origin: [number, number, number] = [atom.x, atom.y, atom.z];
@@ -66,10 +70,13 @@ export function renderMoOrbitals(
       continue;
     }
 
-    // p: the dumbbell along its own axis, the far half in the opposite phase
+    // p: the dumbbell along its own axis, the far half in the opposite phase.
+    // The basis axis is a coordinate axis of the CALCULATION frame, so it is
+    // rotated back into the molecule's own coordinates before it is drawn.
+    const axis = frameDirectionToWorld(frame, orbital.axis);
     const near = createLobeMesh(piLobe(), color, 0.75, preset, size);
     near.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
-    orientLobe(near, origin, orbital.axis);
+    orientLobe(near, origin, axis);
     group.add(near);
 
     const far = createLobeMesh(
@@ -80,7 +87,7 @@ export function renderMoOrbitals(
       size,
     );
     far.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
-    orientLobe(far, origin, [-orbital.axis[0], -orbital.axis[1], -orbital.axis[2]]);
+    orientLobe(far, origin, [-axis[0], -axis[1], -axis[2]]);
     group.add(far);
   }
 }

@@ -153,7 +153,7 @@ export function rebuildDisplay(ctx: SceneContext) {
   // question differently, so the MO takes the stage while it is selected.
   const mo = ctx.display.moIndex;
   if (mo !== null && ctx.ehResult) {
-    renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients, mo);
+    renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients, mo, ctx.ehResult.frame);
     ctx.moGroup.visible = true;
     ctx.orbitalGroup.visible = false;
   } else {
