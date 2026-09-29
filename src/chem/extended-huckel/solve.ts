@@ -21,6 +21,7 @@ import { solveGeneralized } from '../../utils/eigen';
 import { countValenceElectrons } from '../valence-electrons';
 import { alignToPrincipalAxes, type PrincipalFrame } from './align-principal-axes';
 import { assignBasis, type BasisFunction } from './assign-basis';
+import { canonicalizeDegenerateSets } from './canonicalize-degenerate';
 import { hamiltonianMatrix } from './hamiltonian';
 import { overlapMatrix } from './slater-overlap';
 
@@ -62,7 +63,10 @@ export function solveExtendedHuckel(molecule: Molecule): ExtendedHuckelResult | 
 
   // solveGeneralized returns eigenvectors as columns; the rest of the app
   // reads orbitals, so transpose to MO-major here, once.
-  const coefficients = solved.values.map((_, mo) => solved.vectors.map((row) => row[mo]));
+  const raw = solved.values.map((_, mo) => solved.vectors.map((row) => row[mo]));
+  // Degenerate sets are then rotated into their canonical (symmetry-adapted)
+  // combination and given a definite sign — see canonicalize-degenerate.ts.
+  const coefficients = canonicalizeDegenerateSets(basis, raw, solved.values, frame.atoms);
   return { basis, overlap, hamiltonian, energies: solved.values, coefficients, electronCount, frame: frame.axes };
 }
 

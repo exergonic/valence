@@ -23,6 +23,7 @@
  */
 import type { SceneContext } from '../render';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
+import { DEGENERATE_TOLERANCE_EV } from '../chem/extended-huckel/canonicalize-degenerate';
 import { MO_SIGNIFICANT } from '../render/mo-lobes';
 
 const PAD = { top: 16, bottom: 20, left: 44, right: 58 };
@@ -34,10 +35,9 @@ const ABOVE_OCCUPIED = 6;
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
 
-/** Two orbitals within this energy are drawn as one degenerate group (a
- *  symmetric molecule's pair splits by ~1e-4 eV in a 4-decimal geometry, so
- *  the tolerance is well above that and far below any chemical gap). */
-const DEGENERATE_TOLERANCE = 0.005;
+// The same tolerance the solver canonicalizes degenerate sets with, so the
+// panel groups exactly the orbitals that were treated as one set.
+const DEGENERATE_TOLERANCE = DEGENERATE_TOLERANCE_EV;
 
 export function setupMoPanel(ctx: SceneContext) {
   const panel = document.getElementById('mo-panel')!;
@@ -228,11 +228,12 @@ export function setupMoPanel(ctx: SceneContext) {
         + ' — click it again to hide';
       composition.textContent = describeComposition(result, selected);
       if (partners.length > 0) {
-        // Worth saying out loud: the solver returns *a* basis of a degenerate
-        // set, not *the* basis. Two programs will pick different mixtures, and
-        // comparing them one-to-one compares arbitrary representatives — the
-        // set, its energy and its symmetry are what is physical.
-        note.textContent = `Degenerate set of ${partners.length + 1}: any orthogonal combination of these orbitals is an equally valid description, so this one need not look like another program's MO of the same index.`;
+        // Worth saying out loud: a degenerate set is *a* subspace, and any
+        // orthogonal combination inside it is the same physics. The solver
+        // canonicalizes each set against x², y², z², which is what makes it
+        // the combination a textbook draws (and another program's, too) —
+        // but which member carries the nodes follows the frame's own axes.
+        note.textContent = `Degenerate set of ${partners.length + 1}: canonicalized against x², y², z², so these are the symmetry-adapted orbitals a textbook draws — which member carries the nodal plane follows the molecule's own frame.`;
         return;
       }
     } else {

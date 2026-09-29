@@ -26,6 +26,8 @@ import { assignBasis } from '../src/chem/extended-huckel/assign-basis';
 import { hamiltonianMatrix, WOLFSBERG_HELMHOLZ_K } from '../src/chem/extended-huckel/hamiltonian';
 import { solveExtendedHuckel, closedShellOccupations } from '../src/chem/extended-huckel/solve';
 import { alignToPrincipalAxes, frameDirectionToWorld } from '../src/chem/extended-huckel/align-principal-axes';
+import { canonicalizeDegenerateSets, DEGENERATE_TOLERANCE_EV } from '../src/chem/extended-huckel/canonicalize-degenerate';
+import { MO_SIGNIFICANT } from '../src/render/mo-lobes';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 
@@ -50,6 +52,39 @@ const moleculeOf = (atoms: Fixture['molecules'][number]['atoms']): Molecule => (
   atoms: atoms.map((a) => ({ ...a, charge: 0 })),
   bonds: [],
 });
+
+// The reporter's benzene (their local-pipeline export), the geometry that exposed
+// both the frame bug and the degenerate-set question.
+const reporterBenzene = parseMolBlock(`Valence export
+  converter
+
+ 12 12  0  0  0  0  0  0  0  0999 V2000
+    2.2860    0.7785    0.0662 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3086    2.1651   -0.0831 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1309    2.8550   -0.3703 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0695    2.1582   -0.5084 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0924    0.7718   -0.3580 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0854    0.0819   -0.0707 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.2037    0.2410    0.2893 H   0  0  0  0  0  0  0  0  0  0  0  0
+    3.2439    2.7080    0.0243 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1486    3.9354   -0.4866 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.9870    2.6956   -0.7331 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.0278    0.2290   -0.4648 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0675   -0.9984    0.0464 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  2  0  0  0  0
+  3  4  1  0  0  0  0
+  4  5  2  0  0  0  0
+  5  6  1  0  0  0  0
+  6  1  2  0  0  0  0
+  1  7  1  0  0  0  0
+  2  8  1  0  0  0  0
+  3  9  1  0  0  0  0
+  4 10  1  0  0  0  0
+  5 11  1  0  0  0  0
+  6 12  1  0  0  0  0
+  M  END
+`);
 
 describe('slater-overlap — the radial integrals', () => {
   it('1s–1s with equal exponents is the textbook e^-ρ(1 + ρ + ρ²/3)', () => {
@@ -136,50 +171,23 @@ describe('the calculation frame', () => {
   // lands in an arbitrary plane) showed skewed lobes and px/py mixing in a
   // π orbital — 6 of the 12 drawn AOs were not pz. The solver now runs in
   // the molecule's principal-axis frame.
-  const benzene = parseMolBlock(`Valence export
-  converter
-
- 12 12  0  0  0  0  0  0  0  0999 V2000
-    2.2860    0.7785    0.0662 C   0  0  0  0  0  0  0  0  0  0  0  0
-    2.3086    2.1651   -0.0831 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.1309    2.8550   -0.3703 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.0695    2.1582   -0.5084 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.0924    0.7718   -0.3580 C   0  0  0  0  0  0  0  0  0  0  0  0
-    1.0854    0.0819   -0.0707 C   0  0  0  0  0  0  0  0  0  0  0  0
-    3.2037    0.2410    0.2893 H   0  0  0  0  0  0  0  0  0  0  0  0
-    3.2439    2.7080    0.0243 H   0  0  0  0  0  0  0  0  0  0  0  0
-    1.1486    3.9354   -0.4866 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.9870    2.6956   -0.7331 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.0278    0.2290   -0.4648 H   0  0  0  0  0  0  0  0  0  0  0  0
-    1.0675   -0.9984    0.0464 H   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-  2  3  2  0  0  0  0
-  3  4  1  0  0  0  0
-  4  5  2  0  0  0  0
-  5  6  1  0  0  0  0
-  6  1  2  0  0  0  0
-  1  7  1  0  0  0  0
-  2  8  1  0  0  0  0
-  3  9  1  0  0  0  0
-  4 10  1  0  0  0  0
-  5 11  1  0  0  0  0
-  6 12  1  0  0  0  0
-M  END
-`);
 
   it('the reported geometry gives a clean pz π HOMO, not a px/py mixture', () => {
-    const result = solveExtendedHuckel(benzene)!;
+    const result = solveExtendedHuckel(reporterBenzene)!;
     const mo = result.coefficients[14];
     const largest = Math.max(...mo.map(Math.abs));
     const drawn = result.basis.filter((_, i) => Math.abs(mo[i]) / largest >= 0.08);
-    expect(drawn.length).toBe(6);
+    // every drawn AO is pz — no px/py mixing. The count is 4 or 6: the pair is
+    // canonicalized, so one member carries the two nodal atoms (4) and the
+    // other the two nodal bonds (6).
+    expect([4, 6]).toContain(drawn.length);
     for (const orbital of drawn) expect(orbital.label.endsWith('2pz')).toBe(true);
   });
 
   it('the drawn pz lobes are perpendicular to the ring plane', () => {
-    const result = solveExtendedHuckel(benzene)!;
+    const result = solveExtendedHuckel(reporterBenzene)!;
     // the ring normal from three ring carbons
-    const [p0, p1, p2] = [0, 1, 2].map((i) => benzene.atoms[i]);
+    const [p0, p1, p2] = [0, 1, 2].map((i) => reporterBenzene.atoms[i]);
     const v1 = [p1.x - p0.x, p1.y - p0.y, p1.z - p0.z];
     const v2 = [p2.x - p0.x, p2.y - p0.y, p2.z - p0.z];
     const n = [v1[1] * v2[2] - v1[2] * v2[1], v1[2] * v2[0] - v1[0] * v2[2], v1[0] * v2[1] - v1[1] * v2[0]];
@@ -206,7 +214,7 @@ M  END
   });
 
   it('the frame axes are orthonormal and right-handed', () => {
-    const frame = alignToPrincipalAxes(benzene).axes;
+    const frame = alignToPrincipalAxes(reporterBenzene).axes;
     for (let i = 0; i < 3; i++) {
       expect(Math.hypot(...frame[i])).toBeCloseTo(1, 12);
       for (let j = i + 1; j < 3; j++) {
@@ -217,6 +225,107 @@ M  END
     expect(x[1] * y[2] - x[2] * y[1]).toBeCloseTo(z[0], 12);
     expect(x[2] * y[0] - x[0] * y[2]).toBeCloseTo(z[1], 12);
     expect(x[0] * y[1] - x[1] * y[0]).toBeCloseTo(z[2], 12);
+  });
+});
+
+describe('canonical orbitals for degenerate sets', () => {
+  // The solver returns AN orthonormal basis of a degenerate subspace; any
+  // orthogonal combination is the same physics. Two programs therefore pick
+  // different mixtures, and comparing them one-to-one compares arbitrary
+  // representatives — reported 2026-09-29 against WebMO, whose symmetrizer
+  // hands it a symmetry-exact geometry and symmetry-adapted orbitals. These
+  // orbitals are canonicalized by diagonalizing x², then y², then z² inside
+  // each set, which is what makes them look like the textbook ones.
+
+  it('an isolated atom gives pure px, py and pz', () => {
+    const atom = solveExtendedHuckel(parseMolBlock(`Valence export
+  converter
+
+  1  0  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+M  END
+`))!;
+    // the three p orbitals are one degenerate set: each must come out as a
+    // single AO, one per axis
+    const axes = ['2px', '2py', '2pz'];
+    const seen: string[] = [];
+    for (let mo = 0; mo < atom.energies.length; mo++) {
+      const coefficients = atom.coefficients[mo];
+      const largest = Math.max(...coefficients.map(Math.abs));
+      if (largest < 0.5) continue; // the 2s orbital
+      const significant = atom.basis
+        .map((b, i) => ({ kind: b.label.split(' ').pop()!, c: coefficients[i] }))
+        .filter((e) => Math.abs(e.c) / largest > 0.5);
+      expect(significant.length).toBe(1);
+      if (significant[0].kind === '2s') continue; // the 2s orbital is a singlet, not part of the p set
+      seen.push(significant[0].kind);
+    }
+    expect(seen.sort()).toEqual(axes);
+  });
+
+  it('the canonical e1g pair of benzene is the textbook pair: one member carries the nodal atoms', () => {
+    const result = solveExtendedHuckel(reporterBenzene)!;
+    // the pair is MO 14/15 in this ladder; the in-plane frame decides which
+    // member has its nodes through atoms and which through bonds, so assert
+    // the shape of the pair rather than which one is which
+    const pz = result.basis.map((b, i) => (b.label.endsWith('2pz') ? i : -1)).filter((i) => i >= 0);
+    // the drawing's own significance threshold: the reporter's ring is a few
+    // 1e-4 Å off perfect symmetry, so the "nodal" atoms carry 0.056 rather
+    // than exactly 0 — invisible as lobes, visible as a number
+    const counts = [13, 14].map((mo) => {
+      const largest = Math.max(...result.coefficients[mo].map(Math.abs));
+      return pz.filter((i) => Math.abs(result.coefficients[mo][i]) / largest >= MO_SIGNIFICANT).length;
+    });
+    expect(counts.filter((c) => c === 4).length).toBe(1); // nodes through two atoms
+    expect(counts.filter((c) => c === 6).length).toBe(1); // nodes through two bonds
+  });
+
+  it('canonicalizing twice changes nothing', () => {
+    const result = solveExtendedHuckel(reporterBenzene)!;
+    const framed = alignToPrincipalAxes(reporterBenzene).atoms;
+    const again = canonicalizeDegenerateSets(result.basis, result.coefficients, result.energies, framed);
+    for (let mo = 0; mo < again.length; mo++) {
+      for (let ao = 0; ao < again[mo].length; ao++) {
+        expect(again[mo][ao]).toBeCloseTo(result.coefficients[mo][ao], 10);
+      }
+    }
+  });
+
+  it('the rotation stays inside the subspace: the projector is unchanged', () => {
+    // a hand-made degenerate pair, rotated by an arbitrary angle, must
+    // canonicalize back to the same two-dimensional space
+    const basis = [
+      { atomIndex: 0, angular: 'p' as const, axis: [1, 0, 0] as [number, number, number], n: 2, zeta: 1, hii: -1, label: 'A 2px' },
+      { atomIndex: 1, angular: 'p' as const, axis: [1, 0, 0] as [number, number, number], n: 2, zeta: 1, hii: -1, label: 'B 2px' },
+      { atomIndex: 2, angular: 'p' as const, axis: [1, 0, 0] as [number, number, number], n: 2, zeta: 1, hii: -1, label: 'C 2px' },
+      { atomIndex: 3, angular: 'p' as const, axis: [1, 0, 0] as [number, number, number], n: 2, zeta: 1, hii: -1, label: 'D 2px' },
+    ];
+    const atoms = [
+      { element: 'C', x: 1, y: 0, z: 0, charge: 0 },
+      { element: 'C', x: 0, y: 1, z: 0, charge: 0 },
+      { element: 'C', x: -1, y: 0, z: 0, charge: 0 },
+      { element: 'C', x: 0, y: -1, z: 0, charge: 0 },
+    ];
+    const theta = 0.4;
+    const a = [1, 0, 0, 0];
+    const b = [0, 1, 0, 0];
+    const pair = [
+      a.map((v, i) => v * Math.cos(theta) + b[i] * Math.sin(theta)),
+      a.map((v, i) => -v * Math.sin(theta) + b[i] * Math.cos(theta)),
+    ];
+    const canonical = canonicalizeDegenerateSets(basis, pair, [1, 1], atoms);
+    // the projector onto the space must be identical before and after
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        const before = pair[0][i] * pair[0][j] + pair[1][i] * pair[1][j];
+        const after = canonical[0][i] * canonical[0][j] + canonical[1][i] * canonical[1][j];
+        expect(after).toBeCloseTo(before, 12);
+      }
+    }
+  });
+
+  it('the tolerance the panel groups levels with is the solver\'s own', () => {
+    expect(DEGENERATE_TOLERANCE_EV).toBe(0.005);
   });
 });
 
