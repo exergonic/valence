@@ -1,0 +1,19 @@
+ethenech
+geometry
+6
+1 C -0.667500 0.000000 0.000000
+2 C 0.667500 0.000000 0.000000
+3 H -1.224400 0.939500 0.000000
+4 H -1.224400 -0.939500 0.000000
+5 H 1.224400 0.939500 0.000000
+6 H 1.224400 -0.939500 0.000000
+electrons
+12
+molecular
+nonweighted
+printing
+overlap
+hamil
+wave functions
+orbital mapping
+end_print

@@ -1,0 +1,15 @@
+nitrogenn
+geometry
+2
+1 N -0.550000 0.000000 0.000000
+2 N 0.550000 0.000000 0.000000
+electrons
+10
+molecular
+nonweighted
+printing
+overlap
+hamil
+wave functions
+orbital mapping
+end_print

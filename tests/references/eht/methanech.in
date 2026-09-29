@@ -1,0 +1,18 @@
+methanech
+geometry
+5
+1 C 0.000000 0.000000 0.000000
+2 H 0.000000 0.000000 1.089000
+3 H 1.026700 0.000000 -0.363000
+4 H -0.513400 0.889000 -0.363000
+5 H -0.513400 -0.889000 -0.363000
+electrons
+8
+molecular
+nonweighted
+printing
+overlap
+hamil
+wave functions
+orbital mapping
+end_print
