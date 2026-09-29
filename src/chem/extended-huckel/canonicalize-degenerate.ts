@@ -30,9 +30,21 @@ import type { Molecule } from '../../mol-parser';
 import { jacobiSymmetric } from '../../utils/eigen';
 import type { BasisFunction } from './assign-basis';
 
-/** Orbitals within this energy are one degenerate set. A symmetric molecule's
- *  pair splits by ~1e-4 eV in a 4-decimal geometry, so this is well above the
- *  numerical noise and far below any chemical gap. */
+/**
+ * The solver only rotates a set whose members are degenerate *exactly* — this
+ * tight. Rotating two states with different energies would replace two
+ * eigenstates with a mixture, which is a wrong picture even though the
+ * energies and the density are untouched. Measured: on a geometry the
+ * symmetrizer has snapped, a symmetry-required degeneracy is exact to ~1e-9
+ * eV, while accidental near-degeneracies between different irreps sit at
+ * 1e-3 eV and up (pyrrole has one at 4.3 meV) — so this separates them by
+ * five orders of magnitude.
+ */
+export const CANONICAL_TOLERANCE_EV = 1e-5;
+
+/** The tolerance the level diagram *groups* levels with, so two levels that
+ *  look degenerate in a picture are labelled as such. A display choice, not a
+ *  statement about the orbitals: the solver's own is CANONICAL_TOLERANCE_EV. */
 export const DEGENERATE_TOLERANCE_EV = 0.005;
 
 /** Eigenvalues of the second-moment operator this close are still degenerate,
@@ -94,7 +106,7 @@ export function canonicalizeDegenerateSets(
   let i = 0;
   while (i < energies.length) {
     let j = i + 1;
-    while (j < energies.length && Math.abs(energies[j] - energies[i]) < DEGENERATE_TOLERANCE_EV) j++;
+    while (j < energies.length && Math.abs(energies[j] - energies[i]) < CANONICAL_TOLERANCE_EV) j++;
     if (j - i > 1) refine(i, j, 0);
     i = j;
   }

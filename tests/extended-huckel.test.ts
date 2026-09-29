@@ -26,7 +26,12 @@ import { assignBasis } from '../src/chem/extended-huckel/assign-basis';
 import { hamiltonianMatrix, WOLFSBERG_HELMHOLZ_K } from '../src/chem/extended-huckel/hamiltonian';
 import { solveExtendedHuckel, closedShellOccupations } from '../src/chem/extended-huckel/solve';
 import { alignToPrincipalAxes, frameDirectionToWorld } from '../src/chem/extended-huckel/align-principal-axes';
-import { canonicalizeDegenerateSets, DEGENERATE_TOLERANCE_EV } from '../src/chem/extended-huckel/canonicalize-degenerate';
+import {
+  canonicalizeDegenerateSets,
+  CANONICAL_TOLERANCE_EV,
+  DEGENERATE_TOLERANCE_EV,
+} from '../src/chem/extended-huckel/canonicalize-degenerate';
+import { symmetrizeMolecule } from '../src/geometry/symmetrize';
 import { MO_SIGNIFICANT } from '../src/render/mo-lobes';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
@@ -264,7 +269,10 @@ M  END
   });
 
   it('the canonical e1g pair of benzene is the textbook pair: one member carries the nodal atoms', () => {
-    const result = solveExtendedHuckel(reporterBenzene)!;
+    // the app snaps the geometry to its point group before solving, which is
+    // what makes the pair exactly degenerate (2.3 meV before, 1e-9 meV after)
+    const snapped = symmetrizeMolecule(reporterBenzene);
+    const result = solveExtendedHuckel({ atoms: snapped.atoms, bonds: reporterBenzene.bonds })!;
     // the pair is MO 14/15 in this ladder; the in-plane frame decides which
     // member has its nodes through atoms and which through bonds, so assert
     // the shape of the pair rather than which one is which
@@ -324,8 +332,14 @@ M  END
     }
   });
 
-  it('the tolerance the panel groups levels with is the solver\'s own', () => {
+  it('the solver rotates only exactly-degenerate sets; the panel groups loosely', () => {
+    // rotating states whose energies differ replaces eigenstates with a
+    // mixture — right energies, wrong orbital. The solver's tolerance is
+    // therefore tight, and the diagram's grouping is a separate, display-only
+    // choice.
+    expect(CANONICAL_TOLERANCE_EV).toBe(1e-5);
     expect(DEGENERATE_TOLERANCE_EV).toBe(0.005);
+    expect(CANONICAL_TOLERANCE_EV).toBeLessThan(DEGENERATE_TOLERANCE_EV);
   });
 });
 

@@ -6,6 +6,7 @@ import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
+import { symmetrizeMolecule } from '../geometry/symmetrize';
 import type { PubChemInfo } from '../geometry/resolve3d';
 import { computeDipole, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE } from '../chem/charge-model/dipole';
 import type { DipoleResult } from '../chem/charge-model/dipole';
@@ -45,6 +46,28 @@ function hideRenderError() {
 // goes to the panel's Info log (bottom of the right panel) and the header
 // keeps only the short structural warnings — the stereo notes from the
 // pipeline.
+/**
+ * Snap the resolved geometry to the point group it nearly has — the last step
+ * of the pipeline, after the source (PubChem, CIR, or our own MMFF94) has had
+ * its say. Every source leaves a symmetric molecule a little asymmetric
+ * (measured: 0.2 mÅ in the stiff coordinates, up to 20 mÅ in the soft ones),
+ * which reads as a distorted molecule and splits degenerate orbitals. The
+ * snap is reported, never silent, and can be turned off.
+ */
+function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: string[] } {
+  const enabled = (document.getElementById('ctrl-symmetrize') as HTMLInputElement | null)?.checked ?? true;
+  if (!enabled) return { molecule, info: [] };
+  const snapped = symmetrizeMolecule(molecule);
+  if (snapped.order <= 1) return { molecule, info: [] };
+  return {
+    molecule: { atoms: snapped.atoms, bonds: molecule.bonds },
+    info: [
+      `Symmetry: ${snapped.symbol} — the geometry was snapped to the point group it nearly has `
+      + `(atoms moved at most ${(snapped.maxShift * 1000).toFixed(2)} mÅ). Turn off "Snap to point group" to see it raw.`,
+    ],
+  };
+}
+
 function composeNotes(warnings: string[], molecule: Molecule, dipole: DipoleResult | null): {
   warnings: string[];
   info: string[];
@@ -199,9 +222,12 @@ export function mountJsmePanel(ctx: SceneContext) {
         // fetch3D validates the returned structure against the sketch and
         // returns the parsed molecule — no re-parse here.
         molecule = result.molecule;
+        const snapped = snapToSymmetry(molecule);
+        molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         const dipole = computeDipole(molecule);
         const notes = composeNotes(result.info.warnings ?? [], molecule, dipole);
+        notes.info.push(...snapped.info);
         updateMoleculeInfo({
           ...result.info,
           formula,
@@ -226,9 +252,12 @@ export function mountJsmePanel(ctx: SceneContext) {
           return;
         }
         molecule = local.molecule;
+        const snapped = snapToSymmetry(molecule);
+        molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         const dipole = computeDipole(molecule);
         const notes = composeNotes(local.warnings, molecule, dipole);
+        notes.info.push(...snapped.info);
         updateMoleculeInfo({
           source: 'local',
           formula,
