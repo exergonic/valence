@@ -7,7 +7,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import { getLonePairDirections } from '../chem/vsepr/orient-lone-pairs';
 import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
 
-export function renderOrbitals(
+export function renderHybridOrbitals(
   group: THREE.Group,
   molecule: Molecule,
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',

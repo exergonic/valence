@@ -37,10 +37,14 @@ export function setupControls(ctx: SceneContext) {
     ctx.moleculeGroup.visible = molToggle.checked;
   });
 
-  // Show Orbitals
+  // Show Orbitals — the checkbox records the intent; visibility is resolved
+  // in rebuildDisplay, because a selected MO takes the stage over the
+  // VSEPR/hybrid lobes (two answers to the same question).
   const orbToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-orb')!;
+  ctx.display.showOrbitals = orbToggle.checked;
   orbToggle.addEventListener('change', () => {
-    ctx.orbitalGroup.visible = orbToggle.checked;
+    ctx.display.showOrbitals = orbToggle.checked;
+    rerender();
   });
 
   // Dipole arrow — same visibility pattern as the orbital toggle: the arrow

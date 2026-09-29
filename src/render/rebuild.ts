@@ -2,17 +2,19 @@ import * as THREE from 'three';
 import type { SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
-import { renderOrbitals } from './orbitals';
+import { renderHybridOrbitals } from './hybrid-orbitals';
 import { renderLabels, renderChargeLabels, renderHybridizationLabels } from './labels';
 import { renderOrbitalLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
 import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
+import { renderMoOrbitals } from './mo-lobes';
 import { computeEspSurface } from '../chem/charge-model/esp';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/vsepr/assign-orbitals';
 import { computeDipole } from '../chem/charge-model/dipole';
+import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
 import { resolveCharges } from '../chem/charge-model/bci-charges';
 import { labelPaletteFor } from './label-colors';
 
@@ -52,6 +54,7 @@ export function rebuildDisplay(ctx: SceneContext) {
   clearGroup(ctx.piSystemGroup);
   clearGroup(ctx.dipoleGroup);
   clearGroup(ctx.espGroup);
+  clearGroup(ctx.moGroup);
 
   const { atoms, bonds } = ctx.currentMolecule;
   const c = ctx.display.colors;
@@ -66,7 +69,7 @@ export function rebuildDisplay(ctx: SceneContext) {
   if (!ctx.display.spaceFilling) {
     renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
   }
-  renderOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.atomOrbitals);
+  renderHybridOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.atomOrbitals);
 
   // Pedagogical view presets
   const preset = ctx.display.viewPreset;
@@ -144,6 +147,19 @@ export function rebuildDisplay(ctx: SceneContext) {
   } else {
     ctx.espGroup.visible = false;
   }
+
+  // Extended-Hückel MO: the selected level's lobes, from the cached result.
+  // One picture at a time — an MO and the VSEPR hybrid lobes answer the same
+  // question differently, so the MO takes the stage while it is selected.
+  const mo = ctx.display.moIndex;
+  if (mo !== null && ctx.ehResult) {
+    renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients, mo);
+    ctx.moGroup.visible = true;
+    ctx.orbitalGroup.visible = false;
+  } else {
+    ctx.moGroup.visible = false;
+    ctx.orbitalGroup.visible = ctx.display.showOrbitals;
+  }
 }
 
 // Show only orbitals matching the active preset.
@@ -167,7 +183,7 @@ function filterOrbitalsByPreset(group: THREE.Group, preset: string) {
 
 // Full build: rebuildDisplay plus frame the camera on the new molecule.
 export function buildScene(ctx: SceneContext) {
-  // Cache the per-molecule orbital assignment here so renderOrbitals can
+  // Cache the per-molecule orbital assignment here so renderHybridOrbitals can
   // read it instead of recomputing on every display-setting change.
   ctx.atomOrbitals = ctx.currentMolecule ? assignOrbitals(ctx.currentMolecule) : null;
   // Same for the charge-model dipole (BCI charges are geometry-independent:
@@ -177,6 +193,11 @@ export function buildScene(ctx: SceneContext) {
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
+  // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is
+  // computed once here and cached; null when an element is outside the
+  // parameter table. A new molecule also clears any selected MO.
+  ctx.ehResult = ctx.currentMolecule ? solveExtendedHuckel(ctx.currentMolecule) : null;
+  ctx.display.moIndex = null;
   rebuildDisplay(ctx);
 
   const center = new THREE.Vector3();

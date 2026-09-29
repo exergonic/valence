@@ -438,16 +438,18 @@ html, body {
 
 .tab-btn {
   flex: 1;
-  padding: 8px 4px;
+  min-width: 0;
+  padding: 8px 2px;
   border: none;
   background: transparent;
   color: #888;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.12s;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
 }
 
 .tab-btn:hover {
@@ -1132,3 +1134,89 @@ html, body {
 }
 
 #copy-toast.hidden { display: none; }
+
+/* ── MO diagram (the extended-Hückel ladder) ── */
+
+#mo-diagram {
+  margin: 6px 0 4px;
+}
+
+.mo-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.mo-axis {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1;
+}
+
+.mo-tick {
+  stroke: rgba(255, 255, 255, 0.18);
+  stroke-width: 1;
+}
+
+.mo-tick-label {
+  fill: #888;
+  font-size: 9px;
+  text-anchor: end;
+}
+
+.mo-level .mo-bar {
+  stroke: #7fa8d8;
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.mo-level.occupied .mo-bar {
+  stroke: #cfd8e6;
+  stroke-width: 3;
+}
+
+.mo-level .mo-hit {
+  stroke: transparent;
+  stroke-width: 10;
+  cursor: pointer;
+}
+
+.mo-level:hover .mo-bar {
+  stroke: #ffffff;
+}
+
+.mo-level.selected .mo-bar {
+  stroke: #4488ff;
+  stroke-width: 4;
+}
+
+.mo-level.clipped .mo-bar {
+  stroke-dasharray: 3 3;
+  stroke-width: 1.5;
+}
+
+.mo-arrows {
+  fill: #cfd8e6;
+  font-size: 10px;
+}
+
+.mo-edge {
+  fill: #777;
+  font-size: 9px;
+  text-anchor: end;
+}
+
+.mo-tag {
+  fill: #4488ff;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.mo-readout {
+  font-size: 10px;
+  color: #bbb;
+  margin-bottom: 4px;
+  min-height: 13px;
+}
+
+#mo-note:empty { display: none; }

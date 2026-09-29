@@ -5,6 +5,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
+import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
@@ -29,6 +30,13 @@ export interface DisplaySettings {
   spaceFilling: boolean;
   autoRotate: boolean;
   highlightPiSystems: boolean;
+  /** Which extended-Hückel MO is shown over the molecule (null = none).
+   *  Selecting one is what "click a level" does in the MO tab. */
+  moIndex: number | null;
+  /** VSEPR/hybrid orbitals visible — the checkbox in the Build tab. The MO
+   *  picture takes precedence: an MO and the hybrid lobes are two different
+   *  answers to the same question, so they never draw together. */
+  showOrbitals: boolean;
   /** Charge-model ESP surface (translucent vdW spheres colored by V). */
   showEsp: boolean;
   /** ESP surface translucency — 0.05..0.95 (1 − opacity reads as see-through). */
@@ -47,6 +55,8 @@ export interface SceneContext {
   piSystemGroup: THREE.Group;
   dipoleGroup: THREE.Group;
   espGroup: THREE.Group;
+  /** Extended-Hückel MO lobes for the selected level (see display.moIndex). */
+  moGroup: THREE.Group;
   atomRig: { key: THREE.DirectionalLight; fill: THREE.DirectionalLight; rim: THREE.DirectionalLight };
   display: DisplaySettings;
   currentMolecule?: Molecule;
@@ -60,6 +70,10 @@ export interface SceneContext {
   /** Cached fused vdW ESP surface for the current molecule (computed lazily
    *  on the first ESP render; null until then or for an untypeable molecule). */
   espSurface: EspSurfaceData | null;
+  /** Cached extended-Hückel result for the current molecule (computed once in
+   *  buildScene, like the dipole); null when an element is outside the
+   *  parameter table. */
+  ehResult: ExtendedHuckelResult | null;
   rerender: () => void;
   teardown: () => void;
   autoRotate: boolean;
@@ -130,6 +144,10 @@ export function initScene(container: HTMLElement): SceneContext {
   // Off by default — a dipole is a thing you ask to see, not the default view.
   dipoleGroup.visible = false;
   scene.add(dipoleGroup);
+  const moGroup = new THREE.Group();
+  // Nothing to show until a level is picked in the MO tab.
+  moGroup.visible = false;
+  scene.add(moGroup);
   const espGroup = new THREE.Group();
   // Off by default, like the dipole — the ESP surface is a thing you ask to see.
   espGroup.visible = false;
@@ -147,6 +165,7 @@ export function initScene(container: HTMLElement): SceneContext {
       piSystemGroup.rotation.y += 0.005;
       dipoleGroup.rotation.y += 0.005;
       espGroup.rotation.y += 0.005;
+      moGroup.rotation.y += 0.005;
     }
     controls.update();
     // Forward-push the atom labels against the (moved) camera. The dipole
@@ -171,7 +190,7 @@ export function initScene(container: HTMLElement): SceneContext {
   };
 
   return {
-    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, piSystemGroup, dipoleGroup, espGroup, atomRig,
+    scene, camera, renderer, controls, moleculeGroup, orbitalGroup, labelGroup, orbitalLabelGroup, piSystemGroup, dipoleGroup, espGroup, moGroup, atomRig,
     display: {
       atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', atomStyle: 'glossy', bgColor: '#ffffff',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
@@ -179,6 +198,8 @@ export function initScene(container: HTMLElement): SceneContext {
       spaceFilling: false,
       autoRotate: false,
       highlightPiSystems: false,
+      moIndex: null,
+      showOrbitals: true,
       showEsp: false,
       espOpacity: 0.5,
     },
@@ -186,6 +207,7 @@ export function initScene(container: HTMLElement): SceneContext {
     dipole: null,
     charges: null,
     espSurface: null,
+    ehResult: null,
     rerender: () => {},
     teardown,
     get autoRotate() { return autoRotate; },
