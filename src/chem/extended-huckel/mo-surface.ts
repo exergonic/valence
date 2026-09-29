@@ -153,13 +153,21 @@ export function evaluatePrepared(
     const dx = px - prepared[i];
     const dy = py - prepared[i + 1];
     const dz = pz - prepared[i + 2];
-    const r2 = dx * dx + dy * dy + dz * dz;
-    if (r2 < 1e-12) continue;
-    const r = Math.sqrt(r2);
-
     const zeta = prepared[i + 3];
     const scale = prepared[i + 4];
     const n = prepared[i + 8];
+    const isS = prepared[i + 9] === 1;
+    const r2 = dx * dx + dy * dy + dz * dz;
+    if (r2 < 1e-12) {
+      // Exactly at the nucleus. A 1s is *finite* there — it peaks there — and
+      // treating it as zero (as a plain `continue` did) puts a spurious little
+      // sphere at every hydrogen: the field dips below the isovalue at a point
+      // the surface should enclose. Higher s orbitals and every p vanish at
+      // the point, and their gradients are bounded, so they are left out.
+      if (n === 1 && isS) value += scale * INV_SQRT_FOUR_PI;
+      continue;
+    }
+    const r = Math.sqrt(r2);
     const rb = r * BOHR_PER_ANGSTROM;
     const decay = Math.exp(-zeta * rb);
     // radial part r^(n−1) e^(−ζr) and its derivative — n is 1 or 2 in this
@@ -175,7 +183,7 @@ export function evaluatePrepared(
     let gax = 0;
     let gay = 0;
     let gaz = 0;
-    if (prepared[i + 9] === 1) {
+    if (isS) {
       angular = INV_SQRT_FOUR_PI;
     } else {
       const ax = prepared[i + 5];
@@ -364,22 +372,26 @@ export function computeMoSurface(
     const gy = abz * acx - abx * acz;
     const gz = abx * acy - aby * acx;
     gradientAt((px[a] + px[b] + px[c]) / 3, (py[a] + py[b] + py[c]) / 3, (pz[a] + pz[b] + pz[c]) / 3, midGradient);
-    // The outward direction of the |ψ| = c surface is sign(ψ)·∇ψ, not ∇ψ:
-    // comparing against ∇ψ alone winds every triangle of the NEGATIVE sheet
-    // backwards, and a FrontSide pass then culls the whole sheet away — which
-    // is what "the surface is clipping" was. (It was invisible while the
-    // default style drew the surface opaque and DoubleSide.) All three
+    // The outward direction of the |ψ| = c surface is MINUS the gradient of
+    // |ψ|: a gradient points toward increasing values, and |ψ| increases
+    // inward. ∇|ψ| = sign(ψ)·∇ψ, so the outward normal is −sign(ψ)·∇ψ. Getting
+    // this backwards — as both this and the vertex normals did — winds the
+    // whole mesh inside out: a FrontSide pass then draws nothing but the
+    // silhouette, and the far-sheet depth pass hides even that. All three
     // crossings of one triangle lie on one sheet, so one sign covers it.
     const sheet = pSign[a];
-    const swap = (gx * midGradient[0] + gy * midGradient[1] + gz * midGradient[2]) * sheet < 0;
+    const swap = (gx * midGradient[0] + gy * midGradient[1] + gz * midGradient[2]) * sheet > 0;
     const order = swap ? [a, c, b] : [a, b, c];
     for (const v of order) {
       positions.push(px[v], py[v], pz[v]);
       gradientAt(px[v], py[v], pz[v], geometric);
       const length = Math.hypot(geometric[0], geometric[1], geometric[2]) || 1;
-      const sign = pSign[v];
-      normals.push((sign * geometric[0]) / length, (sign * geometric[1]) / length, (sign * geometric[2]) / length);
-      phases.push(sign);
+      // outward = −sign(ψ)·∇ψ, the same reference the winding uses; the phase
+      // itself is the plain sign of ψ (these are not the same thing, and
+      // reusing one for both inverts the colours)
+      const outward = -pSign[v];
+      normals.push((outward * geometric[0]) / length, (outward * geometric[1]) / length, (outward * geometric[2]) / length);
+      phases.push(pSign[v]);
     }
   }
 

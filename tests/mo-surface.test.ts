@@ -187,6 +187,54 @@ describe('the MO isosurface', () => {
     }
   });
 
+  it('winds the surface outward, judged against a shape whose outside is known', () => {
+    // A single 1s orbital's |ψ| = c surface is a sphere centred on the nucleus,
+    // so "outward" here needs no reference to the field's own gradient. That is
+    // the whole point: the winding and the vertex normals are both derived from
+    // ∇ψ, so a test comparing them to each other is tautological about the
+    // global sign — and both were inverted. The outward direction is
+    // −∇|ψ| = −sign(ψ)·∇ψ (a gradient points toward increasing values, and |ψ|
+    // increases inward), so getting it backwards winds the mesh inside out and
+    // a FrontSide pass draws nothing but the silhouette.
+    const molecule: Molecule = { atoms: [{ element: 'H', x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
+    const basis: BasisFunction[] = [{
+      atomIndex: 0, angular: 's', axis: [0, 0, 0], n: 1, zeta: 1, hii: -13.6, label: 'H 1s',
+    }];
+
+    for (const coefficient of [1, -1]) {
+      const surface = computeMoSurface(molecule, basis, [coefficient]);
+      expect(surface.vertexCount).toBeGreaterThan(0);
+      // every vertex sits on a sphere of one radius
+      let minRadius = Infinity;
+      let maxRadius = 0;
+      for (let i = 0; i < surface.vertexCount; i++) {
+        const r = Math.hypot(surface.positions[i * 3], surface.positions[i * 3 + 1], surface.positions[i * 3 + 2]);
+        minRadius = Math.min(minRadius, r);
+        maxRadius = Math.max(maxRadius, r);
+      }
+      // The vertices sit on chords of a curved field, so a marching-tetrahedra
+      // surface is on the sphere to the interpolation error (~0.005 Å), not to
+      // machine precision. The bound is loose enough for that and far tighter
+      // than the spurious nucleus blob it is there to catch (0.94 Å).
+      expect(maxRadius - minRadius).toBeLessThan(0.02);
+
+      for (let t = 0; t < surface.vertexCount; t += 3) {
+        const at = (v: number, c: number) => surface.positions[(t + v) * 3 + c];
+        const ux = at(1, 0) - at(0, 0), uy = at(1, 1) - at(0, 1), uz = at(1, 2) - at(0, 2);
+        const vx = at(2, 0) - at(0, 0), vy = at(2, 1) - at(0, 1), vz = at(2, 2) - at(0, 2);
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+        const cx = (at(0, 0) + at(1, 0) + at(2, 0)) / 3;
+        const cy = (at(0, 1) + at(1, 1) + at(2, 1)) / 3;
+        const cz = (at(0, 2) + at(1, 2) + at(2, 2)) / 3;
+        // the geometric normal must point away from the nucleus
+        expect(nx * cx + ny * cy + nz * cz).toBeGreaterThan(0);
+        // and so must the shading normal
+        expect(surface.normals[t * 3] * at(0, 0) + surface.normals[t * 3 + 1] * at(0, 1) + surface.normals[t * 3 + 2] * at(0, 2)).toBeGreaterThan(0);
+      }
+      expect(surface.phases[0]).toBe(coefficient > 0 ? 1 : -1);
+    }
+  });
+
   it('returns nothing for a coefficient set that is all zero', () => {
     const molecule = { atoms: atom(), bonds: [] };
     const surface = computeMoSurface(molecule, [s1(1)], [0]);
