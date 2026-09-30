@@ -63,6 +63,15 @@ const MAX_EVALUATIONS = 4_000_000;
  */
 export const MO_SURFACE_ISOVALUE = 0.04;
 
+/**
+ * The localized picture's own default. It sits higher than the MO default
+ * because a localized orbital is concentrated on one or two atoms and so is
+ * drawn oversized at the MO level; and lower than a single bond would like,
+ * because a level that shrinks a σ bond nicely also strips the outer carbons
+ * off a delocalized ring orbital. NOTES.md has the measurements behind both.
+ */
+export const LOCALIZED_ISOVALUE = 0.1;
+
 /** The levels the panel offers. */
 export const MO_SURFACE_ISOVALUES = [0.02, 0.03, 0.04, 0.06, 0.1, 0.2, 0.3];
 

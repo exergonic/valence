@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { SceneContext } from './setup';
+import { activeIsovalue, type SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
@@ -183,7 +183,7 @@ export function rebuildDisplay(ctx: SceneContext) {
       for (const pick of picks) {
         let surface = ctx.moSurfaces.get(pick.key);
         if (!surface) {
-          surface = computeMoSurface(ctx.currentMolecule, ctx.ehResult.basis, pick.coefficients, ctx.display.moIsovalue);
+          surface = computeMoSurface(ctx.currentMolecule, ctx.ehResult.basis, pick.coefficients, activeIsovalue(ctx.display));
           ctx.moSurfaces.set(pick.key, surface);
         }
         renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase);

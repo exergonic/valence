@@ -23,6 +23,7 @@
  *    has, so it stays legible when the panel is resized or collapsed.
  */
 import type { SceneContext } from '../render';
+import { activeIsovalue } from '../render';
 import type { Molecule } from '../mol-parser';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
 import { CANONICAL_TOLERANCE_EV, DEGENERATE_TOLERANCE_EV } from '../chem/extended-huckel/canonicalize-degenerate';
@@ -98,6 +99,7 @@ export function setupMoPanel(ctx: SceneContext) {
     // one picture at a time: the other view's selection stops drawing
     if (view === 'localized') ctx.display.moIndex = null;
     else ctx.display.localizedSelection = [];
+    syncIsovalue();
     draw();
     ctx.rerender();
   };
@@ -124,10 +126,22 @@ export function setupMoPanel(ctx: SceneContext) {
   }
 
   const isovalue = document.getElementById('ctrl-mo-isovalue') as HTMLSelectElement | null;
+  // Each view keeps its own level (see activeIsovalue): switching tabs shows
+  // the level that view was last drawn at rather than the other one's. The
+  // option is matched by VALUE, not by string: the control's labels are
+  // 2-decimal ("0.10") while a default written as 0.1 stringifies to "0.1",
+  // which matches nothing and blanks the control.
+  const syncIsovalue = () => {
+    if (!isovalue) return;
+    const level = activeIsovalue(ctx.display);
+    const option = Array.from(isovalue.options).find((o) => parseFloat(o.value) === level);
+    if (option) isovalue.value = option.value;
+  };
   if (isovalue) {
-    isovalue.value = String(ctx.display.moIsovalue);
+    syncIsovalue();
     isovalue.addEventListener('change', () => {
-      ctx.display.moIsovalue = parseFloat(isovalue.value);
+      const field = ctx.display.orbitalView === 'localized' ? 'localizedIsovalue' : 'moIsovalue';
+      ctx.display[field] = parseFloat(isovalue.value);
       // every cached surface was extracted at the old level
       ctx.moSurfaces.clear();
       ctx.rerender();

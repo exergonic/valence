@@ -5,7 +5,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
-import { MO_SURFACE_ISOVALUE, type MoSurfaceData } from '../chem/extended-huckel/mo-surface';
+import { LOCALIZED_ISOVALUE, MO_SURFACE_ISOVALUE, type MoSurfaceData } from '../chem/extended-huckel/mo-surface';
 import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
 import type { LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import { updateLabels } from './labels';
@@ -58,6 +58,26 @@ export interface DisplaySettings {
   moOpacity: number;
   /** Isosurface level for the MO surface (see MO_SURFACE_ISOVALUES). */
   moIsovalue: number;
+  /** Isosurface level for the localized picture, which wants its own — see
+   *  `activeIsovalue` and the measurements in NOTES.md. */
+  localizedIsovalue: number;
+}
+
+/**
+ * The isosurface level for the view currently on stage.
+ *
+ * The two views want different levels, and not symmetrically. A localized
+ * orbital drawn at the MO default is about 1.5× its bond length (water's O–H
+ * lobes reach 1.50 Å against a 0.96 Å bond), so the localized default sits
+ * higher. But not as high as a single bond would like: the failure modes are
+ * asymmetric. Set too low, a picture is merely fat and shows everything. Set
+ * too high, whole atoms drop out — benzene's delocalized ring orbital covers
+ * six carbons at 0.10 and three at 0.20 — and a picture that has silently lost
+ * half its molecule is worse than a fat one. So the higher value is for the
+ * bond, the safer one is the default. NOTES.md has the measurements.
+ */
+export function activeIsovalue(display: DisplaySettings): number {
+  return display.orbitalView === 'localized' ? display.localizedIsovalue : display.moIsovalue;
 }
 
 export interface SceneContext {
@@ -237,6 +257,7 @@ export function initScene(container: HTMLElement): SceneContext {
       smoothMo: true,
       moOpacity: 0.85,
       moIsovalue: MO_SURFACE_ISOVALUE,
+      localizedIsovalue: LOCALIZED_ISOVALUE,
     },
     atomOrbitals: null,
     dipole: null,

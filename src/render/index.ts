@@ -1,4 +1,4 @@
-export { initScene } from './setup';
+export { initScene, activeIsovalue } from './setup';
 export type { SceneContext, DisplaySettings, ColorSettings, ColorScheme } from './setup';
 export { renderAtoms } from './atoms';
 export { applyAtomStyle, atomEnvMap, atomLayer, makeAtomMaterial, ATOM_LAYER } from './atom-styles';
