@@ -47,12 +47,37 @@ export const MO_SURFACE_MARGIN = 2.5;
  *  which is what "jagged" was. */
 const MAX_EVALUATIONS = 4_000_000;
 
-/** The isovalue as a fraction of the MO's largest amplitude on the grid. A
- *  fraction rather than an absolute value so the pictures are comparable as
- *  the user clicks down the level diagram: every MO is drawn at the same
- *  fraction of its own peak, which is what makes a bonding/antibonding pair
- *  read as a shape difference rather than a size difference. */
+/** The isovalue as a fraction of the MO's largest amplitude on the grid — a
+ *  fraction so the pictures are comparable as the user clicks down the level
+ *  diagram, and a bonding/antibonding pair reads as a shape difference rather
+ *  than a size difference. */
 export const MO_SURFACE_FRACTION = 0.2;
+
+/**
+ * A ceiling on the isovalue (bohr^-3/2, the natural units of these Slater
+ * amplitudes).
+ *
+ * The fraction alone fails when one centre dominates the MO, and it fails in a
+ * way that looks like a rendering bug rather than a level choice. The halides'
+ * HOMOs peak on sulfur; at 20% of *that* peak the halogen lobes are drawn so
+ * tightly that they sit *inside the atom's drawn sphere* (0.3 × vdW — 0.56 Å
+ * for bromine, 0.59 for iodine) and the atom simply hides them, leaving the
+ * crescent of shell that pokes out. Measured on SBr₂'s HOMO, the bromine's
+ * amplitude falls below 0.045 at 0.55 Å from the nucleus — exactly the sphere.
+ *
+ * Set just above what a typical MO's fraction gives (water and benzene peak
+ * near 0.22, so 20% of that is 0.0447): a normal MO is untouched, while a
+ * strong-peak MO is drawn at a relatively lower level so its weak lobes are
+ * visible at all. Lowering it further — 0.02 draws a lobe that envelops its
+ * atom — fixes the halides but turns benzene's HOMO into a blob, so the cap
+ * stops where normal molecules stop changing.
+ *
+ * What remains, and is a *display* question rather than a level one: a halogen
+ * lobe is about as wide as its atom's drawn sphere (0.3 × vdW), so the sphere
+ * still hides the lobe's waist and only its caps show. Hiding the atoms (the
+ * existing toggle) shows the lobe whole.
+ */
+export const MO_SURFACE_MAX_ISOVALUE = 0.045;
 
 /** Grid points above which the spacing is coarsened, so a large delocalized
  *  MO cannot stall the frame. */
@@ -292,12 +317,14 @@ export function computeMoSurface(
   const ny = Math.ceil((maxY - minY) / step) + 1;
   const nz = Math.ceil((maxZ - minZ) / step) + 1;
 
-  // ψ on the grid — signed, because the phase of each sheet is read from it —
-  // plus the gradient, which the normals need and which is cheaper to keep
-  // than to recompute at every crossing
+  // ψ on the grid — signed, because the phase of each sheet is read from it.
+  // The gradients are *not* stored: the normals come from the analytic
+  // gradient at each vertex, which matters on the thin marginal sheets a
+  // diffuse halogen produces, where the field's gradient is small and a
+  // trilinearly interpolated one points the wrong way. (That is what made
+  // SBr₂ and SI₂ render as slivers: the surfaces were there, lit wrongly.)
   const count = nx * ny * nz;
   const field = new Float32Array(count);
-  const gradient = new Float32Array(count * 3);
   const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
   let peak = 0;
   for (let gz = 0; gz < nz; gz++) {
@@ -306,14 +333,11 @@ export function computeMoSurface(
         evaluatePrepared(minX + gx * step, minY + gy * step, minZ + gz * step, prepared, probe);
         const index = gx + gy * nx + gz * nx * ny;
         field[index] = probe.value;
-        gradient[index * 3] = probe.gx;
-        gradient[index * 3 + 1] = probe.gy;
-        gradient[index * 3 + 2] = probe.gz;
         peak = Math.max(peak, Math.abs(probe.value));
       }
     }
   }
-  const isovalue = peak * fraction;
+  const isovalue = Math.min(peak * fraction, MO_SURFACE_MAX_ISOVALUE);
   if (isovalue <= 0) return empty;
 
   const positions: number[] = [];
@@ -333,64 +357,31 @@ export function computeMoSurface(
   const pz = new Float64Array(4);
   const pSign = new Float64Array(4);
 
-  /** ∇ψ at a point, trilinear interpolation of the stored grid gradients —
-   *  smooth, and consistent with the field the crossings came from. */
-  function gradientAt(x: number, y: number, z: number, out: Vec3): void {
-    const fx = (x - minX) / step;
-    const fy = (y - minY) / step;
-    const fz = (z - minZ) / step;
-    const x0 = Math.min(nx - 1, Math.max(0, Math.floor(fx)));
-    const y0 = Math.min(ny - 1, Math.max(0, Math.floor(fy)));
-    const z0 = Math.min(nz - 1, Math.max(0, Math.floor(fz)));
-    const x1 = Math.min(nx - 1, x0 + 1);
-    const y1 = Math.min(ny - 1, y0 + 1);
-    const z1 = Math.min(nz - 1, z0 + 1);
-    const tx = fx - x0;
-    const ty = fy - y0;
-    const tz = fz - z0;
-    for (let k = 0; k < 3; k++) {
-      const at = (i: number, j: number, l: number) => gradient[(i + j * nx + l * nx * ny) * 3 + k];
-      const c00 = at(x0, y0, z0) * (1 - tx) + at(x1, y0, z0) * tx;
-      const c10 = at(x0, y1, z0) * (1 - tx) + at(x1, y1, z0) * tx;
-      const c01 = at(x0, y0, z1) * (1 - tx) + at(x1, y0, z1) * tx;
-      const c11 = at(x0, y1, z1) * (1 - tx) + at(x1, y1, z1) * tx;
-      out[k] = (c00 * (1 - ty) + c10 * ty) * (1 - tz) + (c01 * (1 - ty) + c11 * ty) * tz;
-    }
+  /** The outward unit normal at a point: the analytic ∇ψ, negated for the
+   *  negative sheet. Exact where a grid-interpolated gradient is not — see the
+   *  note on the field array above. */
+  function outwardAt(x: number, y: number, z: number, sign: number): Vec3 {
+    evaluatePrepared(x, y, z, prepared, probe);
+    const length = Math.hypot(probe.gx, probe.gy, probe.gz) || 1;
+    const outward = -sign;
+    return [(outward * probe.gx) / length, (outward * probe.gy) / length, (outward * probe.gz) / length];
   }
-
-  const geometric: Vec3 = [0, 0, 0];
-  const midGradient: Vec3 = [0, 0, 0];
 
   /** Append one triangle of crossings a, b, c (indices into the scratch). */
   function emit(a: number, b: number, c: number): void {
-    // the geometric normal of the winding; if it disagrees with the outward
-    // direction (the sign of ∇|ψ|, which is sign(ψ)·∇ψ) two vertices are
-    // swapped — cheaper and more robust than a per-case winding table
     const abx = px[b] - px[a], aby = py[b] - py[a], abz = pz[b] - pz[a];
     const acx = px[c] - px[a], acy = py[c] - py[a], acz = pz[c] - pz[a];
     const gx = aby * acz - abz * acy;
     const gy = abz * acx - abx * acz;
     const gz = abx * acy - aby * acx;
-    gradientAt((px[a] + px[b] + px[c]) / 3, (py[a] + py[b] + py[c]) / 3, (pz[a] + pz[b] + pz[c]) / 3, midGradient);
-    // The outward direction of the |ψ| = c surface is MINUS the gradient of
-    // |ψ|: a gradient points toward increasing values, and |ψ| increases
-    // inward. ∇|ψ| = sign(ψ)·∇ψ, so the outward normal is −sign(ψ)·∇ψ. Getting
-    // this backwards — as both this and the vertex normals did — winds the
-    // whole mesh inside out: a FrontSide pass then draws nothing but the
-    // silhouette, and the far-sheet depth pass hides even that. All three
-    // crossings of one triangle lie on one sheet, so one sign covers it.
-    const sheet = pSign[a];
-    const swap = (gx * midGradient[0] + gy * midGradient[1] + gz * midGradient[2]) * sheet > 0;
+    // all three crossings lie on one sheet, so one sign covers the triangle
+    const mid = outwardAt((px[a] + px[b] + px[c]) / 3, (py[a] + py[b] + py[c]) / 3, (pz[a] + pz[b] + pz[c]) / 3, pSign[a]);
+    const swap = gx * mid[0] + gy * mid[1] + gz * mid[2] < 0;
     const order = swap ? [a, c, b] : [a, b, c];
     for (const v of order) {
+      const normal = outwardAt(px[v], py[v], pz[v], pSign[v]);
       positions.push(px[v], py[v], pz[v]);
-      gradientAt(px[v], py[v], pz[v], geometric);
-      const length = Math.hypot(geometric[0], geometric[1], geometric[2]) || 1;
-      // outward = −sign(ψ)·∇ψ, the same reference the winding uses; the phase
-      // itself is the plain sign of ψ (these are not the same thing, and
-      // reusing one for both inverts the colours)
-      const outward = -pSign[v];
-      normals.push((outward * geometric[0]) / length, (outward * geometric[1]) / length, (outward * geometric[2]) / length);
+      normals.push(normal[0], normal[1], normal[2]);
       phases.push(pSign[v]);
     }
   }
