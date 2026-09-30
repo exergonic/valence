@@ -7,10 +7,10 @@
  * ladder (energies in eV, ascending) with coefficients per atomic orbital,
  * plus the matrices it came from so a caller can show or test them.
  *
- * This is the SEMIEMPIRICAL model: the numbers inherit the Alvarez
- * parameters and the Wolfsberg–Helmholz K, and nothing here is
- * self-consistent. Labels must say "extended Hückel", never imply ab initio
- * quality.
+ * This is the SEMIEMPIRICAL model: the numbers inherit the parameter table
+ * (Alvarez, with ICON8 for the second row — see parameters.ts) and the
+ * Wolfsberg–Helmholz K, and nothing here is self-consistent. Labels must say
+ * "extended Hückel", never imply ab initio quality.
  *
  * Refusals, per the house ladder: an element outside the parameter table, or
  * a molecule the overlap matrix cannot factor (a linearly dependent basis),

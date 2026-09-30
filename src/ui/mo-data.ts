@@ -24,8 +24,9 @@ export function moDataText(molecule: Molecule, result: ExtendedHuckelResult): st
   );
   const lines: string[] = [];
   lines.push('Valence — extended-Hückel MO data');
-  lines.push('model: semiempirical — Alvarez parameters (YAeHMOP\'s eht_parms.dat),');
-  lines.push('       ICON8 (QCPE 517) 3d for Si, P, S and Cl (Alvarez has no second-row d);');
+  lines.push('model: semiempirical — Alvarez parameters (YAeHMOP\'s eht_parms.dat) for most');
+  lines.push('       elements, ICON8 (QCPE 517) in full — s, p and d — for Si, P, S and Cl');
+  lines.push('       (the Alvarez table has no second-row d);');
   lines.push('       the d block\'s d is contracted: two exponents with a coefficient each,');
   lines.push('       Wolfsberg–Helmholz K = 1.75 (plain form, not ABTH-weighted), no self-consistency');
   lines.push(`molecule: ${molecule.atoms.length} atoms, ${result.basis.length} basis functions, ${result.electronCount} electrons`);

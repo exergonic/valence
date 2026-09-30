@@ -1,0 +1,19 @@
+pcl5
+geometry
+6
+1 P 0.000000 0.000000 0.000000
+2 Cl 0.000000 2.020000 0.000000
+3 Cl 0.000000 -2.020000 0.000000
+4 Cl 0.000000 0.000000 1.940000
+5 Cl 1.680100 0.000000 -0.970000
+6 Cl -1.680100 0.000000 -0.970000
+electrons
+40
+molecular
+nonweighted
+printing
+overlap
+hamil
+wave functions
+orbital mapping
+end_print
