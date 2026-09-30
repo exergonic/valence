@@ -9,16 +9,20 @@ extended-Hückel (EH) molecular-orbital layer with localized orbitals. All of
 it stays pure TypeScript, zero dependencies, honestly labeled — the house
 rules of AGENTS.md.
 
-**Status 2026-09-28.** The dipole and the ESP surface are shipped; nothing of
-Phases 2–5 exists yet. The table below is the current state, with the
-evidence for anything called shipped.
+**Status 2026-09-30.** Phases 1–4 are shipped — the ESP surface, the
+extended-Hückel core (s+p, then second-row 3d, then the d block), the MO
+diagram, and Pipek–Mezey localization including the valence-virtual block.
+Phase 5 stays parked, and deliberately: it needs a wavefunction a static page
+cannot produce. The table below is the state of each phase; the follow-up list
+under the dependency diagram is the live queue; and the one bonding area with
+no surface of its own yet — crystal field / ligand field theory — is now
+written down in its own section.
 
 ---
 
 ## Progress
 
-*As of 2026-09-28 (evening). Measurements for anything called shipped live
-in NOTES.md.*
+*As of 2026-09-30. Measurements for anything called shipped live in NOTES.md.*
 
 | Piece | State | Evidence |
 |---|---|---|
@@ -38,7 +42,8 @@ Milestones:
       went straight to extended Hückel, with the solver pinned on analytic
       matrices instead (`tests/eigen.test.ts`)
 - [x] **2b** — extended Hückel: Slater overlaps, VSDIP, Wolfsberg–Helmholz,
-      WebMO/YAeHMOP fixtures (s+p basis; 3d on Si/P/S/Cl still to come)
+      WebMO/YAeHMOP fixtures (s+p basis; the second-row 3d and then the whole d
+      block followed — see milestone 5)
 - [x] **3** — level diagram, click-to-highlight, Cartesian p-orbital lobes
       (windowed energy axis, HOMO/LUMO tags, phase colors; open shells show
       the ladder with no occupancies and a note)
@@ -148,7 +153,15 @@ about what already exists:
 
 ---
 
-## Phase 2 — The extended-Hückel core (the solver) — NOT STARTED (next up)
+## Phase 2 — The extended-Hückel core (the solver) — SHIPPED 2026-09-29
+
+*The section below is the original draft, kept for the record. Where it differs
+from what shipped: the table is **Alvarez's** Hii and ζ for s and p (not the
+draft's Pople VSDIP with Clementi–Raimondi exponents), the second-row d is
+**ICON8's** (Alvarez has none), the calculation runs in the molecule's
+principal-axis frame, and degenerate sets get canonical (symmetry-adapted)
+partners. Everything else — the overlap forms, Wolfsberg–Helmholz with K =
+1.75, the one-shot secular solve — is as drafted. NOTES.md has the numbers.*
 
 This is the only genuinely new mathematics in the whole plan, and it is
 small. Extended Hückel is a one-shot calculation: no self-consistent
@@ -213,7 +226,12 @@ analytic pins and WebMO fixtures are the safety net.
 
 ---
 
-## Phase 3 — MO energy diagram + click-to-highlight — NOT STARTED (needs Phase 2)
+## Phase 3 — MO energy diagram + click-to-highlight — SHIPPED 2026-09-29
+
+*Draft kept for the record; the shipped panel is described in the milestones
+list. Two differences worth naming: the energy axis is windowed with HOMO/LUMO
+tags, and an open shell shows the ladder with **no** occupancies rather than
+fillings it cannot justify (see follow-up 2).*
 
 **What the user sees:** the classic level diagram (energies up the
 side, α/β arrows for occupancy, filled from the electron count) drawn
@@ -342,6 +360,52 @@ teaching need with honest semiempirical labels.
 
 ---
 
+## The ligand-field picture — the one bonding area with no surface of its own
+
+Not planned, but it is the gap worth naming. Everything above is either the
+Lewis/electron-domain picture (`chem/vsepr/`) or the delocalized MO picture
+(`chem/extended-huckel/` and `chem/localized-orbitals/`). The textbook's third
+vocabulary for a metal complex — **crystal field theory** (purely electrostatic:
+ligands as point charges splitting the d orbitals) and its molecular-orbital
+successor **ligand field theory** — has no surface of its own in the app. The
+app is already doing the ligand-field job qualitatively: the d basis, the
+irreps and the ladder give the t2g/eg (Oh) and e/t2 (Td) patterns, and the
+metal override in the localized classifier types a metal-ligand orbital by the
+d it carries (σ / π / δ). What it has no way to *say* is the splitting.
+
+**What a crystal-field / ligand-field surface could honestly be**
+
+- **The splitting as a picture.** Group the metal-d-dominated levels by irrep
+  and draw them as a splitting diagram — free-ion level on the left, ligand-field
+  levels on the right, gaps labelled by Mulliken symbol. The irreps are already
+  computed (`irrep-labels.ts`) and the two nickel examples are the lesson:
+  `[Ni(CN)₄]²⁻` shows a filled metal-d-dominated set below an empty σ* set.
+- **The ordering**, which is what the spectrochemical series is about. Both
+  ligands are already in the examples (`[NiCl₄]²⁻`, `[Ni(CN)₄]²⁻`) but on
+  *different geometries*, so a like-for-like comparison would need one new ORCA
+  run rather than a new code path.
+- **The counting**, once a filling is determined — which is exactly where
+  follow-up 3 bites: a degenerate open shell has no determined filling, so the
+  dⁿ count and any stabilization energy would have to be stated, not inferred.
+
+**What it cannot be, and this is the same wall the whole EH layer stands
+behind:** EH has no electron *repulsion*, so the two numbers the CFT lesson
+turns on are out of reach. The splitting in eV inherits the Alvarez/ICON8
+parameters and carries no electron-electron term — a pattern, not a
+measurement. And the high-spin/low-spin question is decided by the pairing
+energy P against the splitting, which is a two-electron quantity: the app
+cannot answer it at all, and saying so is worth more than a plausible number.
+
+**If it is ever built, the honest way in is the angular overlap model (AOM)** —
+the parameter-lean quantitative form of ligand field theory, which builds each
+ligand's σ and π destabilisation of the d orbitals from the same Slater
+overlaps this app already computes, plus one radial parameter per ligand
+(e_σ, e_π). It is the modern teaching version of exactly this lesson, and
+every piece of machinery it needs (overlaps, d basis, irreps, point group)
+already ships.
+
+---
+
 ## What your ~/Code already contributes
 
 | Repo | Where | Role in this plan |
@@ -354,9 +418,9 @@ teaching need with honest semiempirical labels.
 
 ```
 Phase 1 (ESP)       ← SHIPPED 2026-09-28
-Phase 2 (EH solver) ← SHIPPED 2026-09-29 (s+p basis)
+Phase 2 (EH solver) ← SHIPPED 2026-09-29 (s+p; 3d and the d block 2026-09-30)
 Phase 3 (diagram)   ← SHIPPED 2026-09-29
-Phase 4 (localize)  ← SHIPPED 2026-09-29 (occupied space)
+Phase 4 (localize)  ← SHIPPED 2026-09-29 (occupied), 09-30 (valence-virtual)
 Phase 5 (JANPA)     ← parked
 ```
 
