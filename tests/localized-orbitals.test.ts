@@ -171,23 +171,23 @@ describe('the topology PM recovers', () => {
 
   it('benzene: a local sigma framework under a delocalized pi sextet, and its π* mirror', () => {
     const benzene = localize('Benzene (C₆H₆)');
-    expect(countIn(benzene, 'delocalized pi')).toBe(3);
+    expect(countIn(benzene, 'delocalized')).toBe(3);
     expect(countIn(benzene, 'sigma')).toBe(12); // six C–C, six C–H
-    for (const orbital of occupied(benzene).filter((o) => o.character === 'delocalized pi')) {
+    for (const orbital of occupied(benzene).filter((o) => o.character === 'delocalized')) {
       // spread over the ring, not on two atoms
       const carriers = orbital.populations.filter((q) => q > 0.05).length;
       expect(carriers).toBeGreaterThanOrEqual(4);
     }
-    // σ before π throughout
+    // σ before the delocalized set throughout
     const occupiedCharacters = characters({ ...benzene, orbitals: occupied(benzene) });
-    expect(occupiedCharacters.indexOf('delocalized pi'))
+    expect(occupiedCharacters.indexOf('delocalized'))
       .toBeGreaterThan(occupiedCharacters.lastIndexOf('sigma'));
 
     // the empty block mirrors it: six C–H σ*, six C–C σ*, three ring π* — and
     // a ring orbital must not be labelled a two-centre bond just because two
     // of its carbons hold 0.80 between them
     expect(countEmpty(benzene, 'sigma antibond')).toBe(12);
-    expect(countEmpty(benzene, 'delocalized pi antibond')).toBe(3);
+    expect(countEmpty(benzene, 'pi antibond')).toBe(3);
   });
 
   it('N2: two lone pairs, one sigma, two pi — and π* below σ*', () => {
@@ -213,12 +213,41 @@ describe('the topology PM recovers', () => {
     }
   });
 
-  it('lone pairs sort before bonds, which sort before delocalized pi', () => {
+  it('lone pairs sort before bonds, which sort before the delocalized set', () => {
+    const water = localize('Water (H₂O)');
+    const order = characters({ ...water, orbitals: occupied(water) });
+    expect(order.lastIndexOf('lone pair')).toBeLessThan(order.indexOf('sigma'));
     const benzene = localize('Benzene (C₆H₆)');
-    const order = characters({ ...benzene, orbitals: occupied(benzene) });
-    const lastSigma = order.lastIndexOf('sigma');
-    const firstPi = order.indexOf('delocalized pi');
-    expect(lastSigma).toBeLessThan(firstPi);
+    const benzeneOrder = characters({ ...benzene, orbitals: occupied(benzene) });
+    expect(benzeneOrder.lastIndexOf('sigma')).toBeLessThan(benzeneOrder.indexOf('delocalized'));
+  });
+
+  it('labels the way avo_ibo labels — their classes, in their words', () => {
+    // The classifier is a port of avo_ibo's `_classify_orbital`: the same
+    // names, the same gates, so our rows can be read beside an ibos.txt.
+    const water = localize('Water (H₂O)');
+    expect(characters(water).slice(0, 4)).toEqual(['lone pair', 'lone pair', 'sigma', 'sigma']);
+    // benzene's π set is Deloc under their gate: its fourth atom (5%) misses
+    // the 3% ceiling that would have made it a three-centre orbital
+    const benzene = localize('Benzene (C₆H₆)');
+    expect(countIn(benzene, 'delocalized')).toBe(3);
+  });
+
+  it('a three-centre two-electron bridge is labelled 2e3c — diborane', () => {
+    // The case the rule exists for. Diborane's bridges draw on three centres,
+    // and the gate that finds them is avo_ibo's: a third atom above 10% with
+    // no fourth above 3%. Their own table prints `B-B-H 2e3c` for exactly
+    // these two orbitals.
+    const diborane = localize('Diborane (B₂H₆)');
+    expect(countIn(diborane, 'three-centre')).toBe(2);
+    // four ordinary terminal B–H bonds, and nothing left over
+    expect(countIn(diborane, 'sigma')).toBe(4);
+    expect(occupied(diborane)).toHaveLength(6);
+    // a bridge has three carriers, and the boron is one of them
+    for (const bridge of occupied(diborane).filter((o) => o.character === 'three-centre')) {
+      expect(bridge.atoms).toHaveLength(3);
+      expect(bridge.atoms.some((a) => diborane.molecule.atoms[a].element === 'B')).toBe(true);
+    }
   });
 });
 

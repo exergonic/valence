@@ -26,20 +26,38 @@
  */
 import type { Molecule } from '../../mol-parser';
 import type { ExtendedHuckelResult } from '../extended-huckel/solve';
-import { alignToPrincipalAxes } from '../extended-huckel/align-principal-axes';
-import { vecDot, vecNormalize, vecSub } from '../../utils/vec3';
+import type { DFunction } from '../extended-huckel/assign-basis';
 import { aoWeights, atomicPopulations, bondPopulations } from './mulliken-populations';
 import type { LocalizedSets } from './localize-pm';
 
+/**
+ * The orbital classes, in avo_ibo's vocabulary. That project's classifier
+ * (`src/avogadro_ibo/analysis.py`, `_classify_orbital`) is the reference: the
+ * names, the order the tests are applied in and the thresholds below are all
+ * lifted from it, so a chemist can put our list beside an `ibos.txt` and read
+ * the same words. Two deliberate differences, both noted where they act:
+ *
+ *  - `Core` is not ported. avo_ibo's rule is "one atom >99% with >75%
+ *    s-character whose dominant s is n = 1", and in a full basis that finds an
+ *    oxygen 1s. This basis is valence-only, so the same test would only ever
+ *    fire on a hydrogen 1s — a hydride, mislabelled as a core. There are no
+ *    core orbitals here to find.
+ *  - The bond population's SIGN still splits a bond from its antibond, on top
+ *    of the occupancy split avo_ibo uses. A localized occupied orbital that
+ *    comes out out-of-phase between its two atoms is an antibond whatever its
+ *    occupancy, and this is the only place that shows up.
+ */
 export type LocalizedCharacter =
-  | 'lone pair'
-  | 'sigma'
-  | 'pi'
-  | 'delocalized pi'
-  | 'delocalized pi antibond'
-  | 'delocalized'
-  | 'sigma antibond'
-  | 'pi antibond';
+  | 'lone pair'      // avo_ibo: LP       — one atom above 0.90
+  | 'lone pair s'    // avo_ibo: LP-s     — one atom above 0.70, s-rich
+  | 'sigma'          // σ
+  | 'pi'             // π
+  | 'delta'          // δ               — a d–d interaction, or a metal's
+  | 'three-centre'   // avo_ibo: 2e3c   — three atoms, the third above 0.10
+  | 'delocalized'    // avo_ibo: Deloc
+  | 'sigma antibond' | 'pi antibond' | 'delta antibond'
+  | 'antibond'       // avo_ibo: anti*  — an empty two-centre orbital past the gate
+  | 'virtual';       // avo_ibo: (virt) / Virt
 
 export interface LocalizedOrbital {
   /** Coefficients per AO, in the calculation frame and the solver's basis
@@ -60,37 +78,50 @@ export interface LocalizedOrbital {
   atoms: number[];
 }
 
-/** A lone pair: this much of the orbital on one atom… */
-const LONE_PAIR_MIN = 0.7;
-/** …with no second atom holding this much, and… */
-const LONE_PAIR_MAX_SECOND = 0.25;
-/** …no bond it forms stronger than this (a bond's overlap population). */
-const LONE_PAIR_MAX_BOND = 0.1;
-/** An atom "carries" the orbital at this much population. Two carriers make a
- *  two-centre bond; three or more make it delocalized. Population is a blunt
- *  instrument here — a ring π orbital can hold 0.49/0.31/0.14 on consecutive
- *  carbons, which is 0.80 on two of them — so the count of real carriers
- *  separates a ring from a bond where a top-two sum cannot. */
-const ATOM_CARRIER = 0.1;
-/** Above this share of perpendicular-p weight the orbital is π, not σ. */
-const PI_FRACTION = 0.5;
+/**
+ * The thresholds, all from avo_ibo's classifier. Their populations come from an
+ * orthonormal minimal (IAO) basis and ours are overlap-weighted Mulliken
+ * populations, so the numbers are not identical — a water O–H bond is 62.3/37.7
+ * there and 72/29 here. The gates are coarse enough to land on the same verdict
+ * for every molecule we have checked; NOTES.md records the comparison.
+ */
+/** Their LP: one atom carries this much of the orbital. */
+const LP_SHARE = 0.90;
+/** Their σ/π gate: the top two atoms share this much, and the second carries
+ *  at least the second figure — below that it is a tail, not a bond. */
+const BOND_SHARE = 0.75;
+const BOND_SECOND_MIN = 0.02;
+/** Their LP-s: one atom above this, s-rich, is a lone pair in transition. */
+const LP_S_SHARE = 0.70;
+const LP_S_S_CHARACTER = 0.5;
+/** Their 2e3c: a third atom above this, and no fourth above the gate. */
+const THREE_CENTRE_THIRD = 0.10;
+const THREE_CENTRE_FOURTH_MAX = 0.03;
+/** Their π test inside a bond: both atoms this rich in p, or it is a σ. */
+const PI_P_FRACTION = 0.85;
+/** The virtuals' looser gates, theirs: the same sigma/pi test, then a
+ *  three-centre pi* at a lower third-atom gate, then a two-centre anti* at
+ *  0.60, then a virtual that still lives on one atom above 0.50. */
+const VIRT_THREE_CENTRE_THIRD = 0.08;
+const VIRT_BOND_SHARE = 0.60;
+const VIRT_ONE_ATOM = 0.50;
 
-/** The displayed order: lone pairs, then bonds, then delocalized π, then
- *  whatever is left, then antibonding. Within a class, by energy. */
+/** The displayed order: lone pairs, then the bonds, then the delocalized
+ *  orbitals, then the empties. Within a class, by energy — the number is the
+ *  only thing that can order two equivalent orbitals. */
 const CHARACTER_RANK: Record<LocalizedCharacter, number> = {
   'lone pair': 0,
-  sigma: 1,
-  pi: 2,
-  // A ring π and its antibonding partner share a rank: they never share a
-  // section, and within one the energy orders them.
-  'delocalized pi': 3,
-  'delocalized pi antibond': 3,
-  delocalized: 4,
-  // σ* and π* share a rank: which is lower is a real ordering question
-  // (ethene's π* lies below its σ*), so let the energy decide rather than
-  // asserting it here.
-  'sigma antibond': 5,
-  'pi antibond': 5,
+  'lone pair s': 1,
+  sigma: 2,
+  pi: 3,
+  delta: 4,
+  'three-centre': 5,
+  delocalized: 6,
+  'sigma antibond': 7,
+  'pi antibond': 7,
+  'delta antibond': 7,
+  antibond: 8,
+  virtual: 9,
 };
 
 /** ⟨φ|M|φ⟩ for a symmetric matrix M in the AO basis. */
@@ -105,66 +136,141 @@ function quadratic(M: number[][], c: number[]): number {
   return sum;
 }
 
-/**
- * The share of an orbital's weight that comes from p functions perpendicular
- * to `direction` — the π test. A π bond is built from p orbitals across the
- * bond axis; a σ bond from s and along-axis p, so the two are separated by
- * this number alone.
- */
-function perpendicularFraction(
+/** One atom's share of an orbital, split by shell — what the classifier's
+ *  gates read. `total` is the sum of that atom's weights, which is not 1:
+ *  Mulliken populations sum to 1 over all atoms, and the tails live elsewhere. */
+interface AtomShare {
+  atom: number;
+  total: number;
+  s: number;
+  p: number;
+  d: number;
+  /** The dominant d function on this atom by |weight|; null when it has none. */
+  dominantD: DFunction | null;
+}
+
+/** Per-atom s/p/d shares of an orbital, from the same AO weights the
+ *  populations use. A negative total (an out-of-phase tail) counts as none. */
+function atomShares(
   coefficients: number[],
   overlap: number[][],
   basis: ExtendedHuckelResult['basis'],
-  atoms: number[],
-  direction: [number, number, number],
-): number {
+  atomCount: number,
+): AtomShare[] {
   const weights = aoWeights(coefficients, overlap);
-  let perpendicular = 0;
-  let total = 0;
+  const shares: AtomShare[] = Array.from({ length: atomCount }, (_, atom) => ({
+    atom, total: 0, s: 0, p: 0, d: 0, dominantD: null,
+  }));
+  const bestD = new Array<number>(atomCount).fill(0);
   for (let m = 0; m < basis.length; m++) {
     const orbital = basis[m];
-    if (!atoms.includes(orbital.atomIndex)) continue;
-    total += weights[m];
-    if (orbital.angular !== 'p') continue;
-    const along = Math.abs(vecDot(orbital.axis, direction));
-    perpendicular += weights[m] * (1 - along * along);
+    const share = shares[orbital.atomIndex];
+    const weight = weights[m];
+    share.total += weight;
+    if (orbital.angular === 's') share.s += weight;
+    else if (orbital.angular === 'p') share.p += weight;
+    else {
+      share.d += weight;
+      if (Math.abs(weight) > bestD[orbital.atomIndex]) {
+        bestD[orbital.atomIndex] = Math.abs(weight);
+        share.dominantD = orbital.d ?? null;
+      }
+    }
   }
-  return total !== 0 ? perpendicular / total : 0;
+  for (const share of shares) share.total = Math.max(0, share.total);
+  return shares;
 }
 
 /**
- * A delocalized π system: every atom carrying the orbital contributes through
- * a p function, and all those p axes are parallel. That is what makes a ring
- * orbital π (benzene's π orbitals are pure 2pz on whichever carbons carry
- * them) rather than a delocalized σ network.
+ * σ, π or δ for a two-centre orbital — avo_ibo's `_two_center_bond_type`.
+ *
+ * The organic default is π when BOTH atoms draw their share mostly from p
+ * functions, and σ otherwise. A metal overrides it: when one of the two atoms
+ * carries a d shell and its share there is majority d, the shape of the
+ * dominant d decides — z² is σ, xz and yz are π, xy and x²−y² are δ. Their
+ * code restricts that branch to Z 21–30 because their examples were 3d; here it
+ * applies to any element whose d shell is in the basis, which is the same rule
+ * carried to the 4d and 5d rows this app also has.
  */
-function isDelocalizedPi(
-  coefficients: number[],
-  overlap: number[][],
-  basis: ExtendedHuckelResult['basis'],
-  populations: number[],
-): boolean {
-  const weights = aoWeights(coefficients, overlap);
-  const dominant: [number, number, number][] = [];
-  for (let a = 0; a < populations.length; a++) {
-    if (Math.abs(populations[a]) < ATOM_CARRIER) continue;
-    let best: [number, number, number] | null = null;
-    let bestWeight = 0;
-    for (let m = 0; m < basis.length; m++) {
-      if (basis[m].atomIndex !== a || basis[m].angular !== 'p') continue;
-      if (Math.abs(weights[m]) > bestWeight) {
-        bestWeight = Math.abs(weights[m]);
-        best = basis[m].axis;
-      }
-    }
-    if (!best) return false;
-    dominant.push(best);
+function twoCentreType(a: AtomShare, b: AtomShare): 'sigma' | 'pi' | 'delta' {
+  const metal = [a, b].find((share) => share.dominantD !== null && share.d > 0.5 * share.total);
+  if (metal) {
+    const kind = metal.dominantD;
+    if (kind === 'xy' || kind === 'x2-y2') return 'delta';
+    if (kind === 'xz' || kind === 'yz') return 'pi';
+    return 'sigma';
   }
-  if (dominant.length < 3) return false;
-  for (let i = 1; i < dominant.length; i++) {
-    if (Math.abs(vecDot(dominant[0], dominant[i])) < 0.9) return false;
+  const fraction = (share: AtomShare) => (share.total > 0 ? share.p / share.total : 0);
+  return fraction(a) > PI_P_FRACTION && fraction(b) > PI_P_FRACTION ? 'pi' : 'sigma';
+}
+
+/**
+ * The character of one orbital — avo_ibo's `_classify_orbital`, ported.
+ *
+ * The order of the tests IS the classifier: a sharing gate first, then the
+ * single-atom ones, then the three-centre gate, then Deloc. `shares` is sorted
+ * by share, largest first.
+ */
+function classify(
+  shares: AtomShare[],
+  occupied: boolean,
+  bondPops: number[],
+  molecule: Molecule,
+): LocalizedCharacter {
+  const [first, second, third, fourth] = shares;
+  if (!first) return 'virtual';
+  const share = (n: number) => (shares[n] ? shares[n].total : 0);
+  const sFraction = first.total > 0 ? first.s / first.total : 0;
+
+  // their two-centre gate, and the σ/π/δ typing behind it
+  const twoCentre = (gate: number) => share(0) + share(1) > gate && share(1) > BOND_SECOND_MIN;
+  const bondCharacter = (): LocalizedCharacter => {
+    const kind = twoCentreType(first, second);
+    const bondedPair = molecule.bonds.findIndex(
+      (b) => (b.atom1Index === first.atom && b.atom2Index === second.atom)
+        || (b.atom2Index === first.atom && b.atom1Index === second.atom),
+    );
+    // our addition: an occupied orbital whose bond population is negative is
+    // out of phase, which is an antibond whatever its occupancy says
+    const bonding = bondedPair < 0 || bondPops[bondedPair] >= 0;
+    if (kind === 'pi') return bonding ? 'pi' : 'pi antibond';
+    if (kind === 'delta') return bonding ? 'delta' : 'delta antibond';
+    return bonding ? 'sigma' : 'sigma antibond';
+  };
+
+  // Their 2e3c gate sits BELOW the two-centre one in their code, and the gate
+  // itself transfers — but the ORDER does not. Their populations are IAO and
+  // put diborane's bridge at 0.72 on its two top atoms, so their bond test
+  // misses it and the three-centre test catches it. Ours are overlap-weighted
+  // Mulliken and put the same bridge at 0.79, so with their order it would come
+  // out a plain σ — the one molecule the rule exists for. The three-centre
+  // gate therefore runs first, which is also the chemically right question:
+  // three comparable centres is not a two-centre bond.
+  const threeCentre = !!third
+    && third.total > THREE_CENTRE_THIRD
+    && (!fourth || fourth.total <= THREE_CENTRE_FOURTH_MAX);
+
+  if (occupied) {
+    // their Core test is not ported: this basis has no core orbitals, and the
+    // n = 1 condition would mislabel a hydride (see the type's comment)
+    if (first.total > LP_SHARE) return 'lone pair';
+    if (threeCentre) return 'three-centre';
+    if (twoCentre(BOND_SHARE)) return bondCharacter();
+    if (first.total > LP_S_SHARE) return sFraction > LP_S_S_CHARACTER ? 'lone pair s' : 'lone pair';
+    return 'delocalized';
   }
-  return true;
+
+  if (twoCentre(BOND_SHARE)) {
+    const kind = twoCentreType(first, second);
+    return kind === 'pi' ? 'pi antibond' : kind === 'delta' ? 'delta antibond' : 'sigma antibond';
+  }
+  if (third && third.total > VIRT_THREE_CENTRE_THIRD) {
+    const pFraction = first.total > 0 ? first.p / first.total : 0;
+    return pFraction > PI_P_FRACTION ? 'pi antibond' : 'antibond';
+  }
+  if (twoCentre(VIRT_BOND_SHARE)) return 'antibond';
+  if (first.total > VIRT_ONE_ATOM) return 'virtual';
+  return 'virtual';
 }
 
 /** Character + the numbers the order needs, for one localized orbital. */
@@ -172,68 +278,30 @@ function describe(
   molecule: Molecule,
   result: ExtendedHuckelResult,
   coefficients: number[],
-  frameAtoms: Molecule['atoms'],
   occupied: boolean,
 ): LocalizedOrbital {
   const atomCount = molecule.atoms.length;
   const populations = atomicPopulations(coefficients, result.overlap, result.basis, atomCount);
-  const ranked = populations
-    .map((q, atom) => ({ q, atom }))
-    .sort((x, y) => Math.abs(y.q) - Math.abs(x.q));
+  const shares = atomShares(coefficients, result.overlap, result.basis, atomCount)
+    .sort((x, y) => y.total - x.total);
   const bondPops = bondPopulations(coefficients, result.overlap, result.basis, molecule.bonds);
-  const strongestBond = bondPops.reduce((acc, b) => (Math.abs(b) > Math.abs(acc) ? b : acc), 0);
-
-  const top = ranked[0];
-  const carriers = ranked.filter((r) => r.q >= ATOM_CARRIER);
-  let character: LocalizedCharacter;
-
-  if (Math.abs(top.q) >= LONE_PAIR_MIN
-    && (!ranked[1] || Math.abs(ranked[1].q) < LONE_PAIR_MAX_SECOND)
-    && Math.abs(strongestBond) < LONE_PAIR_MAX_BOND) {
-    character = 'lone pair';
-  } else if (carriers.length === 2 && bonded(molecule, carriers[0].atom, carriers[1].atom)) {
-    const [first, second] = carriers;
-    const direction = vecNormalize(vecSub(
-      [frameAtoms[second.atom].x, frameAtoms[second.atom].y, frameAtoms[second.atom].z],
-      [frameAtoms[first.atom].x, frameAtoms[first.atom].y, frameAtoms[first.atom].z],
-    ));
-    const pi = perpendicularFraction(
-      coefficients, result.overlap, result.basis, [first.atom, second.atom], direction,
-    ) > PI_FRACTION;
-    const bondIndex = molecule.bonds.findIndex(
-      (b) => (b.atom1Index === first.atom && b.atom2Index === second.atom)
-        || (b.atom2Index === first.atom && b.atom1Index === second.atom),
-    );
-    const bonding = bondIndex >= 0 ? bondPops[bondIndex] >= 0 : true;
-    character = pi
-      ? (bonding ? 'pi' : 'pi antibond')
-      : (bonding ? 'sigma' : 'sigma antibond');
-  } else {
-    // A delocalized ring π with its bonds out of phase is an antibonding π*,
-    // the same distinction the two-centre case draws from the bond sign —
-    // without it the occupied π and the empty π* read identically.
-    character = isDelocalizedPi(coefficients, result.overlap, result.basis, populations)
-      ? (strongestBond < 0 ? 'delocalized pi antibond' : 'delocalized pi')
-      : 'delocalized';
-  }
-
+  const ordered = shares.filter((share) => share.total > ATOM_CARRIER).map((share) => share.atom);
   return {
     coefficients,
     energy: quadratic(result.hamiltonian, coefficients),
-    character,
+    character: classify(shares, occupied, bondPops, molecule),
     occupied,
     populations,
-    atoms: carriers.map((r) => r.atom),
+    // the atoms that carry it, strongest first. 0.10 is the same gate the
+    // classifier's three-centre test reads, so a percent-scale tail on a
+    // neighbouring atom is not listed as a second centre.
+    atoms: ordered,
   };
 }
 
-function bonded(molecule: Molecule, a: number, b: number): boolean {
-  return molecule.bonds.some(
-    (bond) => (bond.atom1Index === a && bond.atom2Index === b)
-      || (bond.atom2Index === a && bond.atom1Index === b),
-  );
-}
-
+/** An atom "carries" an orbital at this much of it — the classifier's own
+ *  three-centre gate, reused for the centre list the panel prints. */
+const ATOM_CARRIER = 0.10;
 /**
  * Describe and order the localized orbitals. `localized` is the pair of blocks
  * from `localizeOrbitals`.
@@ -244,18 +312,16 @@ function bonded(molecule: Molecule, a: number, b: number): boolean {
  * themselves are the display's split — a chemist reads "what is filled" before
  * "what is empty", and a hyperconjugation pair is one click from each.
  *
- * The frame is recomputed rather than passed in: it is deterministic (the
- * same molecule always yields the same axes), and the bond directions the π
- * test needs must be in the same frame the coefficients are in.
+ * The classifier reads populations and shells only — no geometry — so the
+ * calculation frame never enters it.
  */
 export function orderLocalizedOrbitals(
   molecule: Molecule,
   result: ExtendedHuckelResult,
   localized: LocalizedSets,
 ): LocalizedOrbital[] {
-  const frameAtoms = alignToPrincipalAxes(molecule).atoms;
   const describeBlock = (rows: number[][], occupied: boolean) => rows.map(
-    (coefficients) => describe(molecule, result, coefficients, frameAtoms, occupied),
+    (coefficients) => describe(molecule, result, coefficients, occupied),
   );
   return [
     ...describeBlock(localized.occupied, true).sort(bySectionThenClass),

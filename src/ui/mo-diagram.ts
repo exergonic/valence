@@ -32,18 +32,22 @@ import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orb
 
 const PAD = { top: 16, bottom: 20, left: 44, right: 58 };
 
-/** How each localized-orbital character reads in the list. */
+/** How each localized-orbital class reads in the list — avo_ibo's own tokens,
+ *  so our rows can be read beside an ibos.txt. */
 const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
-  'lone pair': 'lone pair',
+  'lone pair': 'LP',
+  'lone pair s': 'LP-s',
   sigma: 'σ',
   pi: 'π',
-  'delocalized pi': 'delocalized π',
-  'delocalized pi antibond': 'delocalized π*',
-  delocalized: 'delocalized',
+  delta: 'δ',
+  'three-centre': '2e3c',
+  delocalized: 'Deloc',
   'sigma antibond': 'σ*',
   'pi antibond': 'π*',
+  'delta antibond': 'δ*',
+  antibond: 'anti*',
+  virtual: 'virt',
 };
-
 /** Levels this far outside the occupied ladder still get axis room. */
 const BELOW_OCCUPIED = 4;
 const ABOVE_OCCUPIED = 6;
@@ -217,7 +221,7 @@ export function setupMoPanel(ctx: SceneContext) {
       return html + `<button class="${classes}" data-index="${index}">`
         + dot
         + `<span class="lmo-character">${CHARACTER_LABEL[orbital.character]}</span>`
-        + `<span class="lmo-centres">${localizedCentres(molecule, orbital)}</span>`
+        + `<span class="lmo-centres">${localizedType(molecule, orbital)}</span>`
         + '</button>';
     }).join('');
     list.querySelectorAll<HTMLButtonElement>('button.lmo-item').forEach((node) => {
@@ -229,15 +233,14 @@ export function setupMoPanel(ctx: SceneContext) {
         .map((index) => orbitals[index])
         .filter((orbital): orbital is LocalizedOrbital => !!orbital);
       readout.textContent = described
-        .map((orbital) => `${CHARACTER_LABEL[orbital.character]} ${localizedCentres(molecule, orbital)}`
-          + (orbital.occupied ? '' : ' (empty)'))
+        .map((orbital) => `${localizedType(molecule, orbital)}${orbital.occupied ? '' : ' (empty)'}`)
         .join('  +  ')
         + (selection.length > 1 ? ' — click either again to drop it' : ' — click it again to hide');
       // the composition line describes the LAST orbital picked: two orbitals
       // have no joint composition, and the latest pick is the one being read
       const latest = orbitals[selection[selection.length - 1]];
       if (latest) {
-        composition.textContent = `${CHARACTER_LABEL[latest.character]} ${localizedCentres(molecule, latest)}: `
+        composition.textContent = `${localizedType(molecule, latest)}: `
           + compositionText(basis, latest.coefficients);
       }
     } else {
@@ -502,13 +505,33 @@ function compositionText(basis: Array<{ label: string }>, coefficients: number[]
   return shown.join('  ·  ') + (ranked.length > shown.length ? `  ·  +${ranked.length - shown.length} more` : '');
 }
 
-/** "C1–H3", "O1", or "6 centres" — what a localized orbital sits on. */
-function localizedCentres(molecule: Molecule, orbital: LocalizedOrbital): string {
-  const names = orbital.atoms.map((a) => `${molecule.atoms[a].element}${a + 1}`);
-  if (names.length === 0) return '';
-  if (names.length === 1) return names[0];
-  if (names.length === 2) return `${names[0]}–${names[1]}`;
-  return `${names.length} centres`;
+/**
+ * The orbital's Type string, composed the way avo_ibo's table composes it:
+ * a lone pair is `O1(LP)`, a two-centre bond `C1-H7 σ` (atoms in index order),
+ * a three-centre one `B1-B6-H5 2e3c` (element then index), and a delocalized
+ * orbital is just `Deloc` — their table gives it no composition prefix. A
+ * virtual that still lives on one atom reads `Cl4(virt)`.
+ */
+function localizedType(molecule: Molecule, orbital: LocalizedOrbital): string {
+  const name = (atom: number) => `${molecule.atoms[atom].element}${atom + 1}`;
+  const joined = (atoms: number[]) => atoms.map(name).join('-');
+  const kind = CHARACTER_LABEL[orbital.character];
+
+  if (orbital.character === 'lone pair' || orbital.character === 'lone pair s' || orbital.character === 'virtual') {
+    return `${joined(orbital.atoms.slice(0, 1))}(${kind})`;
+  }
+  if (orbital.character === 'delocalized') return kind;
+  if (orbital.character === 'three-centre') {
+    const sorted = [...orbital.atoms].sort((a, b) => {
+      const ea = molecule.atoms[a].element;
+      const eb = molecule.atoms[b].element;
+      return ea === eb ? a - b : ea.localeCompare(eb);
+    });
+    return `${joined(sorted)} ${kind}`;
+  }
+  // a two-centre bond, in index order; a one-atom virtual keeps its own form
+  const pair = orbital.atoms.slice(0, 2).sort((a, b) => a - b);
+  return pair.length === 1 ? `${joined(pair)} ${kind}` : `${joined(pair)} ${kind}`;
 }
 
 /** Tick values at 5 eV steps inside [lo, hi]. */
