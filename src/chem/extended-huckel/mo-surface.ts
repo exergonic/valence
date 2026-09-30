@@ -29,6 +29,7 @@ import type { Molecule } from '../../mol-parser';
 import type { BasisFunction } from './assign-basis';
 import { alignToPrincipalAxes } from './align-principal-axes';
 import { BOHR_RADIUS } from './slater-overlap';
+import { D_FUNCTIONS } from './assign-basis';
 
 /** The coarsest grid spacing (Å) — the caller's preference, used when the
  *  budget does not allow finer. The actual step adapts down from here: see
@@ -74,6 +75,10 @@ const BOHR_PER_ANGSTROM = 1 / BOHR_RADIUS;
 
 const FOUR_PI = 4 * Math.PI;
 const SQRT_3_OVER_4PI = Math.sqrt(3 / FOUR_PI);
+// the normalized real d harmonics' prefactors (∫|Y|² dΩ = 1)
+const SQRT_15_OVER_16PI = Math.sqrt(15 / (16 * Math.PI));
+const SQRT_5_OVER_16PI = Math.sqrt(5 / (16 * Math.PI));
+const SQRT_15_OVER_4PI = Math.sqrt(15 / (4 * Math.PI));
 const INV_SQRT_FOUR_PI = 1 / Math.sqrt(FOUR_PI);
 
 export interface MoSurfaceData {
@@ -120,7 +125,12 @@ export function prepareOrbitals(
     let factorial = 1;
     for (let k = 2; k <= 2 * orbital.n; k++) factorial *= k;
     const norm = Math.pow(2 * orbital.zeta, orbital.n + 0.5) / Math.sqrt(factorial);
-    const angular = orbital.angular === 's' ? 1 : 2;
+    // 1 = s, 2 = p (with the axis), 3..7 = the five real d functions in
+    // D_FUNCTIONS order. The d kind rides in the same slot the flag used, so
+    // the hot loop's stride is unchanged.
+    const angular = orbital.angular === 's'
+      ? 1
+      : orbital.angular === 'p' ? 2 : 3 + D_FUNCTIONS.indexOf(orbital.d!);
     prepared.push(
       atom.x, atom.y, atom.z, orbital.zeta, c * norm,
       orbital.axis[0], orbital.axis[1], orbital.axis[2], orbital.n, angular,
@@ -167,7 +177,8 @@ export function evaluatePrepared(
     const zeta = prepared[i + 3];
     const scale = prepared[i + 4];
     const n = prepared[i + 8];
-    const isS = prepared[i + 9] === 1;
+    const code = prepared[i + 9];
+    const isS = code === 1;
     const r2 = dx * dx + dy * dy + dz * dz;
     if (r2 < 1e-12) {
       // Exactly at the nucleus. A 1s is *finite* there — it peaks there — and
@@ -197,9 +208,9 @@ export function evaluatePrepared(
     let gax = 0;
     let gay = 0;
     let gaz = 0;
-    if (isS) {
+    if (code === 1) {
       angular = INV_SQRT_FOUR_PI;
-    } else {
+    } else if (code === 2) {
       const ax = prepared[i + 5];
       const ay = prepared[i + 6];
       const az = prepared[i + 7];
@@ -210,6 +221,44 @@ export function evaluatePrepared(
       gax = SQRT_3_OVER_4PI * (ax / r - dx * along);
       gay = SQRT_3_OVER_4PI * (ay / r - dy * along);
       gaz = SQRT_3_OVER_4PI * (az / r - dz * along);
+    } else {
+      // A real d function, normalized: N_k · f_k(d)/r², with f_k the Cartesian
+      // numerator. The gradient follows from f being homogeneous of degree 2:
+      // ∇[f/r²] = ∇f/r² − 2 f d/r⁴.
+      const kind = code - 3;
+      let f: number;
+      let gfx: number;
+      let gfy: number;
+      let gfz: number;
+      let scaleAngular: number;
+      switch (kind) {
+        case 0: // x²−y²
+          f = dx * dx - dy * dy; gfx = 2 * dx; gfy = -2 * dy; gfz = 0;
+          scaleAngular = SQRT_15_OVER_16PI;
+          break;
+        case 1: // z² ∝ 3z²−r² = 2z²−x²−y²
+          f = 2 * dz * dz - dx * dx - dy * dy; gfx = -2 * dx; gfy = -2 * dy; gfz = 4 * dz;
+          scaleAngular = SQRT_5_OVER_16PI;
+          break;
+        case 2: // xy
+          f = dx * dy; gfx = dy; gfy = dx; gfz = 0;
+          scaleAngular = SQRT_15_OVER_4PI;
+          break;
+        case 3: // xz
+          f = dx * dz; gfx = dz; gfy = 0; gfz = dx;
+          scaleAngular = SQRT_15_OVER_4PI;
+          break;
+        default: // yz
+          f = dy * dz; gfx = 0; gfy = dz; gfz = dy;
+          scaleAngular = SQRT_15_OVER_4PI;
+          break;
+      }
+      const inv2 = 1 / r2;
+      const inv4 = inv2 * inv2;
+      angular = scaleAngular * f * inv2;
+      gax = scaleAngular * (gfx * inv2 - 2 * f * dx * inv4);
+      gay = scaleAngular * (gfy * inv2 - 2 * f * dy * inv4);
+      gaz = scaleAngular * (gfz * inv2 - 2 * f * dz * inv4);
     }
 
     value += scale * radial * angular;

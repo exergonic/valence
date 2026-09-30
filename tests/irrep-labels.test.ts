@@ -125,4 +125,42 @@ describe('irrep labels', () => {
       }
     }
   });
+
+  it('represents a rotation on the five d functions with the l = 2 character', () => {
+    // A d function has no axis to rotate, so the representation is built from
+    // the quadratic forms the five of them are. The character of a rotation by
+    // θ is the textbook 1 + 2cosθ + 2cos2θ, which is what says the matrix is
+    // the l = 2 irreducible representation and not merely a rotation of five
+    // arbitrary vectors.
+    const basis = assignBasisForD();
+    for (const degrees of [30, 60, 90, 120, 180, 270]) {
+      const theta = (degrees * Math.PI) / 180;
+      const c = Math.cos(theta);
+      const s = Math.sin(theta);
+      const operation = {
+        matrix: [[c, -s, 0], [s, c, 0], [0, 0, 1]],
+        permutation: [0],
+      };
+      const d = representationMatrix(basis, operation);
+      let trace = 0;
+      for (let i = 0; i < 5; i++) trace += d[i][i];
+      expect(trace).toBeCloseTo(1 + 2 * Math.cos(theta) + 2 * Math.cos(2 * theta), 10);
+      // and it is orthogonal: a rotation cannot change the norm of an orbital
+      for (let i = 0; i < 5; i++) {
+        for (let j = 0; j < 5; j++) {
+          let sum = 0;
+          for (let k = 0; k < 5; k++) sum += d[k][i] * d[k][j];
+          expect(sum).toBeCloseTo(i === j ? 1 : 0, 10);
+        }
+      }
+    }
+  });
 });
+
+/** The five d functions of one sulfur atom, as a basis. */
+function assignBasisForD(): BasisFunction[] {
+  return (['x2-y2', 'z2', 'xy', 'xz', 'yz'] as const).map((d) => ({
+    atomIndex: 0, angular: 'd' as const, axis: [0, 0, 0] as [number, number, number], d,
+    n: 3, zeta: 1.5, hii: -8, label: `S 3d${d}`,
+  }));
+}

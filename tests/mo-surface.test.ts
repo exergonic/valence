@@ -88,6 +88,51 @@ describe('the MO isosurface', () => {
     expect(maxRadius).toBeGreaterThan(1.2);
   });
 
+  it('evaluates a normalized 3d Slater orbital, and its gradient, exactly', () => {
+    // The d functions are the ones the 3d basis brings in: a normalized real d
+    // harmonic against the same radial part. The value pins the normalization
+    // (√(15/16π) for x²−y², √(5/16π) for z², √(15/4π) for the cross terms) and
+    // the gradient pins ∇[f/r²] = ∇f/r² − 2f d/r⁴, which is what the mesh
+    // normals are built from.
+    const radial = (n: number, zeta: number, rb: number) => {
+      let factorial = 1;
+      for (let k = 2; k <= 2 * n; k++) factorial *= k;
+      return Math.pow(2 * zeta, n + 0.5) / Math.sqrt(factorial) * Math.pow(rb, n - 1) * Math.exp(-zeta * rb);
+    };
+    const kinds = [
+      { d: 'x2-y2' as const, f: (x: number, y: number, z: number) => x * x - y * y, norm: Math.sqrt(15 / (16 * Math.PI)) },
+      { d: 'z2' as const, f: (x: number, y: number, z: number) => 2 * z * z - x * x - y * y, norm: Math.sqrt(5 / (16 * Math.PI)) },
+      { d: 'xy' as const, f: (x: number, y: number, z: number) => x * y, norm: Math.sqrt(15 / (4 * Math.PI)) },
+      { d: 'xz' as const, f: (x: number, y: number, z: number) => x * z, norm: Math.sqrt(15 / (4 * Math.PI)) },
+      { d: 'yz' as const, f: (x: number, y: number, z: number) => y * z, norm: Math.sqrt(15 / (4 * Math.PI)) },
+    ];
+    const n = 3;
+    const zeta = 1.5;
+    const point = [0.4, -0.25, 0.55] as [number, number, number];
+    const r = Math.hypot(...point);
+    const rb = r * BOHR_PER_ANGSTROM;
+    for (const { d, f, norm } of kinds) {
+      const basis: BasisFunction = { atomIndex: 0, angular: 'd', axis: [0, 0, 0], d, n, zeta, hii: -8, label: `S ${n}d${d}` };
+      evaluateMo(point[0], point[1], point[2], atom(), [basis], [1], probe);
+      const expected = radial(n, zeta, rb) * norm * f(point[0], point[1], point[2]) / (r * r);
+      expect(probe.value).toBeCloseTo(expected, 10);
+
+      // the analytic gradient against a central difference of the same value
+      const h = 1e-5;
+      for (const axis of [0, 1, 2]) {
+        const step = [0, 0, 0];
+        step[axis] = h;
+        evaluateMo(point[0] + step[0], point[1] + step[1], point[2] + step[2], atom(), [basis], [1], probe);
+        const plus = probe.value;
+        evaluateMo(point[0] - step[0], point[1] - step[1], point[2] - step[2], atom(), [basis], [1], probe);
+        const numeric = (plus - probe.value) / (2 * h);
+        evaluateMo(point[0], point[1], point[2], atom(), [basis], [1], probe);
+        const analytic = [probe.gx, probe.gy, probe.gz][axis];
+        expect(Math.abs(analytic - numeric) / Math.max(1e-9, Math.abs(analytic))).toBeLessThan(1e-3);
+      }
+    }
+  });
+
   it('differentiates an n>2 Slater orbital, not the 2p derivative', () => {
     const basis: BasisFunction = {
       atomIndex: 0, angular: 'p', axis: [0, 0, 1], n: 5, zeta: 2.322, hii: -12.7, label: 'I 5pz',

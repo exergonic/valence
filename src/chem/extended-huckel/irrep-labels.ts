@@ -33,7 +33,7 @@
  * under inversion.
  */
 import type { Molecule } from '../../mol-parser';
-import type { BasisFunction } from './assign-basis';
+import { D_FUNCTIONS, type BasisFunction } from './assign-basis';
 import { alignToPrincipalAxes } from './align-principal-axes';
 import { detectPointGroup, mirrorNormal, type SymmetryOperation } from '../../geometry/symmetrize';
 import { CANONICAL_TOLERANCE_EV } from './canonicalize-degenerate';
@@ -58,6 +58,7 @@ export function representationMatrix(basis: BasisFunction[], operation: Symmetry
   const n = basis.length;
   const d: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
   const r = operation.matrix;
+  const dRep = dRepresentation(r);
   for (let i = 0; i < n; i++) {
     const orbital = basis[i];
     const target = operation.permutation[orbital.atomIndex];
@@ -68,6 +69,16 @@ export function representationMatrix(basis: BasisFunction[], operation: Symmetry
     if (orbital.angular === 's') {
       const match = candidates[0];
       if (match) d[match.j][i] += 1;
+      continue;
+    }
+    if (orbital.angular === 'd') {
+      // A d function has no axis to rotate: the five real d functions are an
+      // l = 2 basis, so the rotation acts through its own 5×5 matrix. Each
+      // candidate is one of them, and the element is the representation's.
+      const sourceKind = D_FUNCTIONS.indexOf(orbital.d!);
+      for (const candidate of candidates) {
+        d[candidate.j][i] += dRep[D_FUNCTIONS.indexOf(candidate.b.d!)][sourceKind];
+      }
       continue;
     }
     for (const candidate of candidates) {
@@ -87,6 +98,57 @@ export function representationMatrix(basis: BasisFunction[], operation: Symmetry
   }
   return d;
 }
+
+/**
+ * The l = 2 representation of a rotation, in the five real d functions'
+ * basis (D_FUNCTIONS order).
+ *
+ * A d function is a symmetric quadratic form, f_k(r) = rᵗ M_k r, so a rotation
+ * acts on it by M → R M Rᵗ and the matrix element onto f_j is that form
+ * re-expressed in the five. The five M_k are orthogonal under the Frobenius
+ * product, which is the same invariant inner product the spherical integrals
+ * use, so the projection is just ⟨M_j, R M_k Rᵗ⟩/⟨M_j, M_j⟩; the ratio of the
+ * normalizations then converts from the numerators to the normalized real
+ * harmonics. Its character for a rotation by θ is 1 + 2cosθ + 2cos2θ, which is
+ * what the tests pin.
+ */
+function dRepresentation(r: number[][]): number[][] {
+  const out: number[][] = Array.from({ length: 5 }, () => new Array<number>(5).fill(0));
+  for (let k = 0; k < 5; k++) {
+    const m = D_FORMS[k];
+    // R M Rᵗ, with r orthogonal so Rᵗ acts as the inverse
+    const rm = [0, 1, 2].map((i) => [0, 1, 2].map((j) => [0, 1, 2].reduce((s, t) => s + r[i][t] * m[t][j], 0)));
+    const rotated = [0, 1, 2].map((i) => [0, 1, 2].map((j) => [0, 1, 2].reduce((s, t) => s + rm[i][t] * r[j][t], 0)));
+    for (let j = 0; j < 5; j++) {
+      let inner = 0;
+      let norm = 0;
+      for (let a = 0; a < 3; a++) {
+        for (let b = 0; b < 3; b++) {
+          inner += D_FORMS[j][a][b] * rotated[a][b];
+          norm += D_FORMS[j][a][b] * D_FORMS[j][a][b];
+        }
+      }
+      out[j][k] = (inner / norm) * (D_NORMS[k] / D_NORMS[j]);
+    }
+  }
+  return out;
+}
+
+/** The five real d functions as the symmetric forms x²−y², 2z²−x²−y², 2xy,
+ *  2xz, 2yz, and their normalizing constants. */
+const D_FORMS: number[][][] = [
+  [[1, 0, 0], [0, -1, 0], [0, 0, 0]],
+  [[-1, 0, 0], [0, -1, 0], [0, 0, 2]],
+  [[0, 1, 0], [1, 0, 0], [0, 0, 0]],
+  [[0, 0, 1], [0, 0, 0], [1, 0, 0]],
+  [[0, 0, 0], [0, 0, 1], [0, 1, 0]],
+];
+const D_NORMS = [
+  // the numerators above are the DOUBLED cross terms (2xy, 2xz, 2yz), which is
+  // what makes the normalizers uniform apart from z²'s
+  Math.sqrt(15 / (16 * Math.PI)), Math.sqrt(5 / (16 * Math.PI)),
+  Math.sqrt(15 / (16 * Math.PI)), Math.sqrt(15 / (16 * Math.PI)), Math.sqrt(15 / (16 * Math.PI)),
+];
 
 /** χ(g) for one orbital, in the non-orthogonal AO basis: ψᵀ S D ψ. */
 function orbitalCharacter(

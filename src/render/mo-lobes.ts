@@ -16,13 +16,51 @@
  */
 import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
-import type { BasisFunction } from '../chem/extended-huckel/assign-basis';
+import type { BasisFunction, DFunction } from '../chem/extended-huckel/assign-basis';
 import { frameDirectionToWorld, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
 import { createLobeMesh, orientLobe, piLobe } from './lobes';
 
 /** The textbook phase pair: the app's π blue against a warm contrast. */
 export const MO_PHASE_POSITIVE = 0x4488ff;
 export const MO_PHASE_NEGATIVE = 0xff6644;
+
+/**
+ * Where a d function's lobes point, in the calculation frame, and which phase
+ * each carries. Four lobes for x²−y², xy, xz and yz; z² has two axial lobes and
+ * the negative collar, which is drawn as the four equatorial directions here
+ * (the smooth surface draws the ring itself).
+ */
+function dLobes(kind: DFunction): Array<{ direction: [number, number, number]; positive: boolean }> {
+  const h = Math.SQRT1_2;
+  switch (kind) {
+    case 'x2-y2':
+      return [
+        { direction: [1, 0, 0], positive: true }, { direction: [-1, 0, 0], positive: true },
+        { direction: [0, 1, 0], positive: false }, { direction: [0, -1, 0], positive: false },
+      ];
+    case 'z2':
+      return [
+        { direction: [0, 0, 1], positive: true }, { direction: [0, 0, -1], positive: true },
+        { direction: [h, h, 0], positive: false }, { direction: [-h, h, 0], positive: false },
+        { direction: [-h, -h, 0], positive: false }, { direction: [h, -h, 0], positive: false },
+      ];
+    case 'xy':
+      return [
+        { direction: [h, h, 0], positive: true }, { direction: [-h, -h, 0], positive: true },
+        { direction: [-h, h, 0], positive: false }, { direction: [h, -h, 0], positive: false },
+      ];
+    case 'xz':
+      return [
+        { direction: [h, 0, h], positive: true }, { direction: [-h, 0, -h], positive: true },
+        { direction: [-h, 0, h], positive: false }, { direction: [h, 0, -h], positive: false },
+      ];
+    default: // yz
+      return [
+        { direction: [0, h, h], positive: true }, { direction: [0, -h, -h], positive: true },
+        { direction: [0, -h, h], positive: false }, { direction: [0, h, -h], positive: false },
+      ];
+  }
+}
 
 /**
  * The phase pairs, one per simultaneously drawn orbital. Two localized
@@ -98,6 +136,25 @@ export function renderMoOrbitals(
       mesh.position.set(origin[0], origin[1], origin[2]);
       mesh.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
       group.add(mesh);
+      continue;
+    }
+
+    if (orbital.angular === 'd') {
+      // A d contribution drawn as a p dumbbell would be a lie about its shape,
+      // so it gets its own lobes: four for x²−y², xy, xz and yz, and for z² the
+      // two axial lobes plus the negative collar as a torus. (The smooth
+      // surface draws all five exactly; this is the "which AO, which phase"
+      // view, and a four-lobed cloverleaf is what that view needs to say.)
+      for (const lobe of dLobes(orbital.d!)) {
+        const direction = frameDirectionToWorld(frame, lobe.direction);
+        // the AO's own sign flips every lobe's phase, as it does for a p
+        const samePhase = lobe.positive === positive;
+        const mesh = createLobeMesh(piLobe(), samePhase ? positiveColour : negativeColour, opacity, preset, size * 0.85);
+        applyMoOpacity(mesh, opacity);
+        mesh.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
+        orientLobe(mesh, origin, direction);
+        group.add(mesh);
+      }
       continue;
     }
 

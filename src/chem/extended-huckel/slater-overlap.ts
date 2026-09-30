@@ -19,7 +19,7 @@
  * module is tested against.
  */
 import type { Molecule } from '../../mol-parser';
-import type { BasisFunction } from './assign-basis';
+import { D_FUNCTIONS, type BasisFunction } from './assign-basis';
 
 /** A(1..n) and B(1..n) as above. `maxIndex` must cover n₁+n₂+1. */
 export function abFunctions(zeta1: number, zeta2: number, R: number, maxIndex: number): { A: number[]; B: number[] } {
@@ -187,6 +187,8 @@ export function radialComponent(
  *  relative, far below the method's accuracy and the fixtures' 4 decimals). */
 export const BOHR_RADIUS = 0.529177210903;
 
+const SQRT3 = Math.sqrt(3);
+
 /**
  * The overlap matrix over a basis, in molecular coordinates.
  *
@@ -252,6 +254,10 @@ function orbitalOverlap(a: BasisFunction, b: BasisFunction, atoms: Molecule['ato
   if (a.angular === 's' && b.angular === 's') {
     return radialComponent(a.n, 0, b.n, 0, 0, a.zeta, b.zeta, R);
   }
+  // before the s-only branches below: an s–d pair must not take the s–p path
+  if (a.angular === 'd' || b.angular === 'd') {
+    return dOverlap(a, b, zFromB, R, rAngstrom);
+  }
   if (a.angular === 's') {
     return dot(b.axis, toward(b, a)) * radialComponent(a.n, 0, b.n, 1, 0, a.zeta, b.zeta, R);
   }
@@ -265,3 +271,109 @@ function orbitalOverlap(a: BasisFunction, b: BasisFunction, atoms: Molecule['ato
   const perpendicular = sameAxis - dot(a.axis, zFromB) * dot(b.axis, zFromB);
   return headOn * sigma + perpendicular * pi;
 }
+
+/**
+ * The overlaps involving a d function — a transcription of YAeHMOP's
+ * `R_overlap_mat.c`, including its sign flips, because those flips are how the
+ * Fortran/C code accounts for the direction convention of a d function that
+ * sits on the "other" atom of the pair. Everything is built from the bond's
+ * direction cosines:
+ *
+ *   A is the angle between the bond vector (from b's atom to a's) and z,
+ *   B the azimuth of its xy projection about z,
+ *
+ * and the two projection tables are exactly the source's: `p` (9 entries) for
+ * a p orbital and `d` (25 = three channels × five functions, plus the two
+ * d–d cross blocks) for the five real d functions in `D_FUNCTIONS` order.
+ * A d function has no axis of its own — its shape is fixed on the frame's
+ * axes — so `u` below is the bond vector and nothing else.
+ *
+ * Pinned against `bind` on PCl₅ (tests/references/eht/d-reference.json), which
+ * is what makes a transcription safer than a re-derivation.
+ */
+function dOverlap(
+  a: BasisFunction,
+  b: BasisFunction,
+  zFromB: [number, number, number],
+  R: number,
+  rAngstrom: number,
+): number {
+  const [ux, uy, uz] = zFromB;
+  const xyUnit = Math.hypot(ux, uy);
+  const xy = xyUnit * rAngstrom;
+  const sinA = xy < 1e-5 ? 0 : xyUnit;
+  const cosA = uz;
+  const cosB = xy < 1e-5 ? 1 : ux / xyUnit;
+  const sinB = xy < 1e-5 ? 0 : uy / xyUnit;
+  const c2A = cosA * cosA - sinA * sinA;
+  const c2B = cosB * cosB - sinB * sinB;
+  const s2B = 2 * sinB * cosB;
+
+  const p = [
+    sinA * cosB, sinA * sinB, cosA,
+    cosA * cosB, cosA * sinB, -sinA,
+    -sinB, cosB, 0,
+  ];
+  const d = [
+    // σ channel: how each of the five functions projects onto the bond axis
+    SQRT3 * 0.5 * sinA * sinA * c2B,
+    1 - 1.5 * sinA * sinA,
+    SQRT3 * cosB * sinB * sinA * sinA,
+    SQRT3 * cosA * sinA * cosB,
+    SQRT3 * cosA * sinA * sinB,
+    // π channel
+    cosA * sinA * c2B,
+    -SQRT3 * cosA * sinA,
+    cosA * sinA * s2B,
+    cosB * c2A,
+    sinB * c2A,
+    // δ channel
+    -sinA * s2B,
+    0,
+    sinA * c2B,
+    -p[4],
+    p[3],
+    // the d–d blocks (only reachable when both sides are d)
+    0.5 * (1 + cosA * cosA) * c2B,
+    0.5 * SQRT3 * sinA * sinA,
+    cosB * sinB * (1 + cosA * cosA),
+    -cosA * sinA * cosB,
+    -cosA * sinA * sinB,
+    -cosA * s2B,
+    0,
+    cosA * c2B,
+    p[1],
+    -p[0],
+  ];
+
+  const ka = a.angular === 'd' ? D_FUNCTIONS.indexOf(a.d!) : -1;
+  const kb = b.angular === 'd' ? D_FUNCTIONS.indexOf(b.d!) : -1;
+  /** The radial σ/π/δ component for this pair's quantum numbers. */
+  const radial = (m: number) => radialComponent(a.n, angularOf(a), b.n, angularOf(b), m, a.zeta, b.zeta, R);
+
+  // < S | D >
+  if (a.angular === 's' && kb >= 0) return d[kb] * radial(0);
+  // < D | S >
+  if (ka >= 0 && b.angular === 's') return d[ka] * radial(0);
+  // < P | D >  — the p's component along the pair's frame axis
+  if (a.angular === 'p' && kb >= 0) {
+    const k = a.axis.indexOf(1); // the frame axis this p lies on
+    return -p[k] * d[kb] * radial(0)
+      + (d[kb + 5] * p[k + 3] + d[kb + 10] * p[k + 6]) * radial(1);
+  }
+  // < D | P >
+  if (ka >= 0 && b.angular === 'p') {
+    const l = b.axis.indexOf(1);
+    return p[l] * d[ka] * radial(0)
+      - (p[l + 3] * d[ka + 5] + d[ka + 10] * p[l + 6]) * radial(1);
+  }
+  // < D | D >
+  return d[ka] * d[kb] * radial(0)
+    - (d[ka + 5] * d[kb + 5] + d[kb + 10] * d[ka + 10]) * radial(1)
+    + (d[ka + 15] * d[kb + 15] + d[ka + 20] * d[kb + 20]) * radial(2);
+}
+
+function angularOf(orbital: BasisFunction): number {
+  return orbital.angular === 's' ? 0 : orbital.angular === 'p' ? 1 : 2;
+}
+
