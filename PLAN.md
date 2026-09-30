@@ -51,7 +51,9 @@ Milestones:
       not needed — the pin set is in `tests/localized-orbitals.test.ts`) — and
       it ran in TypeScript, not in `avo_ibo`: a throwaway script answered the
       risk question (clean local orbitals, no rubbery tails) before the port
-- [x] **4b** — PM localization, character classification and display order,
+- [x] **4b** — PM localization, character classification, and the display order
+      (which became ⟨φ|H|φ⟩ ascending on 2026-09-30 — an energy ladder, lowest
+      at the bottom, rather than grouped by class),
       LMO rendering through the existing MO pictures; the degeneracy resolver
       ships as a symmetry guard after measuring that it fires on none of the
       seven test molecules (NOTES.md)

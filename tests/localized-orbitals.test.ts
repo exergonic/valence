@@ -213,10 +213,25 @@ describe('the topology PM recovers', () => {
     }
   });
 
-  it('lone pairs sort before bonds, which sort before the delocalized set', () => {
+  it('the list ascends by ⟨φ|H|φ⟩ within each section — an energy ladder', () => {
+    for (const name of ['Water (H₂O)', 'Ethene (C₂H₄)', 'Benzene (C₆H₆)', 'Nitrogen (N₂)']) {
+      const localized = localize(name);
+      for (const block of [occupied(localized), virtual(localized)]) {
+        for (let i = 1; i < block.length; i++) {
+          expect(block[i].energy).toBeGreaterThanOrEqual(block[i - 1].energy - 1e-9);
+        }
+      }
+    }
+    // the class is a label, not a rank: water's O–H bonds (−22.05 eV) lie BELOW
+    // its lone pairs (−21.72, −14.80), which is the opposite of listing by
+    // class, and the pure 2p lone pair lands exactly on the canonical HOMO
     const water = localize('Water (H₂O)');
-    const order = characters({ ...water, orbitals: occupied(water) });
-    expect(order.lastIndexOf('lone pair')).toBeLessThan(order.indexOf('sigma'));
+    const waterOrder = occupied(water);
+    expect(characters({ ...water, orbitals: waterOrder }))
+      .toEqual(['sigma', 'sigma', 'lone pair', 'lone pair']);
+    expect(waterOrder[3].energy).toBeCloseTo(-14.8, 2);
+    // ...while benzene's delocalized set still sorts above every σ, because
+    // that is where the numbers put it
     const benzene = localize('Benzene (C₆H₆)');
     const benzeneOrder = characters({ ...benzene, orbitals: occupied(benzene) });
     expect(benzeneOrder.lastIndexOf('sigma')).toBeLessThan(benzeneOrder.indexOf('delocalized'));
@@ -226,7 +241,10 @@ describe('the topology PM recovers', () => {
     // The classifier is a port of avo_ibo's `_classify_orbital`: the same
     // names, the same gates, so our rows can be read beside an ibos.txt.
     const water = localize('Water (H₂O)');
-    expect(characters(water).slice(0, 4)).toEqual(['lone pair', 'lone pair', 'sigma', 'sigma']);
+    // the classes present in the occupied block, whatever order the ladder
+    // puts them in
+    expect([...new Set(characters({ ...water, orbitals: occupied(water) }))].sort())
+      .toEqual(['lone pair', 'sigma']);
     // benzene's π set is Deloc under their gate: its fourth atom (5%) misses
     // the 3% ceiling that would have made it a three-centre orbital
     const benzene = localize('Benzene (C₆H₆)');

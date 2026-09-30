@@ -197,10 +197,12 @@ export function setupMoPanel(ctx: SceneContext) {
   }
 
   /**
-   * The localized list: one row per orbital, in the order the classifier set
-   * (lone pairs, then bonds, then the delocalized π). No energies — the
-   * localized orbitals are not eigenstates, and any number here would inherit
-   * the extended-Hückel parameters (PLAN.md Phase 4).
+   * The localized list: one row per orbital, ordered as an energy ladder —
+   * lowest at the bottom of the panel, rising as you read up, which is how the
+   * Ladder tab and other programs draw an orbital list. The order is ⟨φ|H|φ⟩
+   * within each section (see orderLocalizedOrbitals); the number itself is not
+   * printed, because a localized orbital is not an eigenstate and a number
+   * here would inherit the extended-Hückel parameters (PLAN.md Phase 4).
    */
   function drawLocalized(): void {
     const orbitals = ctx.localizedOrbitals;
@@ -217,7 +219,12 @@ export function setupMoPanel(ctx: SceneContext) {
     const selection = ctx.display.localizedSelection;
     const occupiedCount = orbitals.filter((o) => o.occupied).length;
     let section: 'occupied' | 'empty' | null = null;
-    list.innerHTML = orbitals.map((orbital, index) => {
+    // bottom-up: the array ascends, the panel descends, so the highest-lying
+    // orbital (the empties) sits at the top and the deepest at the bottom. The
+    // rows are walked by INDEX, reversed — `data-index` must stay the array
+    // index, which is what the selection and the click handler speak.
+    list.innerHTML = orbitals.map((_, i) => i).reverse().map((index) => {
+      const orbital = orbitals[index];
       let html = '';
       const tag = orbital.occupied ? 'occupied' : 'empty';
       if (tag !== section) {
@@ -262,7 +269,7 @@ export function setupMoPanel(ctx: SceneContext) {
     } else {
       readout.textContent = `${orbitals.length} localized orbitals · click one to draw it, another to compare`;
     }
-    note.textContent = 'Pipek–Mezey localization of the extended-Hückel orbitals (semiempirical): the delocalized MOs rearranged into bonds and lone pairs, occupied space and valence-virtual space alike. Pick one from each section to see a hyperconjugation interaction. No energies — a localized orbital is not an eigenstate.';
+    note.textContent = 'Pipek–Mezey localization of the extended-Hückel orbitals (semiempirical): the delocalized MOs rearranged into bonds and lone pairs, occupied space and valence-virtual space alike, listed as an energy ladder — lowest at the bottom. Pick one from each section to see a hyperconjugation interaction. No energies are printed: a localized orbital is not an eigenstate, so the order uses the one-electron expectation ⟨φ|H|φ⟩ while the numbers themselves would inherit the parameter sensitivity.';
   }
 
   function draw(): void {

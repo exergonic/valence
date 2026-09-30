@@ -3,26 +3,26 @@
  * the panel shows them in.
  *
  * Localized orbitals are not eigenstates — there is no eigenvalue to sort by —
- * so the list is ordered by what a chemist can see, in two keys:
+ * so the list is ordered by **⟨φ|H|φ⟩**, the one-electron expectation of the
+ * extended-Hückel Hamiltonian, within each section (occupied first, then the
+ * valence-virtual block). It is well defined for any orbital — the mean of the
+ * canonical energies the localized orbital spans — and it is the sort key
+ * ONLY: the number inherits EH's parameter sensitivity, so it is never shown.
  *
- *  1. **Character**, from the Mulliken populations alone: a lone pair is
- *     concentrated on one atom and forms no bond; a two-centre orbital is a
- *     σ or π bond (or its antibonding counterpart, when the A–B overlap
- *     population is negative); anything spread over three or more centres is
- *     delocalized (π when it is built from parallel p orbitals, which is what
- *     benzene's ring orbitals are). No energies, no parameters.
- *  2. **Energy within a class**, ⟨φ|H|φ⟩ — the one-electron expectation of the
- *     extended-Hückel Hamiltonian. It is well defined for any orbital (it is
- *     the mean of the canonical energies the localized orbital spans), which
- *     is why it orders the members of a class even though it is not an
- *     eigenvalue. It is the sort key ONLY: the number inherits EH's parameter
- *     sensitivity, so it is never shown.
+ * The list is an **energy ladder**, ascending: lowest at the bottom of the
+ * panel, rising as you read up, the way the canonical level diagram and other
+ * programs draw it. Water comes out as the two O–H bonds (−22.05 eV), the
+ * in-plane lone pair (−21.72), the pure 2p lone pair (−14.80, which is the 1b1
+ * exactly), then the two σ*: bonds below lone pairs, below the empties.
  *
- * Measured 2026-09-29 (NOTES.md): ordering by ⟨φ|H|φ⟩ alone interleaves the
- * classes (water is lone pair, σ, σ, lone pair), which is the aufbau picture
- * but not a legible list; class first, energy within the class, is both.
- * Within a class, ⟨φ|H|φ⟩ is exact enough to separate σ from π (ethene
- * −20.7/−13.2 eV) and to order the lone pairs (water −21.7/−14.8 eV).
+ * **Class-first was tried and reversed** (added 2026-09-29, removed 2026-09-30).
+ * Grouping lone pairs, then bonds, then the delocalized set gives a legible
+ * list, and its note claimed the pure-energy order interleaves the classes
+ * (water as lone pair, σ, σ, lone pair) — which does not reproduce: water sorts
+ * σ, σ, LP, LP by ⟨φ|H|φ⟩. The user reads these lists as energy ladders, the
+ * same way the Ladder tab reads, and a rank that sets a lone pair below a bond
+ * contradicts the numbers beside it. The class is still *shown*, as the Type
+ * string, so nothing is lost by not also sorting on it.
  */
 import type { Molecule } from '../../mol-parser';
 import type { ExtendedHuckelResult } from '../extended-huckel/solve';
@@ -105,24 +105,6 @@ const PI_P_FRACTION = 0.85;
 const VIRT_THREE_CENTRE_THIRD = 0.08;
 const VIRT_BOND_SHARE = 0.60;
 const VIRT_ONE_ATOM = 0.50;
-
-/** The displayed order: lone pairs, then the bonds, then the delocalized
- *  orbitals, then the empties. Within a class, by energy — the number is the
- *  only thing that can order two equivalent orbitals. */
-const CHARACTER_RANK: Record<LocalizedCharacter, number> = {
-  'lone pair': 0,
-  'lone pair s': 1,
-  sigma: 2,
-  pi: 3,
-  delta: 4,
-  'three-centre': 5,
-  delocalized: 6,
-  'sigma antibond': 7,
-  'pi antibond': 7,
-  'delta antibond': 7,
-  antibond: 8,
-  virtual: 9,
-};
 
 /** ⟨φ|M|φ⟩ for a symmetric matrix M in the AO basis. */
 function quadratic(M: number[][], c: number[]): number {
@@ -324,16 +306,22 @@ export function orderLocalizedOrbitals(
     (coefficients) => describe(molecule, result, coefficients, occupied),
   );
   return [
-    ...describeBlock(localized.occupied, true).sort(bySectionThenClass),
-    ...describeBlock(localized.virtual, false).sort(bySectionThenClass),
+    ...describeBlock(localized.occupied, true).sort(bySectionThenEnergy),
+    ...describeBlock(localized.virtual, false).sort(bySectionThenEnergy),
   ];
 }
 
-/** Character rank first, then the energy within the class, then a
- *  deterministic tie-break on which atoms carry the orbital. */
-function bySectionThenClass(a: LocalizedOrbital, b: LocalizedOrbital): number {
-  const rank = CHARACTER_RANK[a.character] - CHARACTER_RANK[b.character];
-  if (rank !== 0) return rank;
+/** Ascending ⟨φ|H|φ⟩ within a section — the occupied block first, then the
+ *  empties. The list is an energy ladder, so the number does the ordering and
+ *  the class is a label rather than a rank: it is what a chemist reads to know
+ *  what an orbital *is*, not where it sits.
+ *
+ *  Two symmetry-equivalent orbitals are exactly degenerate, so a stable
+ *  tie-break is still needed for a deterministic order — the atoms carrying
+ *  the orbital, which is what makes the two O–H bonds of water always list in
+ *  the same sequence. */
+function bySectionThenEnergy(a: LocalizedOrbital, b: LocalizedOrbital): number {
+  if (a.occupied !== b.occupied) return a.occupied ? -1 : 1;
   if (Math.abs(a.energy - b.energy) > 1e-9) return a.energy - b.energy;
   for (let i = 0; i < Math.min(a.atoms.length, b.atoms.length); i++) {
     if (a.atoms[i] !== b.atoms[i]) return a.atoms[i] - b.atoms[i];
