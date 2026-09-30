@@ -371,7 +371,19 @@ Open follow-ups, in the order they would pay off:
    orbitals (NOTES.md). What remains here is breadth, not machinery: a metal
    complex has to arrive as an example or from PubChem, since MMFF94 cannot
    build one.
-2. **The localized-orbital classes are avo_ibo's** — lifted, thresholds and
+2. **A multiplicity the sketch cannot carry.** A MOL block has no field for
+   spin, so an example whose reference calculation was open-shell says so itself
+   (`Example.multiplicity`) and the Hückel layer then refuses to fill the
+   orbitals. NiCl4(2-) is the case: the tetrahedral d8 complex ORCA optimised as
+   charge −2, MULTIPLICITY 3, and its 40 electrons are even — the count alone
+   would have drawn the singlet it is not. Found while adding it: **the app's
+   default hides the atom layer** (`Atoms & Bonds` off, orbital lobes on, from
+   commit 1b54612), which is invisible for an organic molecule — the lobes trace
+   the skeleton — but leaves a metal complex showing bare element labels, since
+   the valence model has no lobes to draw there. Examples containing an element
+   outside the valence model now turn the molecule layer on as they load; the
+   global default is still the old one, and worth a decision.
+3. **The localized-orbital classes are avo_ibo's** — lifted, thresholds and
    names both, with diborane in as the `2e3c` case the rule exists for. Where
    our labels still differ from theirs on a metal complex, the *orbitals* differ
    too (EH+PM puts more density on the iron than SCF+IAO+PM) — NOTES.md has the
