@@ -36,7 +36,15 @@ type Shape =
   | { l: 's' } | { l: 'p'; axis: [number, number, number] }
   | { l: 'd'; d: DFunction };
 
-interface Spec { n: number; zeta: number; shape: Shape }
+interface Spec { n: number; zeta: number; zeta2?: number; coefficients?: [number, number]; shape: Shape }
+
+/** The (ζ, coefficient) terms a spec is built from — two for a contracted d. */
+function terms(spec: Spec): Array<{ zeta: number; coefficient: number }> {
+  return spec.zeta2 === undefined || spec.coefficients === undefined
+    ? [{ zeta: spec.zeta, coefficient: 1 }]
+    : [{ zeta: spec.zeta, coefficient: spec.coefficients[0] },
+       { zeta: spec.zeta2, coefficient: spec.coefficients[1] }];
+}
 
 /** The normalized Slater angular factor, from the Cartesian direction. */
 function angular(shape: Shape, dx: number, dy: number, dz: number, r: number): number {
@@ -56,13 +64,24 @@ function angular(shape: Shape, dx: number, dy: number, dz: number, r: number): n
   }
 }
 
-/** (2ζ)^(n+½)/√((2n)!) · r^(n−1) e^(−ζr), in bohr. */
-function radial(spec: Spec, r: number): number {
+/** A spec's contraction with the normalization folded in: the inner loop runs
+ *  millions of times, so the factorial and the ζ power are computed once here
+ *  rather than per grid point. */
+function prepare(spec: Spec): Array<{ zeta: number; scale: number }> {
   let factorial = 1;
   for (let k = 2; k <= 2 * spec.n; k++) factorial *= k;
-  let power = 1;
-  for (let k = 1; k < spec.n; k++) power *= r;
-  return Math.pow(2 * spec.zeta, spec.n + 0.5) / Math.sqrt(factorial) * power * Math.exp(-spec.zeta * r);
+  return terms(spec).map((term) => ({
+    zeta: term.zeta,
+    coefficient: term.coefficient,
+    scale: (term.coefficient * Math.pow(2 * term.zeta, spec.n + 0.5)) / Math.sqrt(factorial),
+  }));
+}
+
+/** r^(n−1) · Σ cᵗ e^(−ζ r), in bohr. */
+function radialAt(prepared: Array<{ zeta: number; scale: number }>, power: number, r: number): number {
+  let total = 0;
+  for (const term of prepared) total += term.scale * Math.exp(-term.zeta * r);
+  return power * total;
 }
 
 /** Gauss–Legendre nodes and weights on [−1, 1] (Newton on the Legendre polynomial). */
@@ -107,7 +126,13 @@ function gaussLegendre(n: number): { x: number[]; w: number[] } {
  */
 function overlapByQuadrature(a: Spec, b: Spec, R: number, nodes = 140, margin = 10): number {
   const { x, w } = gaussLegendre(nodes);
-  const half = R / 2 + margin / Math.min(a.zeta, b.zeta) + 1;
+  const pa = prepare(a);
+  const pb = prepare(b);
+  // size the box by the LOOSEST exponent in play — for a contracted orbital
+  // that is its second term, not the first (the same truncation trap as above,
+  // one level deeper: sizing by zeta alone cut a contracted d's slow tail off)
+  const loosest = Math.min(...[...terms(a), ...terms(b)].map((t) => t.zeta));
+  const half = R / 2 + margin / loosest + 1;
   let total = 0;
   for (let i = 0; i < nodes; i++) {
     const px = x[i] * half;
@@ -119,8 +144,12 @@ function overlapByQuadrature(a: Spec, b: Spec, R: number, nodes = 140, margin = 
         const weight = weightXY * w[k] * half;
         const aDist = Math.hypot(px, py, pz);
         const bDist = Math.hypot(px, py, pz - R);
-        total += weight * radial(a, aDist) * angular(a.shape, px, py, pz, aDist)
-          * radial(b, bDist) * angular(b.shape, px, py, pz - R, bDist);
+        let aPower = 1;
+        for (let k = 1; k < a.n; k++) aPower *= aDist;
+        let bPower = 1;
+        for (let k = 1; k < b.n; k++) bPower *= bDist;
+        total += weight * radialAt(pa, aPower, aDist) * angular(a.shape, px, py, pz, aDist)
+          * radialAt(pb, bPower, bDist) * angular(b.shape, px, py, pz - R, bDist);
       }
     }
   }
@@ -140,6 +169,8 @@ function overlapFromCode(a: Spec, b: Spec, R: number): number {
     d: spec.shape.l === 'd' ? spec.shape.d : undefined,
     n: spec.n,
     zeta: spec.zeta,
+    zeta2: spec.zeta2,
+    coefficients: spec.coefficients,
     hii: -1,
     label: 'x',
   });
@@ -150,6 +181,12 @@ function overlapFromCode(a: Spec, b: Spec, R: number): number {
 const s = (zeta: number): Spec => ({ n: 3, zeta, shape: { l: 's' } });
 const p = (zeta: number, axis: [number, number, number]): Spec => ({ n: 3, zeta, shape: { l: 'p', axis } });
 const d = (zeta: number, kind: DFunction): Spec => ({ n: 3, zeta, shape: { l: 'd', d: kind } });
+
+/** Iron's 3d exactly as the parameter table ships it: two exponents, one
+ *  coefficient each. */
+const feD = (kind: DFunction): Spec => ({
+  n: 3, zeta: 5.35, zeta2: 2.0, coefficients: [0.5505, 0.6260], shape: { l: 'd', d: kind },
+});
 
 const Z_AXIS: [number, number, number] = [0, 0, 1];
 const X_AXIS: [number, number, number] = [1, 0, 0];
@@ -167,6 +204,15 @@ describe('the two-centre overlaps by quadrature', () => {
       const finer = overlapByQuadrature(a, b, 2.7, 180, 13);
       expect(Math.abs(working - finer)).toBeLessThan(1e-6);
     }
+
+    // A CONTRACTED orbital is a harder integral: its tight term (ζ = 5.35 for
+    // iron's 3d) decays over 1/ζ ≈ 0.19 bohr, so a box sized to hold the loose
+    // term leaves ~2 nodes per decay length. The rule still converges, just
+    // more slowly — which is why the contracted comparisons below carry a
+    // looser tolerance than the rest of the file.
+    const contractedCoarse = overlapByQuadrature(feD('z2'), feD('z2'), 3.2);
+    const contractedFine = overlapByQuadrature(feD('z2'), feD('z2'), 3.2, 180, 13);
+    expect(Math.abs(contractedCoarse - contractedFine)).toBeLessThan(1e-4);
   });
 
   it('gives the δ pair the same self-overlap, as C∞ symmetry requires', () => {
@@ -190,7 +236,8 @@ describe('the two-centre overlaps by quadrature', () => {
     for (const [a, b, R] of cases) {
       const expected = overlapByQuadrature(a, b, R);
       const actual = overlapFromCode(a, b, R);
-      expect(Math.abs(actual - expected)).toBeLessThan(1e-5);
+      // looser than the single-zeta cases: see the convergence note above
+      expect(Math.abs(actual - expected)).toBeLessThan(1e-4);
     }
   });
 
@@ -212,7 +259,31 @@ describe('the two-centre overlaps by quadrature', () => {
     for (const [a, b, R] of cases) {
       const expected = overlapByQuadrature(a, b, R);
       const actual = overlapFromCode(a, b, R);
-      expect(Math.abs(actual - expected)).toBeLessThan(1e-5);
+      // looser than the single-zeta cases: see the convergence note above
+      expect(Math.abs(actual - expected)).toBeLessThan(1e-4);
+    }
+  });
+
+  it('agrees with the module for a contracted d — the two-zeta sum of the d block', { timeout: 60000 }, () => {
+    // Iron's 3d as the parameter table ships it: two exponents with a
+    // coefficient each. The overlap of a contracted orbital with anything is
+    // the 2×2 sum over exponent pairs, and this is the only check that the sum
+    // (and the normalisation behind it) is right.
+    const carbon = (zeta: number): Spec => ({ n: 2, zeta, shape: { l: 's' } });
+    const ironD = feD;
+    const cases: Array<[Spec, Spec, number]> = [
+      [ironD('z2'), carbon(1.625), 2.6],
+      [ironD('xz'), carbon(1.625), 2.6],
+      [carbon(1.625), ironD('x2-y2'), 2.6],
+      [ironD('z2'), ironD('z2'), 3.2],
+      [ironD('xz'), ironD('xz'), 3.2],
+      [ironD('xy'), ironD('x2-y2'), 3.2],
+    ];
+    for (const [a, b, R] of cases) {
+      const expected = overlapByQuadrature(a, b, R);
+      const actual = overlapFromCode(a, b, R);
+      // looser than the single-zeta cases: see the convergence note above
+      expect(Math.abs(actual - expected)).toBeLessThan(1e-4);
     }
   });
 

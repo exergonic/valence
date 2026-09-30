@@ -133,6 +133,46 @@ describe('the MO isosurface', () => {
     }
   });
 
+  it('evaluates a CONTRACTED d — the two-zeta sum the d block brings', () => {
+    // Iron's 3d as the table ships it. A contracted orbital is a sum of two
+    // STOs, so the amplitude is a sum too — and the sum is where a factor of
+    // the coefficient or a dropped term would hide, since a single-zeta test
+    // cannot see it.
+    const [c1, c2] = [0.5505, 0.6260];
+    const [z1, z2] = [5.35, 2.0];
+    const n = 3;
+    const basis: BasisFunction = {
+      atomIndex: 0, angular: 'd', axis: [0, 0, 0], d: 'z2',
+      n, zeta: z1, zeta2: z2, coefficients: [c1, c2], hii: -12.6, label: 'Fe 3dz2',
+    };
+    const sto = (zeta: number, rb: number) => {
+      let factorial = 1;
+      for (let k = 2; k <= 2 * n; k++) factorial *= k;
+      return Math.pow(2 * zeta, n + 0.5) / Math.sqrt(factorial) * rb * rb * Math.exp(-zeta * rb);
+    };
+    const point = [0.35, -0.2, 0.5] as [number, number, number];
+    const r = Math.hypot(...point);
+    const rb = r * BOHR_PER_ANGSTROM;
+    const angular = Math.sqrt(5 / (16 * Math.PI)) * (2 * point[2] * point[2] - point[0] * point[0] - point[1] * point[1]) / (r * r);
+    const expected = (c1 * sto(z1, rb) + c2 * sto(z2, rb)) * angular;
+    evaluateMo(point[0], point[1], point[2], atom(), [basis], [1], probe);
+    expect(probe.value).toBeCloseTo(expected, 10);
+
+    // and the gradient keeps matching a central difference with both terms in
+    const h = 1e-5;
+    for (const axis of [0, 1, 2]) {
+      const step = [0, 0, 0];
+      step[axis] = h;
+      evaluateMo(point[0] + step[0], point[1] + step[1], point[2] + step[2], atom(), [basis], [1], probe);
+      const plus = probe.value;
+      evaluateMo(point[0] - step[0], point[1] - step[1], point[2] - step[2], atom(), [basis], [1], probe);
+      const numeric = (plus - probe.value) / (2 * h);
+      evaluateMo(point[0], point[1], point[2], atom(), [basis], [1], probe);
+      const analytic = [probe.gx, probe.gy, probe.gz][axis];
+      expect(Math.abs(analytic - numeric) / Math.max(1e-9, Math.abs(analytic))).toBeLessThan(1e-3);
+    }
+  });
+
   it('differentiates an n>2 Slater orbital, not the 2p derivative', () => {
     const basis: BasisFunction = {
       atomIndex: 0, angular: 'p', axis: [0, 0, 1], n: 5, zeta: 2.322, hii: -12.7, label: 'I 5pz',

@@ -15,7 +15,7 @@
  * honest answer, not a smaller basis.
  */
 import type { Molecule } from '../../mol-parser';
-import { EH_PARAMETERS } from './parameters';
+import { EH_PARAMETERS, type OrbitalParameters } from './parameters';
 
 /** The five real 3d functions, in YAeHMOP's order. */
 export const D_FUNCTIONS = ['x2-y2', 'z2', 'xy', 'xz', 'yz'] as const;
@@ -38,6 +38,10 @@ export interface BasisFunction {
   n: number;
   /** Slater exponent ζ (bohr⁻¹). */
   zeta: number;
+  /** The contraction, for the d block's d rows: a second exponent and the two
+   *  coefficients. Absent for a single-zeta orbital. */
+  zeta2?: number;
+  coefficients?: [number, number];
   /** Coulomb term Hᵢᵢ (eV) — the valence-state ionization potential. */
   hii: number;
   /** Diagnostic label in the oracle's form, e.g. "C( 1) 2px". */
@@ -49,6 +53,14 @@ const P_AXES: Array<{ suffix: string; axis: [number, number, number] }> = [
   { suffix: 'y', axis: [0, 1, 0] },
   { suffix: 'z', axis: [0, 0, 1] },
 ];
+
+/** The parameters as a basis function carries them — the contraction travels
+ *  with the orbital so the overlap and the amplitude can sum over it. */
+function contracted(params: OrbitalParameters): Pick<BasisFunction, 'zeta' | 'zeta2' | 'coefficients'> {
+  return params.zeta2 === undefined || params.coefficients === undefined
+    ? { zeta: params.zeta }
+    : { zeta: params.zeta, zeta2: params.zeta2, coefficients: params.coefficients };
+}
 
 export function assignBasis(molecule: Molecule): BasisFunction[] | null {
   const basis: BasisFunction[] = [];
@@ -63,7 +75,7 @@ export function assignBasis(molecule: Molecule): BasisFunction[] | null {
       angular: 's',
       axis: [0, 0, 0],
       n: params.s.n,
-      zeta: params.s.zeta,
+      ...contracted(params.s),
       hii: params.s.hii,
       label: `${label} ${params.s.n}s`,
     });
@@ -74,7 +86,7 @@ export function assignBasis(molecule: Molecule): BasisFunction[] | null {
         angular: 'p',
         axis,
         n: params.p.n,
-        zeta: params.p.zeta,
+        ...contracted(params.p),
         hii: params.p.hii,
         label: `${label} ${params.p.n}p${suffix}`,
       });
@@ -87,7 +99,7 @@ export function assignBasis(molecule: Molecule): BasisFunction[] | null {
         axis: [0, 0, 0],
         d,
         n: params.d.n,
-        zeta: params.d.zeta,
+        ...contracted(params.d),
         hii: params.d.hii,
         label: `${label} ${params.d.n}d${d}`,
       });

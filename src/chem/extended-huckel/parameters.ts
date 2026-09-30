@@ -38,16 +38,43 @@ export interface OrbitalParameters {
   /** Valence-state ionization potential (eV), the Coulomb term Hᵢᵢ. The
    *  table stores it already negative. */
   hii: number;
-  /** Slater exponent ζ (bohr⁻¹) — single zeta throughout this table. */
+  /** Slater exponent ζ (bohr⁻¹). */
   zeta: number;
+  /** The second exponent of a CONTRACTED orbital (the d block's d rows), and
+   *  the pair's coefficients. Absent for the single-zeta orbitals. */
+  zeta2?: number;
+  coefficients?: [number, number];
 }
 
 export interface ElementParameters {
   s: OrbitalParameters;
   /** p is absent for hydrogen and helium, whose valence shell is 1s only. */
   p?: OrbitalParameters;
-  /** 3d, present for the second-row elements (ICON8's values — see above). */
+  /** The d shell: 3d for the second-row elements (ICON8's values) and for the
+   *  d block, where it is contracted — see `zeta2`. */
   d?: OrbitalParameters;
+}
+
+/** One Slater term: an exponent and how much of it the orbital carries. */
+export interface SlaterTerm {
+  zeta: number;
+  coefficient: number;
+}
+
+/**
+ * The terms an orbital is built from: one for Alvarez's single-zeta s and p,
+ * two for a contracted d. Consumers loop over these instead of reading `zeta`
+ * directly, so a contraction is a matter of summing rather than of a second
+ * code path.
+ */
+export function slaterTerms(orbital: OrbitalParameters): SlaterTerm[] {
+  if (orbital.zeta2 === undefined || orbital.coefficients === undefined) {
+    return [{ zeta: orbital.zeta, coefficient: 1 }];
+  }
+  return [
+    { zeta: orbital.zeta, coefficient: orbital.coefficients[0] },
+    { zeta: orbital.zeta2, coefficient: orbital.coefficients[1] },
+  ];
 }
 
 export const EH_PARAMETERS: Record<string, ElementParameters> = {
@@ -74,6 +101,49 @@ export const EH_PARAMETERS: Record<string, ElementParameters> = {
     d: { n: 3, hii: -8.0, zeta: 1.5 } },                         // Chen & Hoffmann, JACS 98, 1647 (1976); ζ 1.817 alternative
   CL: { s: { n: 3, hii: -26.3, zeta: 2.183 }, p: { n: 3, hii: -14.2, zeta: 1.733 },
     d: { n: 3, hii: -9.0, zeta: 2.033 } },                       // ICON8 BLOCK DATA
+  // ── The d block ──────────────────────────────────────────────────────────
+  // Sc–Cu, Zr–Pd and Lu, Ta–Hg, extracted from the same shipped table. Their d
+  // rows are CONTRACTED: two Slater exponents with a coefficient each, which is
+  // what `zeta2`/`coefficients` carry. Two things the extraction had to decide:
+  //
+  //  * The table's coefficients are not all normalized. The on-site overlap of
+  //    a two-zeta d is c1² + 2·c1·c2·S(ζ1,ζ2) + c2², and across the table's 31
+  //    two-zeta rows that quantity ranges from 0.9955 to 1.2457 — so most rows
+  //    are properly normalized, some are 10–25% out, and Fe (the fixture below)
+  //    is 1.000000. We divide each pair by √(that norm), because a basis
+  //    function of unit norm is what the on-site S = 1 convention this whole
+  //    codebase rests on assumes. For Fe the factor is 1 to the precision the
+  //    table carries, so the oracle comparison is untouched; the raw norms are
+  //    recorded in NOTES.md.
+  //  * Five d-block elements are refused rather than half-supported: Zn has no
+  //    d row at all, and Y, Ag, Cd and Hf carry zero-filled placeholders. An
+  //    element whose d shell is a guess gets no MOs, per the rule above.
+
+  SC: { s: { n: 4, hii: -8.87, zeta: 1.3 }, p: { n: 4, hii: -2.75, zeta: 1.3 }, d: { n: 3, hii: -8.51, zeta: 4.35, zeta2: 1.7, coefficients: [0.4228, 0.7276] } },
+  TI: { s: { n: 4, hii: -8.97, zeta: 1.075 }, p: { n: 4, hii: -5.44, zeta: 1.075 }, d: { n: 3, hii: -10.81, zeta: 4.55, zeta2: 1.4, coefficients: [0.4206, 0.7839] } },
+  V: { s: { n: 4, hii: -8.81, zeta: 1.3 }, p: { n: 4, hii: -5.52, zeta: 1.3 }, d: { n: 3, hii: -11.0, zeta: 4.75, zeta2: 1.7, coefficients: [0.4755, 0.7052] } },
+  CR: { s: { n: 4, hii: -8.66, zeta: 1.7 }, p: { n: 4, hii: -5.24, zeta: 1.7 }, d: { n: 3, hii: -11.22, zeta: 4.95, zeta2: 1.8, coefficients: [0.5058, 0.6747] } },
+  MN: { s: { n: 4, hii: -9.75, zeta: 0.97 }, p: { n: 4, hii: -5.89, zeta: 0.97 }, d: { n: 3, hii: -11.67, zeta: 5.15, zeta2: 1.7, coefficients: [0.5139, 0.6929] } },
+  FE: { s: { n: 4, hii: -9.1, zeta: 1.9 }, p: { n: 4, hii: -5.32, zeta: 1.9 }, d: { n: 3, hii: -12.6, zeta: 5.35, zeta2: 2.0, coefficients: [0.5505, 0.626] } },
+  CO: { s: { n: 4, hii: -9.21, zeta: 2.0 }, p: { n: 4, hii: -5.29, zeta: 2.0 }, d: { n: 3, hii: -13.18, zeta: 5.55, zeta2: 2.1, coefficients: [0.5679, 0.6059] } },
+  NI: { s: { n: 4, hii: -10.95, zeta: 2.1 }, p: { n: 4, hii: -6.27, zeta: 2.1 }, d: { n: 3, hii: -14.2, zeta: 5.75, zeta2: 2.3, coefficients: [0.5493, 0.6082] } },
+  CU: { s: { n: 4, hii: -11.4, zeta: 2.2 }, p: { n: 4, hii: -6.06, zeta: 2.2 }, d: { n: 3, hii: -14.0, zeta: 5.95, zeta2: 2.3, coefficients: [0.5933, 0.5744] } },
+  ZR: { s: { n: 5, hii: -9.87, zeta: 1.817 }, p: { n: 5, hii: -6.76, zeta: 1.776 }, d: { n: 4, hii: -11.18, zeta: 3.835, zeta2: 1.505, coefficients: [0.6224, 0.5782] } },
+  NB: { s: { n: 5, hii: -10.1, zeta: 1.89 }, p: { n: 5, hii: -6.86, zeta: 1.85 }, d: { n: 4, hii: -12.1, zeta: 4.08, zeta2: 1.64, coefficients: [0.6401, 0.5516] } },
+  MO: { s: { n: 5, hii: -8.34, zeta: 1.96 }, p: { n: 5, hii: -5.24, zeta: 1.9 }, d: { n: 4, hii: -10.5, zeta: 4.54, zeta2: 1.9, coefficients: [0.5899, 0.5899] } },
+  TC: { s: { n: 5, hii: -10.07, zeta: 2.018 }, p: { n: 5, hii: -5.4, zeta: 1.984 }, d: { n: 4, hii: -12.82, zeta: 4.9, zeta2: 2.094, coefficients: [0.5715, 0.6012] } },
+  RU: { s: { n: 5, hii: -10.4, zeta: 2.08 }, p: { n: 5, hii: -6.87, zeta: 2.04 }, d: { n: 4, hii: -14.9, zeta: 5.38, zeta2: 2.3, coefficients: [0.5342, 0.6368] } },
+  RH: { s: { n: 5, hii: -8.09, zeta: 2.135 }, p: { n: 5, hii: -4.57, zeta: 2.1 }, d: { n: 4, hii: -12.5, zeta: 4.29, zeta2: 1.97, coefficients: [0.5807, 0.5685] } },
+  PD: { s: { n: 5, hii: -7.32, zeta: 2.19 }, p: { n: 5, hii: -3.75, zeta: 2.152 }, d: { n: 4, hii: -12.02, zeta: 5.983, zeta2: 2.613, coefficients: [0.5264, 0.6373] } },
+  LU: { s: { n: 6, hii: -6.05, zeta: 1.666 }, p: { n: 6, hii: -6.05, zeta: 1.666 }, d: { n: 5, hii: -5.12, zeta: 2.813, zeta2: 1.21, coefficients: [0.7044, 0.488] } },
+  TA: { s: { n: 6, hii: -10.1, zeta: 2.28 }, p: { n: 6, hii: -6.86, zeta: 2.241 }, d: { n: 5, hii: -12.1, zeta: 4.762, zeta2: 1.938, coefficients: [0.6106, 0.6106] } },
+  W: { s: { n: 6, hii: -8.26, zeta: 2.341 }, p: { n: 6, hii: -5.17, zeta: 2.309 }, d: { n: 5, hii: -10.37, zeta: 4.982, zeta2: 2.068, coefficients: [0.6685, 0.5424] } },
+  RE: { s: { n: 6, hii: -9.36, zeta: 2.398 }, p: { n: 6, hii: -5.96, zeta: 2.372 }, d: { n: 5, hii: -12.66, zeta: 5.343, zeta2: 2.277, coefficients: [0.6378, 0.5658] } },
+  OS: { s: { n: 6, hii: -8.17, zeta: 2.452 }, p: { n: 6, hii: -4.81, zeta: 2.429 }, d: { n: 5, hii: -11.84, zeta: 5.571, zeta2: 2.416, coefficients: [0.6372, 0.5598] } },
+  IR: { s: { n: 6, hii: -11.36, zeta: 2.5 }, p: { n: 6, hii: -4.5, zeta: 2.2 }, d: { n: 5, hii: -12.17, zeta: 5.796, zeta2: 2.557, coefficients: [0.6351, 0.5556] } },
+  PT: { s: { n: 6, hii: -9.077, zeta: 2.554 }, p: { n: 6, hii: -5.475, zeta: 2.554 }, d: { n: 5, hii: -12.59, zeta: 6.013, zeta2: 2.696, coefficients: [0.6334, 0.5513] } },
+  AU: { s: { n: 6, hii: -10.92, zeta: 2.602 }, p: { n: 6, hii: -5.55, zeta: 2.584 }, d: { n: 5, hii: -15.07, zeta: 6.163, zeta2: 2.794, coefficients: [0.6442, 0.5356] } },
+  HG: { s: { n: 6, hii: -13.68, zeta: 2.649 }, p: { n: 6, hii: -8.47, zeta: 2.631 }, d: { n: 5, hii: -17.5, zeta: 6.436, zeta2: 3.032, coefficients: [0.6438, 0.5215] } },
   K: { s: { n: 4, hii: -4.34, zeta: 0.874 }, p: { n: 4, hii: -2.73, zeta: 0.874 } },
   CA: { s: { n: 4, hii: -7, zeta: 1.2 }, p: { n: 4, hii: -4, zeta: 1.2 } },
   GA: { s: { n: 4, hii: -14.58, zeta: 1.77 }, p: { n: 4, hii: -6.75, zeta: 1.55 } },

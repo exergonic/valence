@@ -30,6 +30,7 @@ import type { BasisFunction } from './assign-basis';
 import { alignToPrincipalAxes } from './align-principal-axes';
 import { BOHR_RADIUS } from './slater-overlap';
 import { D_FUNCTIONS } from './assign-basis';
+import { slaterTerms } from './parameters';
 
 /** The coarsest grid spacing (Å) — the caller's preference, used when the
  *  budget does not allow finer. The actual step adapts down from here: see
@@ -121,20 +122,23 @@ export function prepareOrbitals(
     if (c === 0) continue;
     const orbital = basis[i];
     const atom = atoms[orbital.atomIndex];
-    // the radial normalization of a Slater orbital, (2ζ)^(n+½)/√((2n)!)
-    let factorial = 1;
-    for (let k = 2; k <= 2 * orbital.n; k++) factorial *= k;
-    const norm = Math.pow(2 * orbital.zeta, orbital.n + 0.5) / Math.sqrt(factorial);
     // 1 = s, 2 = p (with the axis), 3..7 = the five real d functions in
     // D_FUNCTIONS order. The d kind rides in the same slot the flag used, so
     // the hot loop's stride is unchanged.
     const angular = orbital.angular === 's'
       ? 1
       : orbital.angular === 'p' ? 2 : 3 + D_FUNCTIONS.indexOf(orbital.d!);
-    prepared.push(
-      atom.x, atom.y, atom.z, orbital.zeta, c * norm,
-      orbital.axis[0], orbital.axis[1], orbital.axis[2], orbital.n, angular,
-    );
+    // One entry per Slater term: a contracted d contributes two, and the
+    // evaluator's sum over entries is the sum over ζ for free.
+    for (const term of slaterTerms(orbital)) {
+      let factorial = 1;
+      for (let k = 2; k <= 2 * orbital.n; k++) factorial *= k;
+      const norm = Math.pow(2 * term.zeta, orbital.n + 0.5) / Math.sqrt(factorial);
+      prepared.push(
+        atom.x, atom.y, atom.z, term.zeta, c * term.coefficient * norm,
+        orbital.axis[0], orbital.axis[1], orbital.axis[2], orbital.n, angular,
+      );
+    }
   }
   return new Float64Array(prepared);
 }

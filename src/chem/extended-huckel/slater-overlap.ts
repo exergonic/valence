@@ -20,6 +20,7 @@
  */
 import type { Molecule } from '../../mol-parser';
 import { D_FUNCTIONS, type BasisFunction } from './assign-basis';
+import { slaterTerms } from './parameters';
 
 /** A(1..n) and B(1..n) as above. `maxIndex` must cover n₁+n₂+1. */
 export function abFunctions(zeta1: number, zeta2: number, R: number, maxIndex: number): { A: number[]; B: number[] } {
@@ -234,7 +235,28 @@ function bondAxis(
   return { axis: [dx / rAngstrom, dy / rAngstrom, dz / rAngstrom], R: rAngstrom / BOHR_RADIUS };
 }
 
+/**
+ * The overlap of two basis functions, summed over their contractions: a
+ * contracted d is c₁·STO(ζ₁) + c₂·STO(ζ₂), so its overlap with anything is the
+ * 2×2 sum of the single-zeta overlaps, each weighted by the coefficient pair.
+ * A single-zeta orbital contributes one term and the sum is the arithmetic it
+ * always was.
+ */
 function orbitalOverlap(a: BasisFunction, b: BasisFunction, atoms: Molecule['atoms']): number {
+  const termsA = slaterTerms(a);
+  const termsB = slaterTerms(b);
+  if (termsA.length === 1 && termsB.length === 1) return singleOverlap(a, b, termsA[0].zeta, termsB[0].zeta, atoms);
+  let total = 0;
+  for (const ta of termsA) {
+    for (const tb of termsB) {
+      total += ta.coefficient * tb.coefficient * singleOverlap(a, b, ta.zeta, tb.zeta, atoms);
+    }
+  }
+  return total;
+}
+
+/** The overlap for one pair of exponents. */
+function singleOverlap(a: BasisFunction, b: BasisFunction, zetaA: number, zetaB: number, atoms: Molecule['atoms']): number {
   const pa = atoms[a.atomIndex];
   const pb = atoms[b.atomIndex];
   const rAngstrom = Math.hypot(pa.x - pb.x, pa.y - pb.y, pa.z - pb.z);
@@ -252,20 +274,20 @@ function orbitalOverlap(a: BasisFunction, b: BasisFunction, atoms: Molecule['ato
   const dot = (u: [number, number, number], v: [number, number, number]) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
 
   if (a.angular === 's' && b.angular === 's') {
-    return radialComponent(a.n, 0, b.n, 0, 0, a.zeta, b.zeta, R);
+    return radialComponent(a.n, 0, b.n, 0, 0, zetaA, zetaB, R);
   }
   // before the s-only branches below: an s–d pair must not take the s–p path
   if (a.angular === 'd' || b.angular === 'd') {
-    return dOverlap(a, b, zFromB, R, rAngstrom);
+    return dOverlap(a, b, zFromB, R, rAngstrom, zetaA, zetaB);
   }
   if (a.angular === 's') {
-    return dot(b.axis, toward(b, a)) * radialComponent(a.n, 0, b.n, 1, 0, a.zeta, b.zeta, R);
+    return dot(b.axis, toward(b, a)) * radialComponent(a.n, 0, b.n, 1, 0, zetaA, zetaB, R);
   }
   if (b.angular === 's') {
-    return dot(a.axis, toward(a, b)) * radialComponent(a.n, 1, b.n, 0, 0, a.zeta, b.zeta, R);
+    return dot(a.axis, toward(a, b)) * radialComponent(a.n, 1, b.n, 0, 0, zetaA, zetaB, R);
   }
-  const sigma = radialComponent(a.n, 1, b.n, 1, 0, a.zeta, b.zeta, R);
-  const pi = radialComponent(a.n, 1, b.n, 1, 1, a.zeta, b.zeta, R);
+  const sigma = radialComponent(a.n, 1, b.n, 1, 0, zetaA, zetaB, R);
+  const pi = radialComponent(a.n, 1, b.n, 1, 1, zetaA, zetaB, R);
   const headOn = dot(a.axis, toward(a, b)) * dot(b.axis, toward(b, a));
   const sameAxis = dot(a.axis, b.axis);
   const perpendicular = sameAxis - dot(a.axis, zFromB) * dot(b.axis, zFromB);
@@ -297,6 +319,8 @@ function dOverlap(
   zFromB: [number, number, number],
   R: number,
   rAngstrom: number,
+  zetaA: number,
+  zetaB: number,
 ): number {
   const [ux, uy, uz] = zFromB;
   const xyUnit = Math.hypot(ux, uy);
@@ -349,7 +373,7 @@ function dOverlap(
   const ka = a.angular === 'd' ? D_FUNCTIONS.indexOf(a.d!) : -1;
   const kb = b.angular === 'd' ? D_FUNCTIONS.indexOf(b.d!) : -1;
   /** The radial σ/π/δ component for this pair's quantum numbers. */
-  const radial = (m: number) => radialComponent(a.n, angularOf(a), b.n, angularOf(b), m, a.zeta, b.zeta, R);
+  const radial = (m: number) => radialComponent(a.n, angularOf(a), b.n, angularOf(b), m, zetaA, zetaB, R);
 
   // < S | D >
   if (a.angular === 's' && kb >= 0) return d[kb] * radial(0);

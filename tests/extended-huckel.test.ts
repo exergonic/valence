@@ -23,6 +23,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { abFunctions, radialComponent, overlapMatrix } from '../src/chem/extended-huckel/slater-overlap';
 import { assignBasis } from '../src/chem/extended-huckel/assign-basis';
+import { EH_PARAMETERS } from '../src/chem/extended-huckel/parameters';
 import { hamiltonianMatrix, WOLFSBERG_HELMHOLZ_K } from '../src/chem/extended-huckel/hamiltonian';
 import { solveExtendedHuckel, closedShellOccupations } from '../src/chem/extended-huckel/solve';
 import { alignToPrincipalAxes, frameDirectionToWorld } from '../src/chem/extended-huckel/align-principal-axes';
@@ -250,6 +251,85 @@ describe('the 3d basis against the YAeHMOP oracle', () => {
   });
 });
 
+describe('the d block against the YAeHMOP oracle', () => {
+  // Ferrocene, whose iron 3d is CONTRACTED — the one fixture that pins the
+  // two-zeta sum. Unlike the second row, no parameter injection was needed:
+  // the shipped table already carries the d block, so this comparison is the
+  // same kind as the first-row fixtures.
+  const fixture = JSON.parse(
+    readFileSync(new URL('./references/eht/tm-reference.json', import.meta.url), 'utf8'),
+  ) as {
+    name: string;
+    atoms: Array<{ element: string; x: number; y: number; z: number }>;
+    electrons: number;
+    orbitals: Array<{ element: string; atom: number; n: number; angular: string; kind: string | null }>;
+    S: number[][];
+    energies: number[];
+    occupied: number;
+  };
+
+  it(`${fixture.name}: basis order, S and the ladder`, () => {
+    const molecule: Molecule = { atoms: fixture.atoms.map((a) => ({ ...a, charge: 0 })), bonds: [] };
+    const result = solveExtendedHuckel(molecule);
+    expect(result).not.toBeNull();
+    const { basis, overlap, energies, electronCount } = result!;
+    const n = fixture.orbitals.length;
+    expect(basis.length).toBe(n);
+    expect(electronCount).toBe(fixture.electrons);
+
+    expect(basis.map((b) => ({
+      element: molecule.atoms[b.atomIndex].element.toUpperCase(),
+      atom: b.atomIndex,
+      n: b.n,
+      angular: b.angular,
+      kind: b.angular === 'p' ? ['x', 'y', 'z'][b.axis.indexOf(1)] : b.d ?? null,
+    }))).toEqual(fixture.orbitals);
+
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        expect(Math.abs(overlap[i][j] - fixture.S[i][j])).toBeLessThan(2e-4);
+      }
+    }
+
+    expect(energies.length).toBe(fixture.energies.length);
+    for (let k = 0; k < energies.length; k++) {
+      expect(Math.abs(energies[k] - fixture.energies[k])).toBeLessThan(0.05);
+    }
+    for (let k = 0; k < fixture.occupied; k++) {
+      expect(Math.abs(energies[k] - fixture.energies[k])).toBeLessThan(0.002);
+    }
+  });
+
+  it('the iron 3d is contracted, and every contracted row is normalized', () => {
+    // The two facts the d block rests on. First, that the iron basis functions
+    // really carry two exponents (a table slip that dropped them would show up
+    // as a wrong overlap, not as an error).
+    const molecule: Molecule = { atoms: fixture.atoms.map((a) => ({ ...a, charge: 0 })), bonds: [] };
+    const basis = assignBasis(molecule)!;
+    const ironD = basis.filter((b) => b.angular === 'd');
+    expect(ironD).toHaveLength(5);
+    for (const orbital of ironD) {
+      expect(orbital.zeta2).toBeCloseTo(2.0, 6);       // Fe's second exponent
+      expect(orbital.coefficients).toHaveLength(2);
+    }
+
+    // Second, that every contracted row in the table is normalized INCLUDING
+    // the on-site cross term, c1² + 2·c1·c2·S(ζ1,ζ2) + c2² = 1, which is what
+    // makes the S matrix's unit diagonal mean anything. The table's raw
+    // coefficients are only normalized for some rows (0.9955 … 1.2457 across
+    // the 31 of them), so this pins the adjustment we apply on the way in.
+    for (const [element, params] of Object.entries(EH_PARAMETERS)) {
+      const d = params.d;
+      if (!d || d.zeta2 === undefined || d.coefficients === undefined) continue;
+      const [c1, c2] = d.coefficients;
+      // the same-centre overlap of two STOs with equal n and l
+      const s = Math.pow((2 * Math.sqrt(d.zeta * d.zeta2)) / (d.zeta + d.zeta2), 2 * d.n + 1);
+      const norm = c1 * c1 + 2 * c1 * c2 * s + c2 * c2;
+      expect(Math.abs(norm - 1), `${element} 3d normalization`).toBeLessThan(1e-3);
+    }
+  });
+});
+
 describe('the calculation frame', () => {
   // The AO basis is tied to the coordinate axes, so the frame decides what
   // "pz" means. Reported 2026-09-29: a local-pipeline benzene (whose ring
@@ -425,9 +505,18 @@ M  END
 
 describe('the extended-Hückel refusals', () => {
   it('an element outside the parameter table gets no orbitals', () => {
+    // The d block is in the table now, so the refusals are the elements the
+    // table cannot support: Zn has no d row at all, and the f block (Ce) is
+    // outside this basis entirely. A metal whose d shell would be a guess gets
+    // no MOs rather than a wrong d shell.
+    for (const element of ['Zn', 'Ce']) {
+      const metal: Molecule = { atoms: [{ element, x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
+      expect(assignBasis(metal)).toBeNull();
+      expect(solveExtendedHuckel(metal)).toBeNull();
+    }
+    // ...and an element that IS in the table now solves
     const iron: Molecule = { atoms: [{ element: 'Fe', x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
-    expect(assignBasis(iron)).toBeNull();
-    expect(solveExtendedHuckel(iron)).toBeNull();
+    expect(assignBasis(iron)).not.toBeNull();
   });
 
   it('closed-shell filling refuses an odd electron count instead of half-filling', () => {
