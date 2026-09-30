@@ -23,6 +23,7 @@ export const VALENCE_ELECTRONS: Record<string, number> = {
   Sc: 3, Ti: 4, V: 5, Cr: 6, Mn: 7, Fe: 8, Co: 9, Ni: 10, Cu: 11,
   Y: 3, Zr: 4, Nb: 5, Mo: 6, Tc: 7, Ru: 8, Rh: 9, Pd: 10,
   Lu: 3, Ta: 5, W: 6, Re: 7, Os: 8, Ir: 9, Pt: 10, Au: 11, Hg: 12,
+  Zn: 12, Cd: 12, // s+p only in the parameter table — see SP_ONLY_METALS
 };
 
 /** The molecule's electron count: valence electrons minus the net formal

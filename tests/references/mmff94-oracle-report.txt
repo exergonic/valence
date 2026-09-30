@@ -1,6 +1,6 @@
 mmff94-ts oracle — valence orbital assignment vs the reference typer
-corpus: 18 molecules, 68 heavy atoms
-agreement: 65/68 (100.0%), documented deviations: 3, unexplained: 0
+corpus: 19 molecules, 70 heavy atoms
+agreement: 67/70 (100.0%), documented deviations: 3, unexplained: 0
 Methane (CH₄): 1/1
 Ethene (C₂H₄): 2/2
 Ethyne (C₂H₂): 2/2
@@ -15,6 +15,7 @@ Water (H₂O): 1/1
 Phosphorus pentachloride (PCl₅): 5/6
 Sulfur hexafluoride (SF₆): 6/7
 But-1-en-3-yne (H₂C=CH-C≡CH): 4/4
+Diborane (B₂H₆): 2/2
 dimethyl ether: 3/3
 formaldehyde: 2/2
 methoxide anion: 2/2

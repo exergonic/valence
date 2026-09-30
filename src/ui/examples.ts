@@ -330,6 +330,41 @@ const FERROCENE = HEADER + ` 21 30  0  0  0  0  0  0  0  0999 V2000
  20 21  1  0  0  0  0
 M  END`;
 
+
+// Diborane, from the wB97X-D/6-31G(d,p) geometry in ~/Code/avo_ibo/examples
+// (its bonds by distance). The hydrogen bridges are the 3c-2e case the
+// classifier's `2e3c` gate exists for — see diborane.md in that corpus.
+const DIBORANE = HEADER + `  8  8  0  0  0  0  0  0  0  0999 V2000
+   -0.8810   -0.0001   -0.0000 B   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.4605    1.0416    0.0004 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0001   -0.0002    0.9799 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.4611   -1.0415   -0.0004 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0002    0.0010   -0.9798 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8810   -0.0001    0.0000 B   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4607    1.0416    0.0001 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4609   -1.0416   -0.0003 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  3  6  1  0  0  0  0
+  5  6  1  0  0  0  0
+  6  7  1  0  0  0  0
+  6  8  1  0  0  0  0
+M  END`;
+
+
+// Zinc chloride, from the geometry in ~/Code/avo_ibo/examples. The
+// demonstration of the s+p exception: the table carries no 3d for zinc and a
+// d¹⁰ shell is core-like, so it runs without d and the panel says so.
+const ZNCL2 = HEADER + `  3  2  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    2.0700 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 Zn  0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000   -2.0700 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+M  END`;
+
 export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
@@ -346,4 +381,6 @@ export const EXAMPLES: Example[] = [
   { name: 'Sulfur hexafluoride (SF₆)', mol: SF6 },
   { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
   { name: 'Ferrocene (Fe(C₅H₅)₂)', mol: FERROCENE },
+  { name: 'Diborane (B₂H₆)', mol: DIBORANE },
+  { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2 },
 ];

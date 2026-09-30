@@ -505,18 +505,24 @@ M  END
 
 describe('the extended-Hückel refusals', () => {
   it('an element outside the parameter table gets no orbitals', () => {
-    // The d block is in the table now, so the refusals are the elements the
-    // table cannot support: Zn has no d row at all, and the f block (Ce) is
-    // outside this basis entirely. A metal whose d shell would be a guess gets
-    // no MOs rather than a wrong d shell.
-    for (const element of ['Zn', 'Ce']) {
+    // The d block is in the table now, so what is refused is what the table
+    // cannot support: the f block (Ce) is outside this basis entirely, and an
+    // element whose d shell would be a guess still gets no MOs.
+    for (const element of ['Ce', 'Nd']) {
       const metal: Molecule = { atoms: [{ element, x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
       expect(assignBasis(metal)).toBeNull();
       expect(solveExtendedHuckel(metal)).toBeNull();
     }
-    // ...and an element that IS in the table now solves
+    // a transition metal solves, with its contracted d
     const iron: Molecule = { atoms: [{ element: 'Fe', x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
-    expect(assignBasis(iron)).not.toBeNull();
+    expect(assignBasis(iron)!.filter((b) => b.angular === 'd')).toHaveLength(5);
+    expect(iron && solveExtendedHuckel(iron)).not.toBeNull();
+    // ...and Zn, which the table carries s+p only, solves WITHOUT d — the
+    // deliberate exception rather than a refusal
+    const zinc: Molecule = { atoms: [{ element: 'Zn', x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
+    expect(assignBasis(zinc)).toHaveLength(4);
+    expect(assignBasis(zinc)!.some((b) => b.angular === 'd')).toBe(false);
+    expect(solveExtendedHuckel(zinc)).not.toBeNull();
   });
 
   it('closed-shell filling refuses an odd electron count instead of half-filling', () => {

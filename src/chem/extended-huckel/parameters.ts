@@ -55,6 +55,13 @@ export interface ElementParameters {
   d?: OrbitalParameters;
 }
 
+/**
+ * The d-block elements carried s+p only (see the d-block note): a d¹⁰ ion
+ * whose d the table does not parameterize. The panel names them when they
+ * appear, so "no d orbitals on this atom" is never a silent absence.
+ */
+export const SP_ONLY_METALS = new Set(['ZN', 'CD']);
+
 /** One Slater term: an exponent and how much of it the orbital carries. */
 export interface SlaterTerm {
   zeta: number;
@@ -115,9 +122,16 @@ export const EH_PARAMETERS: Record<string, ElementParameters> = {
   //    codebase rests on assumes. For Fe the factor is 1 to the precision the
   //    table carries, so the oracle comparison is untouched; the raw norms are
   //    recorded in NOTES.md.
-  //  * Five d-block elements are refused rather than half-supported: Zn has no
-  //    d row at all, and Y, Ag, Cd and Hf carry zero-filled placeholders. An
-  //    element whose d shell is a guess gets no MOs, per the rule above.
+  //  * Five d-block elements are refused rather than half-supported: Y, Ag and
+  //    Hf carry zero-filled placeholders. An element whose d shell is a guess
+  //    gets no MOs, per the rule above.
+  //
+  // Zn and Cd are the exception, and they are a chemical one. The table has no
+  // d row for Zn at all, and only a placeholder for Cd — but both are d¹⁰
+  // ions, where the closed d shell is core-like and the bonding runs on 4s/4p
+  // (5s/5p). Their s and p rows are in the table, so they are carried s+p
+  // only, and SP_ONLY_METALS below is what the panel reads to say so out loud.
+  // Refusing them would be a rule applied past its reason.
 
   SC: { s: { n: 4, hii: -8.87, zeta: 1.3 }, p: { n: 4, hii: -2.75, zeta: 1.3 }, d: { n: 3, hii: -8.51, zeta: 4.35, zeta2: 1.7, coefficients: [0.4228, 0.7276] } },
   TI: { s: { n: 4, hii: -8.97, zeta: 1.075 }, p: { n: 4, hii: -5.44, zeta: 1.075 }, d: { n: 3, hii: -10.81, zeta: 4.55, zeta2: 1.4, coefficients: [0.4206, 0.7839] } },
@@ -144,6 +158,9 @@ export const EH_PARAMETERS: Record<string, ElementParameters> = {
   PT: { s: { n: 6, hii: -9.077, zeta: 2.554 }, p: { n: 6, hii: -5.475, zeta: 2.554 }, d: { n: 5, hii: -12.59, zeta: 6.013, zeta2: 2.696, coefficients: [0.6334, 0.5513] } },
   AU: { s: { n: 6, hii: -10.92, zeta: 2.602 }, p: { n: 6, hii: -5.55, zeta: 2.584 }, d: { n: 5, hii: -15.07, zeta: 6.163, zeta2: 2.794, coefficients: [0.6442, 0.5356] } },
   HG: { s: { n: 6, hii: -13.68, zeta: 2.649 }, p: { n: 6, hii: -8.47, zeta: 2.631 }, d: { n: 5, hii: -17.5, zeta: 6.436, zeta2: 3.032, coefficients: [0.6438, 0.5215] } },
+  // s+p only, deliberately — see the note above the d block
+  ZN: { s: { n: 4, hii: -12.41, zeta: 2.01 }, p: { n: 4, hii: -6.53, zeta: 1.7 } },
+  CD: { s: { n: 5, hii: -11.8, zeta: 1.64 }, p: { n: 5, hii: -8.2, zeta: 1.6 } },
   K: { s: { n: 4, hii: -4.34, zeta: 0.874 }, p: { n: 4, hii: -2.73, zeta: 0.874 } },
   CA: { s: { n: 4, hii: -7, zeta: 1.2 }, p: { n: 4, hii: -4, zeta: 1.2 } },
   GA: { s: { n: 4, hii: -14.58, zeta: 1.77 }, p: { n: 4, hii: -6.75, zeta: 1.55 } },

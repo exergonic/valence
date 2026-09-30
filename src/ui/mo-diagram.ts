@@ -29,6 +29,7 @@ import { CANONICAL_TOLERANCE_EV, DEGENERATE_TOLERANCE_EV } from '../chem/extende
 import { labelIrreps } from '../chem/extended-huckel/irrep-labels';
 import { MO_PHASE_PAIRS, MO_SIGNIFICANT } from '../render/mo-lobes';
 import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
+import { SP_ONLY_METALS } from '../chem/extended-huckel/parameters';
 
 const PAD = { top: 16, bottom: 20, left: 44, right: 58 };
 
@@ -281,6 +282,7 @@ export function setupMoPanel(ctx: SceneContext) {
         : 'Load a molecule to see its orbitals.';
       return;
     }
+    const spOnly = spOnlyMetals(ctx.currentMolecule);
 
     const width = Math.max(240, diagram.clientWidth || 340);
     const height = Math.max(200, diagram.clientHeight || 300);
@@ -446,6 +448,12 @@ export function setupMoPanel(ctx: SceneContext) {
       readout.textContent = `${result.energies.length} MOs · click a level to draw it`;
     }
 
+    if (spOnly.length > 0) {
+      // said out loud rather than silently: these metals carry no d here
+      note.textContent = `${spOnly.join(', ')} run on s and p only — the parameter table has no 3d for `
+        + `${spOnly.length === 1 ? 'it' : 'them'}, and a d¹⁰ shell is core-like. Their d orbitals are absent, not hidden.`;
+      return;
+    }
     if (occupations === null) {
       note.textContent = `Open shell (${result.electronCount} electrons): extended Hückel as built here has no spin, so occupancies are not shown.`;
     } else {
@@ -457,6 +465,17 @@ export function setupMoPanel(ctx: SceneContext) {
   }
 
   draw();
+}
+
+/** The elements in this molecule the table carries s+p only for (Zn, Cd). */
+function spOnlyMetals(molecule: Molecule | null | undefined): string[] {
+  if (!molecule) return [];
+  const found = new Set<string>();
+  for (const atom of molecule.atoms) {
+    const element = atom.element.toUpperCase();
+    if (SP_ONLY_METALS.has(element)) found.add(atom.element);
+  }
+  return [...found];
 }
 
 /** Is every atom on one line? The frame cannot tell a linear molecule's two
