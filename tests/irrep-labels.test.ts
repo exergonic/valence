@@ -19,6 +19,7 @@ import { assignBasis } from '../src/chem/extended-huckel/assign-basis';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
 import { solveExtendedHuckel, closedShellOccupations } from '../src/chem/extended-huckel/solve';
 import { labelIrreps, representationMatrix } from '../src/chem/extended-huckel/irrep-labels';
+import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
 
 function labelled(name: string): {
   symbol: string;
@@ -47,6 +48,48 @@ const occupied = (name: string) => {
   const { labels, occupiedCount } = labelled(name);
   return labels.slice(0, occupiedCount);
 };
+
+describe('the electron-domain model refuses what it cannot describe', () => {
+  it('a metal centre gets no label, and its haptic contacts are not domains', () => {
+    // Ferrocene is in EXAMPLES for the MO layer. The electron-domain model has
+    // no answer for iron — ten contacts clamped into the six-domain ceiling
+    // used to come out "sp³d²" — and counting a haptic Fe–C contact as a σ bond
+    // made every cyclopentadienyl carbon read sp³ instead of sp².
+    const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.includes('Ferrocene'))!.mol);
+    const assigned = assignOrbitals(molecule);
+    const iron = assigned[0];
+    expect(iron.described).toBe(false);
+    expect(iron.hybridization).toBe('');
+    expect(iron.lonePairs).toBe(0);
+    expect(iron.hasPi).toBe(false);
+    // the ring carbons are aromatic sp², with a p orbital
+    const carbons = assigned.filter((a, i) => molecule.atoms[i].element === 'C');
+    expect(carbons).toHaveLength(10);
+    for (const carbon of carbons) {
+      expect(carbon.described).toBe(true);
+      expect(carbon.hybridization).toBe('sp²');
+      expect(carbon.hasPi).toBe(true);
+    }
+    // and the hydrogens still read s, as everywhere else
+    for (const [i, atom] of molecule.atoms.entries()) {
+      if (atom.element === 'H') expect(assigned[i].hybridization).toBe('s');
+    }
+  });
+
+  it('a normal organic molecule keeps the same assignments it always had', () => {
+    for (const [name, check] of [
+      ['Water', (a: ReturnType<typeof assignOrbitals>) => a[0].hybridization === 'sp³' && a[0].lonePairs === 2],
+      ['Ethene', (a: ReturnType<typeof assignOrbitals>) => a[0].hybridization === 'sp²' && a[0].hasPi],
+      ['Benzene', (a: ReturnType<typeof assignOrbitals>, m: Molecule) =>
+        a.every((x, i) => m.atoms[i].element === 'H' || x.hybridization === 'sp²')],
+    ] as const) {
+      const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith(name))!.mol);
+      const assigned = assignOrbitals(molecule);
+      expect(assigned.every((a) => a.described)).toBe(true);
+      expect(check(assigned, molecule)).toBe(true);
+    }
+  });
+});
 
 describe('irrep labels', () => {
   it('gives water its four occupied orbitals', () => {

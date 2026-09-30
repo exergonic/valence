@@ -151,8 +151,18 @@ const EXTRA: [string, Molecule][] = [
   ['thioanisole (twisted)', fillMissingHydrogens(TWISTED_THIOANISOLE)],
 ];
 
+/** The elements the valence model describes — the organic and main-group set. */
+const VALENCE_MODEL_ELEMENTS = new Set(['H', 'B', 'C', 'N', 'O', 'F', 'Si', 'P', 'S', 'Cl', 'Br', 'I']);
+
 const CORPUS: [string, Molecule][] = [
-  ...EXAMPLES.map((e) => [e.name, parseMolBlock(e.mol)] as [string, Molecule]),
+  // The mapping this test checks — MMFF94 atom type to the valence model's
+  // hybridization — is a main-group one: it has no entry for a metal centre,
+  // and a metallocene's haptic bonding is outside the VSEPR picture entirely.
+  // Ferrocene is in EXAMPLES for the MO layer, so it is excluded here by its
+  // own element set rather than excused by a deviation entry.
+  ...EXAMPLES
+    .map((e) => [e.name, parseMolBlock(e.mol)] as [string, Molecule])
+    .filter(([, mol]) => mol.atoms.every((a) => VALENCE_MODEL_ELEMENTS.has(a.element))),
   ...EXTRA,
 ];
 

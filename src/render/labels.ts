@@ -73,7 +73,7 @@ export function renderHybridizationLabels(
   placeAtomLabels(group, molecule, (i) => {
     const atom = molecule.atoms[i];
     const info = atomOrbitals[i];
-    if (!info || atom.element === 'H') return null;
+    if (!info || atom.element === 'H' || !info.described) return null;
     return info.hybridization;
   });
 }

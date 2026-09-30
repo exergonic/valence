@@ -18,6 +18,8 @@ export function renderHybridOrbitals(
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
   for (const bond of molecule.bonds) {
+    // only contacts the electron-domain model describes — see assign-orbitals
+    if (cached[bond.atom1Index]?.described === false || cached[bond.atom2Index]?.described === false) continue;
     adj[bond.atom1Index].push(bond.atom2Index);
     adj[bond.atom2Index].push(bond.atom1Index);
   }
@@ -26,6 +28,7 @@ export function renderHybridOrbitals(
     const atom = molecule.atoms[i];
     const atomPos: [number, number, number] = [atom.x, atom.y, atom.z];
     const info = cached[i];
+    if (info && info.described === false) continue; // a metal centre: no model
 
     // Hydrogen: 1s sphere in distinct color
     if (atom.element === 'H') {

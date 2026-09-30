@@ -18,6 +18,27 @@ export interface AtomOrbitals {
   hasPi: boolean;          // whether a p orbital should be rendered
   piDirection: [number, number, number] | null;  // primary p-orbital direction
   piDirection2: [number, number, number] | null; // second p-orbital direction (sp only)
+  /** False for an element this electron-domain model does not describe — a
+   *  metal centre. Such an atom gets no label, no lobes, and counts as no
+   *  neighbour for the atoms bonded to it: a haptic Fe–C contact is not a
+   *  VSEPR domain, and counting it made every cyclopentadienyl carbon read
+   *  sp³ instead of sp². Degrade loudly, per the house rule. */
+  described: boolean;
+}
+
+/**
+ * The elements the electron-domain model describes: the main group. A metal
+ * centre has no σ/π domain count — its bonding is d-based and often haptic —
+ * so ferrocene's iron would otherwise be labelled "sp³d²" by clamping ten
+ * contacts into the six-domain ceiling.
+ */
+const VSEPR_ELEMENTS = new Set([
+  'H', 'B', 'C', 'N', 'O', 'F', 'Si', 'P', 'S', 'Cl', 'Br', 'I',
+]);
+
+/** Does the electron-domain model describe this element? */
+export function isVseprElement(element: string): boolean {
+  return VSEPR_ELEMENTS.has(element);
 }
 
 // Takes a molecule with 3D coordinates and assigns the orbitals of every
@@ -32,6 +53,11 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
   const neighborsOf: number[][] = Array.from({ length: atomCount }, () => []);
   const piBondsPerAtom: number[] = new Array(atomCount).fill(0);
   for (const bond of molecule.bonds) {
+    // a bond to an element the model does not describe is not a domain: the
+    // metallocene's haptic contacts must not inflate the ring carbons' counts
+    const a = molecule.atoms[bond.atom1Index].element;
+    const b = molecule.atoms[bond.atom2Index].element;
+    if (!VSEPR_ELEMENTS.has(a) || !VSEPR_ELEMENTS.has(b)) continue;
     neighborsOf[bond.atom1Index].push(bond.atom2Index);
     neighborsOf[bond.atom2Index].push(bond.atom1Index);
     const piCount = Math.max(0, bond.order - 1);
@@ -43,6 +69,13 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
 
   for (let atomIdx = 0; atomIdx < atomCount; atomIdx++) {
     const atom = molecule.atoms[atomIdx];
+    if (!VSEPR_ELEMENTS.has(atom.element)) {
+      result.push({
+        element: atom.element, hybridization: '', lonePairs: 0, hasPi: false,
+        piDirection: null, piDirection2: null, described: false,
+      });
+      continue;
+    }
     const neighborIndices = neighborsOf[atomIdx];
 
     // Vectors from this atom to each of its neighbors (needed for angle measurement)
@@ -162,6 +195,7 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
       hasPi,
       piDirection,
       piDirection2,
+      described: true,
     });
   }
 
