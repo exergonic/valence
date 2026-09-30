@@ -388,26 +388,44 @@ Open follow-ups, in the order they would pay off:
    the valence model has no lobes to draw there. Examples containing an element
    outside the valence model now turn the molecule layer on as they load; the
    global default is still the old one, and worth a decision.
-3. **The localized-orbital classes are avo_ibo's** — lifted, thresholds and
+3. **Localizing a molecule with an open shell** — the counterpart of item 2,
+   to be settled with the UI/UX pass. Knowing the multiplicity is not enough to
+   place the unpaired electrons when they land in a DEGENERATE set, and the
+   reason is not a gap in the code: a degenerate open-shell state (O₂'s ¹Δg) is
+   a symmetry-adapted combination of determinants, not one orbital occupancy, so
+   "which orbital holds it" has no answer to draw. Two things are true and
+   useful, though. The averaged density IS defined — Unsöld's theorem, the same
+   reason a half-filled shell looks spherical — so "these three orbitals hold
+   two electrons between them" is honest and drawable as fractional markers. And
+   the spatial part of a term symbol could be used as a CHECK rather than a
+   chooser: the app already detects point groups and irreps, so a proposed
+   filling can be tested against the stated term. The design ladder to pick from
+   when the time comes: (a) aufbau + Hund once S is known, which determines
+   everything when the frontier is non-degenerate or a set exactly the size of
+   the unpaired count; (b) localize the doubly-occupied core and mark a
+   partly-filled set rather than choosing inside it; (c) the irrep check. What
+   the app cannot do, in any of them, is derive the term symbol: EH knows the
+   count and nothing else, so S and Γ come from the user or their QC run.
+4. **The localized-orbital classes are avo_ibo's** — lifted, thresholds and
    names both, with diborane in as the `2e3c` case the rule exists for. Where
    our labels still differ from theirs on a metal complex, the *orbitals* differ
    too (EH+PM puts more density on the iron than SCF+IAO+PM) — NOTES.md has the
    numbers rather than a claim of agreement.
-3. **Valence-virtual localization — SHIPPED** (milestone 4c), including the
+5. **Valence-virtual localization — SHIPPED** (milestone 4c), including the
    finding that the IAO/VVO screening step is a no-op on a minimal basis.
-4. **Oriented lobes for the localized picture** — the current draw reuses the
+6. **Oriented lobes for the localized picture** — the current draw reuses the
    MO pictures (per-AO dumbbells, or the isosurface). One lobe per localized
    orbital along its own axis is the nicer picture and the only part of
    Milestone 4b's draft still outstanding.
-5. **The VSEPR picture on a 3c-2e bridge** — a bridging hydrogen has two
+7. **The VSEPR picture on a 3c-2e bridge** — a bridging hydrogen has two
    neighbours and reads `sp`, and diborane's boron reads sp³ with the eight-bond
    drawing. Neither is wrong so much as unmodelled: the electron-domain picture
    has no vocabulary for a three-centre bond, which is exactly why the
    localized-orbital list does.
-6. **Ethane and acetone as examples** — the pin set from this phase runs on
+8. **Ethane and acetone as examples** — the pin set from this phase runs on
    water, ethene, benzene and N₂ because those are what `EXAMPLES` has; the
    two molecules the draft named would need examples of their own.
-7. **The second-row hybrid.** SF₆ and PCl₅ run Alvarez s/p against ICON8 d.
+9. **The second-row hybrid.** SF₆ and PCl₅ run Alvarez s/p against ICON8 d.
    Fine as long as it is said out loud — which it is (parameters.ts, the
    panel's model line, the copied MO data, NOTES.md). A "full ICON8 for Si–Cl"
    variant would remove the mixture, and the numbers are in hand if anyone
