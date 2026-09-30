@@ -20,13 +20,14 @@
  */
 import * as THREE from 'three';
 import type { MoSurfaceData } from '../chem/extended-huckel/mo-surface';
-import { MO_PHASE_NEGATIVE, MO_PHASE_POSITIVE } from './mo-lobes';
+import { MO_PHASE_PAIRS } from './mo-lobes';
 
 export function renderMoIsosurface(
   group: THREE.Group,
   surface: MoSurfaceData,
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
   opacity = 0.85,
+  phase: [number, number] = MO_PHASE_PAIRS[0],
 ): void {
   if (surface.vertexCount === 0) return;
 
@@ -34,8 +35,8 @@ export function renderMoIsosurface(
   geo.setAttribute('position', new THREE.BufferAttribute(surface.positions, 3));
   geo.setAttribute('normal', new THREE.BufferAttribute(surface.normals, 3));
   const colors = new Float32Array(surface.positions.length);
-  const positive = new THREE.Color(MO_PHASE_POSITIVE);
-  const negative = new THREE.Color(MO_PHASE_NEGATIVE);
+  const positive = new THREE.Color(phase[0]);
+  const negative = new THREE.Color(phase[1]);
   for (let i = 0; i < surface.vertexCount; i++) {
     const color = surface.phases[i] > 0 ? positive : negative;
     colors[i * 3] = color.r;

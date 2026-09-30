@@ -27,9 +27,22 @@ import type { Molecule } from '../mol-parser';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
 import { CANONICAL_TOLERANCE_EV, DEGENERATE_TOLERANCE_EV } from '../chem/extended-huckel/canonicalize-degenerate';
 import { labelIrreps } from '../chem/extended-huckel/irrep-labels';
-import { MO_SIGNIFICANT } from '../render/mo-lobes';
+import { MO_PHASE_PAIRS, MO_SIGNIFICANT } from '../render/mo-lobes';
+import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 
 const PAD = { top: 16, bottom: 20, left: 44, right: 58 };
+
+/** How each localized-orbital character reads in the list. */
+const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
+  'lone pair': 'lone pair',
+  sigma: 'σ',
+  pi: 'π',
+  'delocalized pi': 'delocalized π',
+  'delocalized pi antibond': 'delocalized π*',
+  delocalized: 'delocalized',
+  'sigma antibond': 'σ*',
+  'pi antibond': 'π*',
+};
 
 /** Levels this far outside the occupied ladder still get axis room. */
 const BELOW_OCCUPIED = 4;
@@ -47,11 +60,14 @@ const DEGENERATE_TOLERANCE = DEGENERATE_TOLERANCE_EV;
 export function setupMoPanel(ctx: SceneContext) {
   const panel = document.getElementById('mo-panel')!;
   const diagram = document.getElementById('mo-diagram')!;
+  const list = document.getElementById('mo-list')!;
   const readout = document.getElementById('mo-readout')!;
   const composition = document.getElementById('mo-composition')!;
   const note = document.getElementById('mo-note')!;
   const clear = document.getElementById('ctrl-mo-clear') as HTMLButtonElement | null;
   const collapse = document.getElementById('mo-collapse') as HTMLButtonElement | null;
+  const ladderTab = document.getElementById('mo-view-ladder') as HTMLButtonElement | null;
+  const localizedTab = document.getElementById('mo-view-localized') as HTMLButtonElement | null;
 
   const select = (index: number | null) => {
     ctx.display.moIndex = ctx.display.moIndex === index ? null : index;
@@ -59,7 +75,39 @@ export function setupMoPanel(ctx: SceneContext) {
     ctx.rerender();
   };
 
-  clear?.addEventListener('click', () => select(null));
+  /** Picking a localized orbital adds it to the picture, or removes it if it
+   *  was already there: several at once is the hyperconjugation view (a filled
+   *  orbital and the empty one it reaches into). */
+  const toggleLocalized = (index: number) => {
+    const selected = ctx.display.localizedSelection;
+    ctx.display.localizedSelection = selected.includes(index)
+      ? selected.filter((i) => i !== index)
+      : [...selected, index];
+    draw();
+    ctx.rerender();
+  };
+
+  const setView = (view: 'ladder' | 'localized') => {
+    if (ctx.display.orbitalView === view) return;
+    ctx.display.orbitalView = view;
+    // one picture at a time: the other view's selection stops drawing
+    if (view === 'localized') ctx.display.moIndex = null;
+    else ctx.display.localizedSelection = [];
+    draw();
+    ctx.rerender();
+  };
+  ladderTab?.addEventListener('click', () => setView('ladder'));
+  localizedTab?.addEventListener('click', () => setView('localized'));
+
+  clear?.addEventListener('click', () => {
+    if (ctx.display.orbitalView === 'localized') {
+      ctx.display.localizedSelection = [];
+      draw();
+      ctx.rerender();
+    } else {
+      select(null);
+    }
+  });
 
   const opacity = document.getElementById('ctrl-mo-opacity') as HTMLInputElement | null;
   if (opacity) {
@@ -75,8 +123,8 @@ export function setupMoPanel(ctx: SceneContext) {
     isovalue.value = String(ctx.display.moIsovalue);
     isovalue.addEventListener('change', () => {
       ctx.display.moIsovalue = parseFloat(isovalue.value);
-      // the surface is cached per level, so a new isovalue re-extracts it
-      ctx.moSurface = null;
+      // every cached surface was extracted at the old level
+      ctx.moSurfaces.clear();
       ctx.rerender();
     });
   }
@@ -106,6 +154,8 @@ export function setupMoPanel(ctx: SceneContext) {
   // so a redraw cannot feed the observer its own trigger.
   let drawn = { width: 0, height: 0 };
   const observer = new ResizeObserver(() => {
+    // hidden in the localized view: a zero-size SVG would redraw forever
+    if (!diagram.clientWidth && !diagram.clientHeight) return;
     const width = diagram.clientWidth;
     const height = diagram.clientHeight;
     if (Math.abs(width - drawn.width) > 1 || Math.abs(height - drawn.height) > 1) draw();
@@ -127,19 +177,101 @@ export function setupMoPanel(ctx: SceneContext) {
     return labelled.labels;
   }
 
+  /**
+   * The localized list: one row per orbital, in the order the classifier set
+   * (lone pairs, then bonds, then the delocalized π). No energies — the
+   * localized orbitals are not eigenstates, and any number here would inherit
+   * the extended-Hückel parameters (PLAN.md Phase 4).
+   */
+  function drawLocalized(): void {
+    const orbitals = ctx.localizedOrbitals;
+    const molecule = ctx.currentMolecule;
+    const basis = ctx.ehResult?.basis;
+    if (!orbitals || !molecule || !basis) {
+      note.textContent = ctx.currentMolecule
+        ? 'No localized orbitals: extended Hückel refused this molecule, or its shell is open (an odd electron count, or a degenerate set the count would only partly fill).'
+        : 'Load a molecule to see its orbitals.';
+      return;
+    }
+
+    const selection = ctx.display.localizedSelection;
+    const occupiedCount = orbitals.filter((o) => o.occupied).length;
+    let section: 'occupied' | 'empty' | null = null;
+    list.innerHTML = orbitals.map((orbital, index) => {
+      let html = '';
+      const tag = orbital.occupied ? 'occupied' : 'empty';
+      if (tag !== section) {
+        section = tag;
+        const header = orbital.occupied
+          ? `Occupied · ${occupiedCount}`
+          : `Empty — valence-virtual · ${orbitals.length - occupiedCount}`;
+        html += `<div class="lmo-group">${header}</div>`;
+      }
+      const slot = selection.indexOf(index);
+      const classes = slot >= 0 ? 'lmo-item selected' : 'lmo-item';
+      // the dot carries the phase colour the orbital is drawn in, so the list
+      // and the picture say the same thing when two orbitals are up at once
+      const dot = slot >= 0
+        ? `<span class="lmo-dot" style="background:#${MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length][0].toString(16).padStart(6, '0')}"></span>`
+        : '<span class="lmo-dot"></span>';
+      return html + `<button class="${classes}" data-index="${index}">`
+        + dot
+        + `<span class="lmo-character">${CHARACTER_LABEL[orbital.character]}</span>`
+        + `<span class="lmo-centres">${localizedCentres(molecule, orbital)}</span>`
+        + '</button>';
+    }).join('');
+    list.querySelectorAll<HTMLButtonElement>('button.lmo-item').forEach((node) => {
+      node.addEventListener('click', () => toggleLocalized(Number(node.dataset.index)));
+    });
+
+    if (selection.length > 0) {
+      const described = selection
+        .map((index) => orbitals[index])
+        .filter((orbital): orbital is LocalizedOrbital => !!orbital);
+      readout.textContent = described
+        .map((orbital) => `${CHARACTER_LABEL[orbital.character]} ${localizedCentres(molecule, orbital)}`
+          + (orbital.occupied ? '' : ' (empty)'))
+        .join('  +  ')
+        + (selection.length > 1 ? ' — click either again to drop it' : ' — click it again to hide');
+      // the composition line describes the LAST orbital picked: two orbitals
+      // have no joint composition, and the latest pick is the one being read
+      const latest = orbitals[selection[selection.length - 1]];
+      if (latest) {
+        composition.textContent = `${CHARACTER_LABEL[latest.character]} ${localizedCentres(molecule, latest)}: `
+          + compositionText(basis, latest.coefficients);
+      }
+    } else {
+      readout.textContent = `${orbitals.length} localized orbitals · click one to draw it, another to compare`;
+    }
+    note.textContent = 'Pipek–Mezey localization of the extended-Hückel orbitals (semiempirical): the delocalized MOs rearranged into bonds and lone pairs, occupied space and valence-virtual space alike. Pick one from each section to see a hyperconjugation interaction. No energies — a localized orbital is not an eigenstate.';
+  }
+
   function draw(): void {
     const result = ctx.ehResult;
-    const selected = ctx.display.moIndex;
+    const view = ctx.display.orbitalView;
     diagram.innerHTML = '';
+    list.innerHTML = '';
     note.textContent = '';
     readout.textContent = '';
     composition.textContent = '';
-    // The picture controls only mean something with a level selected — say so
-    // rather than letting a drag do nothing.
-    const hasSelection = selected !== null && !!result;
+    // The picture controls only mean something with an orbital selected — say
+    // so rather than letting a drag do nothing.
+    const hasSelection = view === 'localized'
+      ? !!ctx.localizedOrbitals && ctx.display.localizedSelection.length > 0
+      : result !== null && ctx.display.moIndex !== null;
     for (const control of [smooth, opacity, isovalue]) if (control) control.disabled = !hasSelection;
+    ladderTab?.classList.toggle('active', view === 'ladder');
+    localizedTab?.classList.toggle('active', view === 'localized');
+    diagram.classList.toggle('hidden', view === 'localized');
+    list.classList.toggle('hidden', view !== 'localized');
     if (panel.classList.contains('collapsed')) return;
 
+    if (view === 'localized') {
+      drawLocalized();
+      return;
+    }
+
+    const selected = ctx.display.moIndex;
     if (!result) {
       note.textContent = ctx.currentMolecule
         ? 'No orbitals: an element here is outside the extended-Hückel parameter table.'
@@ -281,7 +413,7 @@ export function setupMoPanel(ctx: SceneContext) {
         + (occupancy === null ? '' : occupancy > 0 ? ' · occupied' : ' · empty')
         + (partners.length > 0 ? ` · degenerate with MO ${partners.join(', ')}` : '')
         + ' — click it again to hide';
-      composition.textContent = describeComposition(result, selected)
+      composition.textContent = compositionText(result.basis, result.coefficients[selected])
         // A linear molecule's two non-zero moments of inertia are equal, so
         // the axes perpendicular to the molecular axis are degenerate and the
         // frame's choice between them is arbitrary. That makes the px/py/pz
@@ -350,14 +482,13 @@ function isLinear(molecule: Molecule | null | undefined): boolean {
   });
 }
 
-/** "C2 2pz −0.46 · C3 2pz −0.46 · …" — the biggest contributors to an MO,
+/** "C2 2pz −0.46 · C3 2pz −0.46 · …" — the biggest contributors to an orbital,
  *  which is what a chemist compares against another program's output. */
-function describeComposition(result: { basis: Array<{ label: string }>; coefficients: number[][] }, mo: number): string {
-  const coefficients = result.coefficients[mo];
+function compositionText(basis: Array<{ label: string }>, coefficients: number[]): string {
   if (!coefficients) return '';
   const largest = Math.max(...coefficients.map(Math.abs));
   const ranked = coefficients
-    .map((c, i) => ({ c, label: result.basis[i].label }))
+    .map((c, i) => ({ c, label: basis[i].label }))
     // the same threshold the lobes are drawn with: the line describes the
     // picture, so a numerically-tiny coefficient is not listed as a
     // "contribution" (a π MO has 24 of those, all rounding noise)
@@ -369,6 +500,15 @@ function describeComposition(result: { basis: Array<{ label: string }>; coeffici
     return `${short} ${e.c >= 0 ? '+' : '−'}${Math.abs(e.c).toFixed(2)}`;
   });
   return shown.join('  ·  ') + (ranked.length > shown.length ? `  ·  +${ranked.length - shown.length} more` : '');
+}
+
+/** "C1–H3", "O1", or "6 centres" — what a localized orbital sits on. */
+function localizedCentres(molecule: Molecule, orbital: LocalizedOrbital): string {
+  const names = orbital.atoms.map((a) => `${molecule.atoms[a].element}${a + 1}`);
+  if (names.length === 0) return '';
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]}–${names[1]}`;
+  return `${names.length} centres`;
 }
 
 /** Tick values at 5 eV steps inside [lo, hi]. */

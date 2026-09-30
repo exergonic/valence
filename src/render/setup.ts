@@ -7,6 +7,7 @@ import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
 import { MO_SURFACE_ISOVALUE, type MoSurfaceData } from '../chem/extended-huckel/mo-surface';
 import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
+import type { LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
@@ -34,6 +35,14 @@ export interface DisplaySettings {
   /** Which extended-Hückel MO is shown over the molecule (null = none).
    *  Selecting one is what "click a level" does in the MO tab. */
   moIndex: number | null;
+  /** The MO panel's view: the energy ladder, or the localized orbitals
+   *  (Pipek–Mezey). Only one of the two selections draws at a time. */
+  orbitalView: 'ladder' | 'localized';
+  /** Which localized orbitals are drawn over the molecule, in the order they
+   *  were picked (empty = none). More than one is the hyperconjugation
+   *  picture: a filled orbital and the empty one it reaches into, each with
+   *  its own phase colours. */
+  localizedSelection: number[];
   /** VSEPR/hybrid orbitals visible — the checkbox in the Build tab. The MO
    *  picture takes precedence: an MO and the hybrid lobes are two different
    *  answers to the same question, so they never draw together. */
@@ -78,15 +87,19 @@ export interface SceneContext {
   /** Cached fused vdW ESP surface for the current molecule (computed lazily
    *  on the first ESP render; null until then or for an untypeable molecule). */
   espSurface: EspSurfaceData | null;
-  /** The isosurface of the selected MO, cached until the selection or the
-   *  molecule changes (the surface does not depend on opacity or style). */
-  moSurface: MoSurfaceData | null;
-  moSurfaceIndex: number | null;
-  moSurfaceIsovalue: number | null;
+  /** Extracted isosurfaces, keyed `mo:<index>` / `localized:<index>`. Each
+   *  costs ~50 ms to extract, and the same orbital can be picked, dropped and
+   *  picked again while comparing orbitals — so they are kept until the
+   *  isovalue or the molecule changes. */
+  moSurfaces: Map<string, MoSurfaceData>;
   /** Cached extended-Hückel result for the current molecule (computed once in
    *  buildScene, like the dipole); null when an element is outside the
    *  parameter table. */
   ehResult: ExtendedHuckelResult | null;
+  /** The molecule's localized orbitals, classified and ordered for display
+   *  (computed once in buildScene). Null when EH refused, the shell is open,
+   *  or there is nothing occupied — no list rather than a wrong one. */
+  localizedOrbitals: LocalizedOrbital[] | null;
   rerender: () => void;
   /** Called at the end of buildScene, i.e. when a new molecule is in the
    *  scene — panels that read per-molecule data (the MO ladder) redraw here
@@ -216,6 +229,8 @@ export function initScene(container: HTMLElement): SceneContext {
       autoRotate: false,
       highlightPiSystems: false,
       moIndex: null,
+      orbitalView: 'ladder',
+      localizedSelection: [],
       showOrbitals: true,
       showEsp: false,
       espOpacity: 0.5,
@@ -227,10 +242,9 @@ export function initScene(container: HTMLElement): SceneContext {
     dipole: null,
     charges: null,
     espSurface: null,
-    moSurface: null,
-    moSurfaceIndex: null,
-    moSurfaceIsovalue: null,
+    moSurfaces: new Map(),
     ehResult: null,
+    localizedOrbitals: null,
     rerender: () => {},
     onSceneBuilt: () => {},
     teardown,

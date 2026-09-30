@@ -266,11 +266,16 @@
              molecule. -->
         <div id="mo-panel">
           <div class="mo-head">
-            <span class="ctrl-label">Molecular Orbitals — extended Hückel</span>
+            <span class="ctrl-label">Orbitals — extended Hückel</span>
             <button id="mo-collapse" class="mo-collapse" title="Collapse">&minus;</button>
+          </div>
+          <div id="mo-views">
+            <button id="mo-view-ladder" class="mo-view active" title="The orbital energy ladder">Ladder</button>
+            <button id="mo-view-localized" class="mo-view" title="The same occupied space rearranged into bonds and lone pairs (Pipek–Mezey)">Localized</button>
           </div>
           <div id="mo-body">
             <div id="mo-diagram"></div>
+            <div id="mo-list" class="hidden"></div>
             <div id="mo-readout" class="mo-readout"></div>
             <div id="mo-composition" class="mo-composition"></div>
             <label class="ctrl-toggle mo-toggle" title="Draw the orbital as one continuous surface of constant amplitude, the way other programs do — or as the individual atomic orbitals it is built from">

@@ -8,7 +8,7 @@ import { renderOrbitalLabels } from './orbital-labels';
 import { renderPiSystems } from './pi-systems';
 import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
-import { renderMoOrbitals } from './mo-lobes';
+import { renderMoOrbitals, MO_PHASE_PAIRS } from './mo-lobes';
 import { computeEspSurface } from '../chem/charge-model/esp';
 import { computeMoSurface } from '../chem/extended-huckel/mo-surface';
 import { renderMoIsosurface } from './mo-isosurface';
@@ -17,6 +17,8 @@ import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/vsepr/assign-orbitals';
 import { computeDipole } from '../chem/charge-model/dipole';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
+import { localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
+import { orderLocalizedOrbitals } from '../chem/localized-orbitals/order-localized';
 import { resolveCharges } from '../chem/charge-model/bci-charges';
 import { labelPaletteFor } from './label-colors';
 
@@ -150,25 +152,47 @@ export function rebuildDisplay(ctx: SceneContext) {
     ctx.espGroup.visible = false;
   }
 
-  // Extended-Hückel MO: the selected level's lobes, from the cached result.
-  // One picture at a time — an MO and the VSEPR hybrid lobes answer the same
-  // question differently, so the MO takes the stage while it is selected.
-  const mo = ctx.display.moIndex;
-  if (mo !== null && ctx.ehResult) {
+  // Extended-Hückel MO, or localized orbitals: whatever is selected, from the
+  // cached results. One picture at a time — orbitals and the VSEPR hybrid
+  // lobes answer the same question differently, so an orbital takes the stage
+  // while it is selected. The localized view draws SEVERAL at once (a filled
+  // orbital and the empty one it reaches into is the hyperconjugation
+  // picture), so each takes its own phase colours, in the order it was picked.
+  const picks: Array<{ key: string; coefficients: number[]; phase: [number, number] }> = [];
+  if (ctx.display.orbitalView === 'localized' && ctx.localizedOrbitals) {
+    ctx.display.localizedSelection.forEach((index, slot) => {
+      const orbital = ctx.localizedOrbitals![index];
+      if (!orbital) return;
+      picks.push({
+        key: `localized:${index}`,
+        coefficients: orbital.coefficients,
+        phase: MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length],
+      });
+    });
+  } else if (ctx.display.moIndex !== null && ctx.ehResult) {
+    const index = ctx.display.moIndex;
+    if (ctx.ehResult.coefficients[index]) {
+      picks.push({ key: `mo:${index}`, coefficients: ctx.ehResult.coefficients[index], phase: MO_PHASE_PAIRS[0] });
+    }
+  }
+
+  if (picks.length > 0 && ctx.ehResult) {
     if (ctx.display.smoothMo) {
       // one continuous surface of constant amplitude — the picture other
-      // programs draw. Cached per selection: it costs ~50 ms to extract.
-      if (!ctx.moSurface || ctx.moSurfaceIndex !== mo || ctx.moSurfaceIsovalue !== ctx.display.moIsovalue) {
-        ctx.moSurface = computeMoSurface(
-          ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients[mo], ctx.display.moIsovalue,
-        );
-        ctx.moSurfaceIndex = mo;
-        ctx.moSurfaceIsovalue = ctx.display.moIsovalue;
+      // programs draw. Cached per orbital: it costs ~50 ms to extract.
+      for (const pick of picks) {
+        let surface = ctx.moSurfaces.get(pick.key);
+        if (!surface) {
+          surface = computeMoSurface(ctx.currentMolecule, ctx.ehResult.basis, pick.coefficients, ctx.display.moIsovalue);
+          ctx.moSurfaces.set(pick.key, surface);
+        }
+        renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase);
       }
-      renderMoIsosurface(ctx.moGroup, ctx.moSurface, ctx.display.orbitalPreset, ctx.display.moOpacity);
     } else {
       // the atomic orbitals themselves: which AO, which phase, how much
-      renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients, mo, ctx.ehResult.frame, ctx.display.orbitalPreset, ctx.display.moOpacity);
+      for (const pick of picks) {
+        renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, [pick.coefficients], 0, ctx.ehResult.frame, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase);
+      }
     }
     ctx.moGroup.visible = true;
     ctx.orbitalGroup.visible = false;
@@ -209,14 +233,18 @@ export function buildScene(ctx: SceneContext) {
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
-  ctx.moSurface = null;
-  ctx.moSurfaceIndex = null;
-  ctx.moSurfaceIsovalue = null;
+  ctx.moSurfaces.clear();
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is
   // computed once here and cached; null when an element is outside the
   // parameter table. A new molecule also clears any selected MO.
   ctx.ehResult = ctx.currentMolecule ? solveExtendedHuckel(ctx.currentMolecule) : null;
+  ctx.localizedOrbitals = null;
+  if (ctx.currentMolecule && ctx.ehResult) {
+    const localized = localizeOrbitals(ctx.currentMolecule, ctx.ehResult);
+    if (localized) ctx.localizedOrbitals = orderLocalizedOrbitals(ctx.currentMolecule, ctx.ehResult, localized);
+  }
   ctx.display.moIndex = null;
+  ctx.display.localizedSelection = [];
   rebuildDisplay(ctx);
 
   const center = new THREE.Vector3();

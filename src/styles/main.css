@@ -1199,6 +1199,104 @@ html, body {
 
 .mo-collapse:hover { color: #fff; border-color: rgba(255, 255, 255, 0.35); }
 
+/* The panel's two views — the energy ladder, or the localized orbitals. */
+#mo-views {
+  display: flex;
+  gap: 1px;
+  padding: 6px 10px 0;
+  flex-shrink: 0;
+}
+
+#mo-panel.collapsed #mo-views { display: none; }
+
+.mo-view {
+  flex: 1;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: #999;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mo-view:first-child { border-radius: 4px 0 0 4px; }
+.mo-view:last-child { border-radius: 0 4px 4px 0; }
+.mo-view:hover { color: #ddd; }
+.mo-view.active {
+  background: rgba(127, 168, 216, 0.25);
+  border-color: rgba(127, 168, 216, 0.6);
+  color: #fff;
+}
+
+#mo-diagram.hidden { display: none; }
+
+/* The localized list: one row per orbital, in the classifier's order. */
+#mo-list {
+  flex: 1;
+  min-height: 240px;
+  margin-bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+#mo-list.hidden { display: none; }
+
+/* Section headers: what is filled, then what is empty. */
+.lmo-group {
+  margin: 6px 0 2px;
+  color: #888;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#mo-list .lmo-group:first-child { margin-top: 0; }
+
+.lmo-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ccc;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.lmo-item:hover { background: rgba(255, 255, 255, 0.1); }
+
+.lmo-item.selected {
+  background: rgba(127, 168, 216, 0.25);
+  border-color: rgba(127, 168, 216, 0.6);
+  color: #fff;
+}
+
+.lmo-character {
+  flex: 0 0 84px;
+  color: #7fa8d8;
+}
+
+/* The dot shows the phase colour the orbital is drawn in, so the list and the
+   picture agree when more than one orbital is up. Empty when unpicked. */
+.lmo-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  align-self: center;
+}
+
+.lmo-item.selected .lmo-character { color: #cfe3ff; }
+
+.lmo-centres { flex: 1; color: #aaa; }
+
 #mo-body {
   flex: 1;
   display: flex;

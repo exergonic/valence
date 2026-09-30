@@ -25,6 +25,20 @@ export const MO_PHASE_POSITIVE = 0x4488ff;
 export const MO_PHASE_NEGATIVE = 0xff6644;
 
 /**
+ * The phase pairs, one per simultaneously drawn orbital. Two localized
+ * orbitals picked for a hyperconjugation picture (a σ or a lone pair, and the
+ * π* it reaches) have to be told apart, and each still needs its two phases
+ * distinguishable — so they take different pairs, in the order they were
+ * picked. The first pair is the long-standing blue/orange.
+ */
+export const MO_PHASE_PAIRS: Array<[number, number]> = [
+  [MO_PHASE_POSITIVE, MO_PHASE_NEGATIVE],
+  [0x33bb77, 0xcc55dd],
+  [0xffcc33, 0x8855ff],
+  [0x33cccc, 0xff5599],
+];
+
+/**
  * Give a lobe the MO picture's opacity, whatever the style preset chose. The
  * preset's opacity belongs to the hybrid-orbital picture; here the slider is
  * the authority, in both MO views and every style — otherwise the control goes
@@ -51,7 +65,9 @@ export function renderMoOrbitals(
   frame: PrincipalFrame['axes'],
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
   opacity = 0.75,
+  phase: [number, number] = MO_PHASE_PAIRS[0],
 ): void {
+  const [positiveColour, negativeColour] = phase;
   const mo = coefficients[moIndex];
   if (!mo) return;
   let largest = 0;
@@ -66,7 +82,7 @@ export function renderMoOrbitals(
     const atom = molecule.atoms[orbital.atomIndex];
     const origin: [number, number, number] = [atom.x, atom.y, atom.z];
     const positive = coefficient >= 0;
-    const color = positive ? MO_PHASE_POSITIVE : MO_PHASE_NEGATIVE;
+    const color = positive ? positiveColour : negativeColour;
     const size = 0.50 + 0.62 * weight;
     // the basis label already reads "2px" / "2s" — reuse its tail
     const shortName = orbital.label.split(' ').pop() ?? '';
@@ -97,7 +113,7 @@ export function renderMoOrbitals(
 
     const far = createLobeMesh(
       piLobe(),
-      positive ? MO_PHASE_NEGATIVE : MO_PHASE_POSITIVE,
+      positive ? negativeColour : positiveColour,
       opacity,
       preset,
       size,
