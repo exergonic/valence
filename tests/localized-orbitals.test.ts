@@ -259,6 +259,33 @@ describe('the refusals', () => {
     expect(localizeOrbitals(molecule, result)).toBeNull();
   });
 
+  it('the d8 pair: the tetrahedral triplet is refused, the square-planar singlet localizes', () => {
+    // The ligand-field lesson in one test. Same metal, same +2 charge, same d8
+    // count — the difference is the geometry and the spin, and the app treats
+    // them differently for the right reason: 40 even electrons cannot say which
+    // orbitals are singly occupied, so the triplet gets no filling; the singlet's
+    // 48 fill pairwise and localize.
+    const triplet = EXAMPLES.find((e) => e.name.includes('NiCl'))!;
+    const squarePlanar = EXAMPLES.find((e) => e.name.includes('Ni(CN)'))!;
+    expect(triplet.multiplicity).toBe(3);
+    expect(squarePlanar.multiplicity).toBeUndefined(); // a singlet, the default
+
+    const tetrahedralMol = { ...parseMolBlock(triplet.mol), multiplicity: 3 };
+    const tetrahedral = solveExtendedHuckel(tetrahedralMol)!;
+    expect(localizeOrbitals(tetrahedralMol, tetrahedral)).toBeNull();
+
+    const planarMol = parseMolBlock(squarePlanar.mol);
+    const planar = solveExtendedHuckel(planarMol)!;
+    expect(planar.electronCount).toBe(48);
+    const localized = localizeOrbitals(planarMol, planar)!;
+    expect(localized.occupied).toHaveLength(24);
+    const ordered = orderLocalizedOrbitals(planarMol, planar, localized);
+    // the CN ligands: a sigma, two pi, and an N lone pair each
+    expect(count(occupied({ molecule: planarMol, result: planar, orbitals: ordered }), 'sigma')).toBeGreaterThanOrEqual(4);
+    expect(count(occupied({ molecule: planarMol, result: planar, orbitals: ordered }), 'pi')).toBeGreaterThanOrEqual(8);
+    expect(count(occupied({ molecule: planarMol, result: planar, orbitals: ordered }), 'lone pair')).toBeGreaterThanOrEqual(4);
+  });
+
   it('a molecule known to be open-shell gets none, even with an even count', () => {
     // Tetrahedral NiCl4(2-) is a triplet with 40 electrons — an even count, so
     // only the multiplicity can refuse it

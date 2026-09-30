@@ -391,6 +391,32 @@ const NICL4 = HEADER + `  5  4  0  0  0  0  0  0  0  0999 V2000
 M  CHG  5   1   2   2  -1   3  -1   4  -1   5  -1
 M  END`;
 
+
+// Tetracyanonickelate(II): the SQUARE PLANAR d8 complex, from the ORCA
+// optimisation in ~/Code/orca_calcs/nickel-complexes/NiCN6 (charge -2,
+// MULTIPLICITY 1 — a singlet, the diamagnetic partner of the tetrahedral
+// triplet above; the pair is the ligand-field lesson).
+const NICN4 = HEADER + `  9  8  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000   -0.0000 Ni  0  0  0  0  0  0  0  0  0  0  0  0
+    1.9002   -0.0000   -0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.0596   -0.0000    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.9002    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -3.0596   -0.0000   -0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0000    1.9002   -0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0000    3.0596    0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000   -1.9002    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0000   -3.0596   -0.0000 N   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  6  1  0  0  0  0
+  1  8  1  0  0  0  0
+  2  3  1  0  0  0  0
+  4  5  1  0  0  0  0
+  6  7  1  0  0  0  0
+  8  9  1  0  0  0  0
+M  CHG  5   1   2   2  -1   4  -1   6  -1   8  -1
+M  END`;
+
 export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
@@ -410,4 +436,5 @@ export const EXAMPLES: Example[] = [
   { name: 'Diborane (B₂H₆)', mol: DIBORANE },
   { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2 },
   { name: 'Tetrachloronickelate(II) ([NiCl₄]²⁻, triplet)', mol: NICL4, multiplicity: 3 },
+  { name: 'Tetracyanonickelate(II) ([Ni(CN)₄]²⁻, singlet)', mol: NICN4 },
 ];
