@@ -363,23 +363,34 @@ Phase 5 (JANPA)     ← parked
 Open follow-ups, in the order they would pay off:
 
 1. **Transition-metal basis — SHIPPED 2026-09-30.** 25 d-block elements with
-   s+p+contracted-d from the shipped Alvarez table, refused for the five the
-   table cannot support (Zn has no d row; Y, Ag, Cd, Hf are placeholders).
-   Validated against bind on ferrocene — overlaps to the 4-decimal floor, the
-   occupied ladder to 0.0007 eV, and the eigenvectors to 0.005 over all 59
+   s+p+contracted-d from the shipped Alvarez table, plus Zn and Cd as a
+   deliberate s+p exception (their d¹⁰ shell is core-like and the table has no
+   d for them), refused for the three that carry a placeholder instead (Y, Ag,
+   Hf). Validated against bind on ferrocene — overlaps to the 4-decimal floor,
+   the occupied ladder to 0.0007 eV, and the eigenvectors to 0.005 over all 59
    orbitals (NOTES.md). What remains here is breadth, not machinery: a metal
    complex has to arrive as an example or from PubChem, since MMFF94 cannot
-   build one, and only iron is fixture-verified.
-2. **Valence-virtual localization — SHIPPED** (milestone 4c), including the
+   build one.
+2. **The localized-orbital classes are avo_ibo's** — lifted, thresholds and
+   names both, with diborane in as the `2e3c` case the rule exists for. Where
+   our labels still differ from theirs on a metal complex, the *orbitals* differ
+   too (EH+PM puts more density on the iron than SCF+IAO+PM) — NOTES.md has the
+   numbers rather than a claim of agreement.
+3. **Valence-virtual localization — SHIPPED** (milestone 4c), including the
    finding that the IAO/VVO screening step is a no-op on a minimal basis.
-3. **Oriented lobes for the localized picture** — the current draw reuses the
+4. **Oriented lobes for the localized picture** — the current draw reuses the
    MO pictures (per-AO dumbbells, or the isosurface). One lobe per localized
    orbital along its own axis is the nicer picture and the only part of
    Milestone 4b's draft still outstanding.
-4. **Ethane and acetone as examples** — the pin set from this phase runs on
+5. **The VSEPR picture on a 3c-2e bridge** — a bridging hydrogen has two
+   neighbours and reads `sp`, and diborane's boron reads sp³ with the eight-bond
+   drawing. Neither is wrong so much as unmodelled: the electron-domain picture
+   has no vocabulary for a three-centre bond, which is exactly why the
+   localized-orbital list does.
+6. **Ethane and acetone as examples** — the pin set from this phase runs on
    water, ethene, benzene and N₂ because those are what `EXAMPLES` has; the
    two molecules the draft named would need examples of their own.
-5. **The second-row hybrid.** SF₆ and PCl₅ run Alvarez s/p against ICON8 d.
+7. **The second-row hybrid.** SF₆ and PCl₅ run Alvarez s/p against ICON8 d.
    Fine as long as it is said out loud — which it is (parameters.ts, the
    panel's model line, the copied MO data, NOTES.md). A "full ICON8 for Si–Cl"
    variant would remove the mixture, and the numbers are in hand if anyone
