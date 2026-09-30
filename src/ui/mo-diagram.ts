@@ -25,6 +25,7 @@ import type { SceneContext } from '../render';
 import type { Molecule } from '../mol-parser';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
 import { DEGENERATE_TOLERANCE_EV } from '../chem/extended-huckel/canonicalize-degenerate';
+import { labelIrreps } from '../chem/extended-huckel/irrep-labels';
 import { MO_SIGNIFICANT } from '../render/mo-lobes';
 
 const PAD = { top: 16, bottom: 20, left: 44, right: 58 };
@@ -96,6 +97,21 @@ export function setupMoPanel(ctx: SceneContext) {
     if (Math.abs(width - drawn.width) > 1 || Math.abs(height - drawn.height) > 1) draw();
   });
   observer.observe(diagram);
+
+  // The irrep labels cost a symmetry detection (~10 ms), so they are computed
+  // once per solved molecule rather than per redraw.
+  let labelled: { result: unknown; labels: (string | null)[] } | null = null;
+  function irreps(): (string | null)[] {
+    const result = ctx.ehResult;
+    if (!result || !ctx.currentMolecule) return [];
+    if (!labelled || labelled.result !== result) {
+      labelled = {
+        result,
+        labels: labelIrreps(ctx.currentMolecule, result.basis, result.coefficients, result.energies, result.overlap),
+      };
+    }
+    return labelled.labels;
+  }
 
   function draw(): void {
     const result = ctx.ehResult;
@@ -245,7 +261,9 @@ export function setupMoPanel(ctx: SceneContext) {
         .map((e, i) => ({ e, i }))
         .filter(({ e, i }) => i !== selected && Math.abs(e - energy) < DEGENERATE_TOLERANCE)
         .map(({ i }) => i + 1);
+      const irrep = irreps()[selected];
       readout.textContent = `MO ${selected + 1} · ${energy.toFixed(3)} eV`
+        + (irrep ? ` · ${irrep}` : '')
         + (occupancy === null ? '' : occupancy > 0 ? ' · occupied' : ' · empty')
         + (partners.length > 0 ? ` · degenerate with MO ${partners.join(', ')}` : '')
         + ' — click it again to hide';

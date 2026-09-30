@@ -80,6 +80,22 @@ interface Operation {
   perm: number[];
 }
 
+/** A symmetry operation in the form callers outside this module need: the
+ *  matrix acting on centroid-relative positions, and where each atom goes. */
+export interface SymmetryOperation {
+  matrix: number[][];
+  permutation: number[];
+}
+
+export interface DetectedPointGroup {
+  /** Schoenflies symbol, 'C1' when nothing was found */
+  symbol: string;
+  /** number of operations (0 for a linear molecule's infinite group) */
+  order: number;
+  /** the operations, empty for C1 and for the linear groups */
+  operations: SymmetryOperation[];
+}
+
 export interface SymmetrizedGeometry {
   /** the same atoms, in the same order, with the symmetrized positions */
   atoms: Atom[];
@@ -373,6 +389,55 @@ function symbolOf(group: Operation[]): string {
 }
 
 const IDENTITY_MATRIX: Mat3 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+
+/**
+ * Detect the point group of a geometry without touching it. The same machinery
+ * `symmetrizeMolecule` runs, exposed for callers that need the operations
+ * themselves — the irrep labels are built from them (see
+ * chem/extended-huckel/irrep-labels.ts).
+ *
+ * The operations act on centroid-relative coordinates in the molecule's own
+ * frame, so a caller working in the calculation frame should pass the *framed*
+ * atoms (see alignToPrincipalAxes) rather than the molecule as displayed.
+ */
+export function detectPointGroup(
+  molecule: Molecule,
+  tolerance = SYMMETRY_TOLERANCE,
+): DetectedPointGroup {
+  const { atoms } = molecule;
+  if (atoms.length < 2) return { symbol: 'C1', order: 1, operations: [] };
+
+  const centroid: Vec3 = [0, 0, 0];
+  for (const a of atoms) {
+    centroid[0] += a.x / atoms.length;
+    centroid[1] += a.y / atoms.length;
+    centroid[2] += a.z / atoms.length;
+  }
+  const centered = atoms.map((a): Vec3 => [a.x - centroid[0], a.y - centroid[1], a.z - centroid[2]]);
+  const elements = atoms.map((a) => a.element);
+
+  // a linear molecule's group is infinite: report it and stop
+  const farthest = centered.reduce((best, q) => (length(q) > length(best) ? q : best), centered[0]);
+  const along = unit(farthest);
+  if (length(along) > 0 && centered.every((p) => length(cross(p, along)) <= tolerance)) {
+    let centrosymmetric = true;
+    for (let i = 0; i < centered.length; i++) {
+      const mirrored = scale(centered[i], -1);
+      if (!centered.some((q, j) => elements[j] === elements[i] && length(sub(mirrored, q)) <= tolerance)) {
+        centrosymmetric = false;
+      }
+    }
+    return { symbol: centrosymmetric ? 'D∞h' : 'C∞v', order: 0, operations: [] };
+  }
+
+  const group = closeGroup(detectOperations(centered, elements, tolerance));
+  if (!group || group.length <= 1) return { symbol: 'C1', order: 1, operations: [] };
+  return {
+    symbol: symbolOf(group),
+    order: group.length,
+    operations: group.map((op) => ({ matrix: op.m.map((row) => [...row]), permutation: [...op.perm] })),
+  };
+}
 
 /**
  * Detect the point group the geometry nearly has and project the geometry
