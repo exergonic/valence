@@ -22,6 +22,7 @@
  *    has, so it stays legible when the panel is resized or collapsed.
  */
 import type { SceneContext } from '../render';
+import type { Molecule } from '../mol-parser';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
 import { DEGENERATE_TOLERANCE_EV } from '../chem/extended-huckel/canonicalize-degenerate';
 import { MO_SIGNIFICANT } from '../render/mo-lobes';
@@ -248,7 +249,20 @@ export function setupMoPanel(ctx: SceneContext) {
         + (occupancy === null ? '' : occupancy > 0 ? ' · occupied' : ' · empty')
         + (partners.length > 0 ? ` · degenerate with MO ${partners.join(', ')}` : '')
         + ' — click it again to hide';
-      composition.textContent = describeComposition(result, selected);
+      composition.textContent = describeComposition(result, selected)
+        // A linear molecule's two non-zero moments of inertia are equal, so
+        // the axes perpendicular to the molecular axis are degenerate and the
+        // frame's choice between them is arbitrary. That makes the px/py/pz
+        // names a statement about the frame rather than about the molecule —
+        // most visible on a σ orbital, which is the p *along* the axis
+        // whichever name it landed on (N₂'s σ HOMO reads "2py"). Said here,
+        // beside the labels, rather than "fixed" in the calculation: they are
+        // correct for the frame, and a linear molecule has no chemistry for
+        // the frame to align to. Deliberately not solved by re-aligning the
+        // oracle fixtures — see NOTES.md.
+        + (isLinear(ctx.currentMolecule)
+          ? '\u2003(linear molecule: the perpendicular p axes are degenerate, so these px/py/pz names are the calculation frame\'s choice)'
+          : '');
       if (partners.length > 0) {
         // Worth saying out loud: a degenerate set is *a* subspace, and any
         // orthogonal combination inside it is the same physics. The solver
@@ -273,6 +287,31 @@ export function setupMoPanel(ctx: SceneContext) {
   }
 
   draw();
+}
+
+/** Is every atom on one line? The frame cannot tell a linear molecule's two
+ *  perpendicular axes apart, which is what the note above is about. */
+function isLinear(molecule: Molecule | null | undefined): boolean {
+  if (!molecule || molecule.atoms.length < 3) return molecule !== null && molecule !== undefined;
+  const [first] = molecule.atoms;
+  let farthest = molecule.atoms[1];
+  for (const atom of molecule.atoms) {
+    const d = Math.hypot(atom.x - first.x, atom.y - first.y, atom.z - first.z);
+    const f = Math.hypot(farthest.x - first.x, farthest.y - first.y, farthest.z - first.z);
+    if (d > f) farthest = atom;
+  }
+  const axis = [farthest.x - first.x, farthest.y - first.y, farthest.z - first.z];
+  const length = Math.hypot(...axis);
+  if (length < 1e-9) return false;
+  return molecule.atoms.every((atom) => {
+    const v = [atom.x - first.x, atom.y - first.y, atom.z - first.z];
+    const along = (v[0] * axis[0] + v[1] * axis[1] + v[2] * axis[2]) / length;
+    return Math.hypot(
+      v[0] - (along * axis[0]) / length,
+      v[1] - (along * axis[1]) / length,
+      v[2] - (along * axis[2]) / length,
+    ) < 1e-3;
+  });
 }
 
 /** "C2 2pz −0.46 · C3 2pz −0.46 · …" — the biggest contributors to an MO,

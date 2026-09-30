@@ -130,6 +130,15 @@ describe('extended Hückel against the YAeHMOP oracle', () => {
       const result = solveExtendedHuckel(mol);
       expect(result).not.toBeNull();
       const { basis, overlap, hamiltonian, energies, electronCount } = result!;
+      // These fixtures are YAeHMOP's own output for coordinates aligned by
+      // scripts/eht-fixtures.ts, and they are compared verbatim. For a linear
+      // molecule (N₂, ethyne) the two axes perpendicular to the molecular axis
+      // are degenerate, so the frame's choice between them is arbitrary and the
+      // px/py/pz names are a statement about that frame — a σ orbital is the p
+      // *along* the axis, whichever name it landed on (N₂'s reads 2py). That is
+      // not a bug to fix by re-aligning the fixtures: editing the ground truth
+      // would replace an independent oracle with a hand-transformed copy of
+      // itself. See NOTES.md.
       const n = fixture.aoLabels.length;
 
       expect(basis.length).toBe(n);

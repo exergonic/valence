@@ -1293,6 +1293,7 @@ html, body {
 }
 
 #mo-note:empty { display: none; }
+#mo-note { flex-shrink: 0; }
 
 /* MO panel: bigger type and hit areas now that there is room */
 .mo-svg .mo-tick-label { font-size: 11px; }
@@ -1309,7 +1310,11 @@ html, body {
   color: #9ab;
   margin-bottom: 6px;
   line-height: 1.5;
+  /* Keep the text's own height: as a flex item with min-height 0 this was
+     squeezed below its content when a note made it wrap, and the overflow
+     landed on the controls underneath. #mo-body scrolls instead. */
   min-height: 0;
+  flex-shrink: 0;
 }
 
 .mo-composition:empty { display: none; }
