@@ -220,10 +220,10 @@ export function setupMoPanel(ctx: SceneContext) {
       const dot = slot >= 0
         ? `<span class="lmo-dot" style="background:#${MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length][0].toString(16).padStart(6, '0')}"></span>`
         : '<span class="lmo-dot"></span>';
+      // one Type column, as avo_ibo's table has — the class IS the type's tail
       return html + `<button class="${classes}" data-index="${index}">`
         + dot
-        + `<span class="lmo-character">${CHARACTER_LABEL[orbital.character]}</span>`
-        + `<span class="lmo-centres">${localizedType(molecule, orbital)}</span>`
+        + `<span class="lmo-type">${localizedType(molecule, orbital)}</span>`
         + '</button>';
     }).join('');
     list.querySelectorAll<HTMLButtonElement>('button.lmo-item').forEach((node) => {

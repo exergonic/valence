@@ -1276,9 +1276,10 @@ html, body {
   color: #fff;
 }
 
-.lmo-character {
-  flex: 0 0 84px;
-  color: #7fa8d8;
+.lmo-type {
+  flex: 1;
+  color: #9db8d8;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The dot shows the phase colour the orbital is drawn in, so the list and the
@@ -1293,9 +1294,8 @@ html, body {
   align-self: center;
 }
 
-.lmo-item.selected .lmo-character { color: #cfe3ff; }
+.lmo-item.selected .lmo-type { color: #dceaff; }
 
-.lmo-centres { flex: 1; color: #aaa; }
 
 #mo-body {
   flex: 1;
