@@ -157,8 +157,9 @@ about what already exists:
 
 *The section below is the original draft, kept for the record. Where it differs
 from what shipped: the table is **Alvarez's** Hii and ζ for s and p (not the
-draft's Pople VSDIP with Clementi–Raimondi exponents), the second-row d is
-**ICON8's** (Alvarez has none), the calculation runs in the molecule's
+draft's Pople VSDIP with Clementi–Raimondi exponents), Si, P, S and Cl are
+**ICON8's** in full — s, p and d, since Alvarez has no second-row d — the
+calculation runs in the molecule's
 principal-axis frame, and degenerate sets get canonical (symmetry-adapted)
 partners. Everything else — the overlap forms, Wolfsberg–Helmholz with K =
 1.75, the one-shot secular solve — is as drafted. NOTES.md has the numbers.*
@@ -489,11 +490,14 @@ Open follow-ups, in the order they would pay off:
 8. **Ethane and acetone as examples** — the pin set from this phase runs on
    water, ethene, benzene and N₂ because those are what `EXAMPLES` has; the
    two molecules the draft named would need examples of their own.
-9. **The second-row hybrid.** SF₆ and PCl₅ run Alvarez s/p against ICON8 d.
-   Fine as long as it is said out loud — which it is (parameters.ts, the
-   panel's model line, the copied MO data, NOTES.md). A "full ICON8 for Si–Cl"
-   variant would remove the mixture, and the numbers are in hand if anyone
-   wants it.
+9. **The second-row hybrid — SHIPPED 2026-09-30.** Si, P, S and Cl now come
+   from ICON8 (QCPE 517) in full — s, p and d — so no atom draws on two
+   published parameter sets. Only P, S and Cl actually changed: Alvarez's Si s
+   and p are ICON8's digit for digit. The PCl₅ fixture was regenerated against
+   `bind` with the same values handed to both sides, and the agreement came out
+   *better* than under the hybrid (S to 7.1e-05, the occupied ladder to
+   0.0006 eV, from 1.07e-04 and 0.001). NOTES.md carries the extracted values,
+   the before/after, and the one trap — the parameter file's CRLF line ends.
 
 ## House rules that apply to every phase
 
