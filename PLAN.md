@@ -60,7 +60,11 @@ Milestones:
       ICON8's parameters (Alvarez has no second-row d), the s–d/p–d/d–d
       overlaps transcribed from YAeHMOP's angular step and pinned against a
       `bind` run on PCl₅ — every pair inside 1.07e-04, the 4-decimal floor
-      (NOTES.md). Transition metals are the remaining half of this item.
+      (NOTES.md).
+- [x] **5 (part 2)** — the d block: 25 transition metals with s+p+contracted-d
+      from the shipped table, ferrocene as the example and the fixture, and the
+      electron-domain model taught to refuse a metal centre instead of
+      inventing "sp³d²" for iron.
 
 **Layout (2026-09-29).** The chemistry now lives in method folders, so the
 arc of the app is visible at the directory level: `chem/vsepr/` (the
@@ -358,16 +362,14 @@ Phase 5 (JANPA)     ← parked
 
 Open follow-ups, in the order they would pay off:
 
-1. **Transition-metal s+p+d — the next piece, agreed 2026-09-30.** The Alvarez
-   table in `eht_parms.dat` DOES carry d for Sc–Ni and beyond, so the provenance
-   stays clean and bind can validate it (the machinery already exists: the
-   overlap transcription covers l = 2 and `mo-surface` and the symmetry code
-   handle d). What is missing is (a) the two-zeta expansion — the transition
-   metal rows use exp1/exp2 + coeff1/coeff2, which the `OrbitalParameters` shape
-   does not carry yet — and (b) geometry: MMFF94 cannot build a transition-metal
-   complex, so structures have to come from PubChem or arrive as examples. The
-   rigid-d question (whether a 3d should also be contracted to the crystal
-   field) is a modelling choice to record when it lands.
+1. **Transition-metal basis — SHIPPED 2026-09-30.** 25 d-block elements with
+   s+p+contracted-d from the shipped Alvarez table, refused for the five the
+   table cannot support (Zn has no d row; Y, Ag, Cd, Hf are placeholders).
+   Validated against bind on ferrocene — overlaps to the 4-decimal floor, the
+   occupied ladder to 0.0007 eV, and the eigenvectors to 0.005 over all 59
+   orbitals (NOTES.md). What remains here is breadth, not machinery: a metal
+   complex has to arrive as an example or from PubChem, since MMFF94 cannot
+   build one, and only iron is fixture-verified.
 2. **Valence-virtual localization — SHIPPED** (milestone 4c), including the
    finding that the IAO/VVO screening step is a no-op on a minimal basis.
 3. **Oriented lobes for the localized picture** — the current draw reuses the
@@ -377,6 +379,11 @@ Open follow-ups, in the order they would pay off:
 4. **Ethane and acetone as examples** — the pin set from this phase runs on
    water, ethene, benzene and N₂ because those are what `EXAMPLES` has; the
    two molecules the draft named would need examples of their own.
+5. **The second-row hybrid.** SF₆ and PCl₅ run Alvarez s/p against ICON8 d.
+   Fine as long as it is said out loud — which it is (parameters.ts, the
+   panel's model line, the copied MO data, NOTES.md). A "full ICON8 for Si–Cl"
+   variant would remove the mixture, and the numbers are in hand if anyone
+   wants it.
 
 ## House rules that apply to every phase
 
