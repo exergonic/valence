@@ -368,7 +368,12 @@ Open follow-ups, in the order they would pay off:
    d for them), refused for the three that carry a placeholder instead (Y, Ag,
    Hf). Validated against bind on ferrocene — overlaps to the 4-decimal floor,
    the occupied ladder to 0.0007 eV, and the eigenvectors to 0.005 over all 59
-   orbitals (NOTES.md). What remains here is breadth, not machinery: a metal
+   orbitals (NOTES.md). The d8 pair is in as examples — tetrahedral
+   [NiCl₄]²⁻ (ORCA: charge −2, multiplicity 3) and square-planar
+   [Ni(CN)₄]²⁻ (charge −2, multiplicity 1) — which is the ligand-field lesson
+   and the reason the multiplicity channel exists: 40 even electrons cannot say
+   which orbitals are singly occupied, so the triplet gets no filling and the
+   singlet's 48 localize. What remains here is breadth, not machinery: a metal
    complex has to arrive as an example or from PubChem, since MMFF94 cannot
    build one.
 2. **A multiplicity the sketch cannot carry.** A MOL block has no field for
