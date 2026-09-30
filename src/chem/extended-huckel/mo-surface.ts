@@ -16,17 +16,19 @@
  *
  * The amplitude is the *normalized* Slater-type orbital the overlap integrals
  * are built from (ζ in bohr⁻¹, the Mulliken normalization of slater-overlap.ts
- * and YAeHMOP), because a surface is a statement about relative amplitudes:
- * getting the s-to-p normalization wrong would put the wrong size on every
- * lobe. Both sheets of the MO (ψ = +c and ψ = −c) are extracted in one pass
- * over |ψ|; the sign travels with each vertex so the renderer can paint the
- * two phases.
+ * and YAeHMOP): (2ζ)^(n+½)/√((2n)!) · r^(n−1) e^(−ζr) · Y, with that
+ * orbital's own principal quantum number. The basis runs from 1s (hydrogen)
+ * to 5p (iodine); a radial power written out for n ≤ 2 collapses every
+ * heavier lobe onto the nucleus. Both sheets of the MO (ψ = +c and ψ = −c)
+ * are extracted in one pass over |ψ|; the sign travels with each vertex so
+ * the renderer can paint the two phases.
  *
  * Pure — no Three.js — so the field and the surface are unit-testable.
  */
 import type { Molecule } from '../../mol-parser';
 import type { BasisFunction } from './assign-basis';
 import { alignToPrincipalAxes } from './align-principal-axes';
+import { BOHR_RADIUS } from './slater-overlap';
 
 /** The coarsest grid spacing (Å) — the caller's preference, used when the
  *  budget does not allow finer. The actual step adapts down from here: see
@@ -66,8 +68,9 @@ export const MO_SURFACE_ISOVALUES = [0.02, 0.03, 0.04, 0.06, 0.1];
  *  MO cannot stall the frame. */
 const MAX_GRID_POINTS = 400_000;
 
-/** 1 Å in bohr — the Slater exponents are in bohr⁻¹. */
-const BOHR_PER_ANGSTROM = 1.8897259886;
+/** 1 Å in bohr — the same radius the overlap integrals use, so a lobe and
+ *  the S matrix are measured in one unit. */
+const BOHR_PER_ANGSTROM = 1 / BOHR_RADIUS;
 
 const FOUR_PI = 4 * Math.PI;
 const SQRT_3_OVER_4PI = Math.sqrt(3 / FOUR_PI);
@@ -178,13 +181,16 @@ export function evaluatePrepared(
     const r = Math.sqrt(r2);
     const rb = r * BOHR_PER_ANGSTROM;
     const decay = Math.exp(-zeta * rb);
-    // radial part r^(n−1) e^(−ζr) and its derivative — n is 1 or 2 in this
-    // basis, so the powers are written out rather than raised
-    const rp = n === 1 ? 1 : rb;
+    // r^(n−1) e^(−ζr). Multiplies, not Math.pow: this runs once per grid
+    // point per orbital, and a general power was the 150 ms stall. n is
+    // 1 through 5; stopping at "1 or r" is what ate the halogen lobes.
+    let rp = 1;
+    for (let k = 1; k < n; k++) rp *= rb;
     const radial = rp * decay;
-    // d/dr [r^(n−1) e^(−ζr)] = r^(n−2)·[(n−1) − ζr]·e^(−ζr); n is 1 or 2 here
-    const rpDerivative = n === 1 ? 1 / rb : 1;
-    const dRadial = ((n - 1) - zeta * rb) * rpDerivative * decay * BOHR_PER_ANGSTROM;
+    // d/dr_bohr [r^(n−1) e^(−ζr)] = r^(n−2)·[(n−1) − ζr]·e^(−ζr).
+    // For n = 1 the r^(−1) cancels the ζr and leaves −ζ e^(−ζr).
+    const rToTheNm2 = n === 1 ? 1 / rb : rp / rb;
+    const dRadial = rToTheNm2 * ((n - 1) - zeta * rb) * decay * BOHR_PER_ANGSTROM;
 
     // angular part (and its gradient, in Å⁻¹)
     let angular: number;
@@ -301,11 +307,9 @@ export function computeMoSurface(
   const nz = Math.ceil((maxZ - minZ) / step) + 1;
 
   // ψ on the grid — signed, because the phase of each sheet is read from it.
-  // The gradients are *not* stored: the normals come from the analytic
-  // gradient at each vertex, which matters on the thin marginal sheets a
-  // diffuse halogen produces, where the field's gradient is small and a
-  // trilinearly interpolated one points the wrong way. (That is what made
-  // SBr₂ and SI₂ render as slivers: the surfaces were there, lit wrongly.)
+  // Normals come from the analytic gradient at each vertex. A gradient
+  // interpolated off this grid points the wrong way on a shallow sheet, and
+  // storing one per grid point was a several-megabyte array for no gain.
   const count = nx * ny * nz;
   const field = new Float32Array(count);
   const probe = { value: 0, gx: 0, gy: 0, gz: 0 };

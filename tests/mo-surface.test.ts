@@ -20,6 +20,11 @@ import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principa
 import { computeMoSurface, evaluateMo } from '../src/chem/extended-huckel/mo-surface';
 import type { BasisFunction } from '../src/chem/extended-huckel/assign-basis';
 
+/** CODATA Bohr radius in Å, written out rather than imported. The 1s value
+ *  below is the pin that the surface and the overlap integrals share a unit;
+ *  importing BOHR_RADIUS would let a typo in that constant pass its own test. */
+const BOHR_PER_ANGSTROM = 1 / 0.529177210903;
+
 const atom = (x = 0, y = 0, z = 0): Molecule['atoms'] => [{ element: 'H', x, y, z, charge: 0 }];
 
 const s1 = (zeta: number): BasisFunction => ({
@@ -31,14 +36,79 @@ const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
 describe('the MO isosurface', () => {
   it('evaluates a normalized 1s Slater orbital to its known value', () => {
     // (ζ³/π)^½ e^(−ζr) with ζ = 1 bohr⁻¹, at r = 0.3 Å = 0.5669 bohr
-    const expected = Math.sqrt(1 / Math.PI) * Math.exp(-0.3 * 1.8897259886);
+    const expected = Math.sqrt(1 / Math.PI) * Math.exp(-0.3 * BOHR_PER_ANGSTROM);
     evaluateMo(0.3, 0, 0, atom(), [s1(1)], [1], probe);
     expect(probe.value).toBeCloseTo(expected, 10);
     // and the p normalization is √(3/4π)·cosθ against the same radial part
     const p: BasisFunction = { atomIndex: 0, angular: 'p', axis: [0, 0, 1], n: 2, zeta: 1, hii: -13.6, label: 'H 2pz' };
-    const radial = Math.pow(2, 2.5) / Math.sqrt(24) * 0.3 * 1.8897259886 * Math.exp(-0.3 * 1.8897259886);
+    const radial = Math.pow(2, 2.5) / Math.sqrt(24) * 0.3 * BOHR_PER_ANGSTROM * Math.exp(-0.3 * BOHR_PER_ANGSTROM);
     evaluateMo(0, 0, 0.3, atom(), [p], [1], probe);
     expect(probe.value).toBeCloseTo(Math.sqrt(3 / (4 * Math.PI)) * radial, 10);
+  });
+
+  it('uses r^(n−1) for a heavy atom, not the 2p radial factor', () => {
+    // Chlorine is 3p, bromine 4p, iodine 5p. The evaluator used to write
+    // r^(n−1) as "1 or r", so an iodine 5p peaked at 0.23 Å instead of
+    // (n−1)/ζ = 0.91 Å and the |ψ| = 0.10 sheet sat inside the atom sphere.
+    const bohr = BOHR_PER_ANGSTROM;
+    const angular = Math.sqrt(3 / (4 * Math.PI));
+    const cases = [
+      { element: 'Cl', n: 3, zeta: 1.733, rA: 0.6 },
+      { element: 'Br', n: 4, zeta: 2.131, rA: 0.75 },
+      { element: 'I', n: 5, zeta: 2.322, rA: 0.91 },
+    ];
+    for (const { element, n, zeta, rA } of cases) {
+      let factorial = 1;
+      for (let k = 2; k <= 2 * n; k++) factorial *= k;
+      const normalization = Math.pow(2 * zeta, n + 0.5) / Math.sqrt(factorial);
+      const rb = rA * bohr;
+      const expected = normalization * Math.pow(rb, n - 1) * Math.exp(-zeta * rb) * angular;
+      const basis: BasisFunction = {
+        atomIndex: 0, angular: 'p', axis: [0, 0, 1], n, zeta, hii: -12, label: `${element} ${n}pz`,
+      };
+      evaluateMo(0, 0, rA, [{ element, x: 0, y: 0, z: 0, charge: 0 }], [basis], [1], probe);
+      expect(probe.value).toBeCloseTo(expected, 8);
+    }
+
+    // and the sheet at 0.10 — where I₂'s π surfaces were barely visible —
+    // reaches past the radial maximum, not a scrap against the nucleus
+    const iodine: BasisFunction = {
+      atomIndex: 0, angular: 'p', axis: [0, 0, 1], n: 5, zeta: 2.322, hii: -12.7, label: 'I 5pz',
+    };
+    const molecule: Molecule = { atoms: [{ element: 'I', x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
+    const surface = computeMoSurface(molecule, [iodine], [1], 0.1);
+    let maxRadius = 0;
+    for (let i = 0; i < surface.vertexCount; i++) {
+      maxRadius = Math.max(maxRadius, Math.hypot(
+        surface.positions[i * 3], surface.positions[i * 3 + 1], surface.positions[i * 3 + 2],
+      ));
+    }
+    // (n−1)/ζ = 0.91 Å is the radial maximum; |ψ| = 0.10 crosses again near 1.53 Å.
+    // The 2p formula's whole sheet lived inside 0.58 Å.
+    expect(maxRadius).toBeGreaterThan(1.2);
+  });
+
+  it('differentiates an n>2 Slater orbital, not the 2p derivative', () => {
+    const basis: BasisFunction = {
+      atomIndex: 0, angular: 'p', axis: [0, 0, 1], n: 5, zeta: 2.322, hii: -12.7, label: 'I 5pz',
+    };
+    const atoms = [{ element: 'I', x: 0, y: 0, z: 0, charge: 0 }];
+    const h = 1e-5;
+    for (const [px, py, pz] of [[0.4, 0.2, 0.8], [-0.3, 0.5, 1.1], [0.2, -0.4, 0.6]]) {
+      evaluateMo(px, py, pz, atoms, [basis], [1], probe);
+      const analytic = { gx: probe.gx, gy: probe.gy, gz: probe.gz };
+      const numeric = (dx: number, dy: number, dz: number) => {
+        evaluateMo(px + dx * h, py + dy * h, pz + dz * h, atoms, [basis], [1], probe);
+        const plus = probe.value;
+        evaluateMo(px - dx * h, py - dy * h, pz - dz * h, atoms, [basis], [1], probe);
+        return (plus - probe.value) / (2 * h);
+      };
+      const close = (a: number, b: number) =>
+        expect(Math.abs(a - b) / Math.max(1e-9, Math.abs(a))).toBeLessThan(1e-3);
+      close(analytic.gx, numeric(1, 0, 0));
+      close(analytic.gy, numeric(0, 1, 0));
+      close(analytic.gz, numeric(0, 0, 1));
+    }
   });
 
   it('reports the analytic gradient, not a finite difference of it', () => {

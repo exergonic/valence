@@ -312,6 +312,24 @@ function rotationAngle(m: Mat3): number {
   return Math.acos(cos);
 }
 
+/**
+ * Normal of a reflection. M − I = −2nnᵀ, so every column is parallel to n
+ * and the long one is n itself. The first column is zero when n is
+ * perpendicular to x — any mirror standing on the yz plane, including the
+ * plane of a ring that the calculation frame has laid in xy — and reading
+ * only that column reports the normal as zero. Benzene then loses σh and
+ * is named D6d.
+ */
+export function mirrorNormal(matrix: number[][]): Vec3 {
+  let best: Vec3 = [0, 0, 0];
+  for (let col = 0; col < 3; col++) {
+    const column: Vec3 = [matrix[0][col], matrix[1][col], matrix[2][col]];
+    column[col] -= 1;
+    if (length(column) > length(best)) best = column;
+  }
+  return unit(best);
+}
+
 /** Schoenflies symbol from the census of the closed group. */
 function symbolOf(group: Operation[]): string {
   if (group.length === 1) return 'C1';
@@ -350,10 +368,9 @@ function symbolOf(group: Operation[]): string {
     } else if (sameMatrix(op.m, INVERSION)) {
       inversion = true;
     } else if (angle < 1e-6) {
-      // trace 1, improper: a pure mirror. Its normal is the eigenvector with
-      // eigenvalue -1: for I - 2nnᵀ that is n, read off any column scaled.
-      const column: Vec3 = [op.m[0][0] - 1, op.m[1][0], op.m[2][0]];
-      mirrorNormals.push(unit(column));
+      // trace 1, improper: a pure mirror. See mirrorNormal for why this is
+      // not "the first column".
+      mirrorNormals.push(mirrorNormal(op.m));
     }
   }
 

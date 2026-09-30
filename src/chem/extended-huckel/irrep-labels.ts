@@ -9,13 +9,12 @@
  *
  * The two facts that make it small:
  *
- *   - The character of an operation in the AO basis is cheap. Each AO is
- *     carried onto another atom by the operation's permutation, so only atoms
- *     the operation *fixes* contribute to the trace: an s orbital contributes
- *     1 and the p set contributes trace(R), where R is the operation's 3×3
- *     matrix acting on the p axes (a p orbital is a polar vector, so it
- *     transforms by R itself — including the sign under an improper
- *     operation, which is how an inversion gives the p block −3).
+ *   - D(g) is the image of each AO. An s orbital lands as 1 on the image
+ *     atom. A p orbital is a polar vector: axis û is carried to Rû, and the
+ *     component along a target axis v̂ is (Rû)·v̂ — the whole of R, not its
+ *     diagonal. The trace of D only sees atoms g fixes, which is why a label
+ *     read off a pure pz can look right while D is not a representation.
+ *     D(a)D(b) = D(ab) is the check that catches it.
  *   - The character of a *set* of MOs is basis-independent: summing
  *     ψᵀ S D(g) ψ over the set gives the trace of g on that subspace, so it
  *     does not matter which mixture inside a degenerate set we happen to hold.
@@ -29,14 +28,14 @@
  * worse than a partial one.
  *
  * Linear molecules get their own path: their groups have infinitely many
- * operations, so the label comes from the orbital's angular momentum along the
- * axis (σ/π/δ from which p orbitals carry the amplitude) plus the parity under
- * inversion.
+ * operations, so the detector reports none. The label is the character of a
+ * C4 about the axis — χ = d·cos(mπ/2) gives σ, π or δ — plus the parity
+ * under inversion.
  */
 import type { Molecule } from '../../mol-parser';
 import type { BasisFunction } from './assign-basis';
 import { alignToPrincipalAxes } from './align-principal-axes';
-import { detectPointGroup, type SymmetryOperation } from '../../geometry/symmetrize';
+import { detectPointGroup, mirrorNormal, type SymmetryOperation } from '../../geometry/symmetrize';
 import { CANONICAL_TOLERANCE_EV } from './canonicalize-degenerate';
 
 type Vec3 = [number, number, number];
@@ -55,7 +54,7 @@ const determinant = (m: number[][]) =>
  * each AO, as a column. Sparse by construction (an AO lands on one atom), but
  * small enough that a dense array is the simpler thing.
  */
-function representationMatrix(basis: BasisFunction[], operation: SymmetryOperation): number[][] {
+export function representationMatrix(basis: BasisFunction[], operation: SymmetryOperation): number[][] {
   const n = basis.length;
   const d: number[][] = Array.from({ length: n }, () => new Array<number>(n).fill(0));
   const r = operation.matrix;
@@ -72,13 +71,17 @@ function representationMatrix(basis: BasisFunction[], operation: SymmetryOperati
       continue;
     }
     for (const candidate of candidates) {
-      const axis = candidate.b.axis;
+      // R carries the source p orbital onto the target atom. The component
+      // along each of that atom's own p axes is the matrix element. Rotating
+      // the target axis instead (as this did) makes the diagonal right and
+      // every off-diagonal wrong, so a C3 that mixes px with py is not a
+      // representation at all.
+      const source = orbital.axis;
       const rotated: Vec3 = [
-        r[0][0] * axis[0] + r[0][1] * axis[1] + r[0][2] * axis[2],
-        r[1][0] * axis[0] + r[1][1] * axis[1] + r[1][2] * axis[2],
-        r[2][0] * axis[0] + r[2][1] * axis[1] + r[2][2] * axis[2],
+        r[0][0] * source[0] + r[0][1] * source[1] + r[0][2] * source[2],
+        r[1][0] * source[0] + r[1][1] * source[1] + r[1][2] * source[2],
+        r[2][0] * source[0] + r[2][1] * source[1] + r[2][2] * source[2],
       ];
-      // the component of the rotated source axis along this candidate's axis
       d[candidate.j][i] += dot(rotated, candidate.b.axis);
     }
   }
@@ -92,11 +95,12 @@ function orbitalCharacter(
   d: number[][],
 ): number {
   const n = coefficients.length;
+  // cᵀ S (D c). A coefficient that happens to be zero still belongs in the
+  // sum: S couples that AO to its neighbours, and skipping the row drops them.
   let sum = 0;
   for (let i = 0; i < n; i++) {
-    if (coefficients[i] === 0) continue;
     let image = 0;
-    for (let j = 0; j < n; j++) image += d[j][i] * coefficients[j];
+    for (let j = 0; j < n; j++) image += d[i][j] * coefficients[j];
     if (image === 0) continue;
     let bra = 0;
     for (let j = 0; j < n; j++) bra += coefficients[j] * overlap[j][i];
@@ -161,8 +165,7 @@ function censusOf(operations: SymmetryOperation[]): Census {
       if (n === 2) properC2.push(op);
       if (n > order) { order = n; principal = op; axis = axisOf(op); }
     } else if (Math.abs(theta) < 1e-6) {
-      // a pure mirror: its normal is the eigenvector with eigenvalue −1
-      mirrors.push({ op, normal: unit([op.matrix[0][0] - 1, op.matrix[1][0], op.matrix[2][0]]) });
+      mirrors.push({ op, normal: mirrorNormal(op.matrix) });
     } else if (trace(op.matrix) < -2.9) {
       inversion = op;
     }
@@ -374,18 +377,8 @@ export function labelIrreps(
 
   const census = censusOf(group.operations);
 
-  // degenerate sets by energy, the same grouping the canonicalization uses
-  const sets: number[][] = [];
-  let i = 0;
-  while (i < energies.length) {
-    let j = i + 1;
-    while (j < energies.length && Math.abs(energies[j] - energies[i]) < CANONICAL_TOLERANCE_EV) j++;
-    sets.push(Array.from({ length: j - i }, (_, k) => i + k));
-    i = j;
-  }
-
   const matrices = group.operations.map((op) => representationMatrix(basis, op));
-  for (const set of sets) {
+  for (const set of degenerateSets(energies)) {
     // the set's character under each operation, summed over its members
     const characters = group.operations.map((_, index) => {
       let sum = 0;

@@ -5,9 +5,9 @@
  * The diagram is the textbook one — energy up the side, one line per orbital,
  * the occupied ones filled with their α/β pair — but it only ever shows what
  * the calculation actually produced, and it says so: the caption reads
- * "extended Hückel (semiempirical)", and a molecule the model refuses (an
- * element outside the parameter table, or an open shell) gets a note instead
- * of a ladder.
+ * "extended Hückel (semiempirical)". An element outside the parameter table
+ * gets a note instead of a ladder. An open shell still gets the ladder — the
+ * levels are real — with no occupancy arrows and a note saying why.
  *
  * Three rendering choices worth knowing:
  *  - The axis is WINDOWED around the occupied ladder (deep σ levels and very
@@ -15,16 +15,17 @@
  *    Levels outside the window are drawn as edge markers with their energy,
  *    never dropped silently.
  *  - The levels come straight from the solver; the occupancy comes from
- *    `closedShellOccupations`, which refuses an odd electron count. A radical
- *    therefore shows its ladder with no occupancy and a warning — the levels
- *    are real, the filling would be a lie.
+ *    `closedShellOccupations`, which refuses an odd electron count and a
+ *    degenerate set that the electron count would only partly fill (O₂'s π*
+ *    pair). Either one shows the ladder with no occupancy and a warning —
+ *    the levels are real, the filling would be a lie.
  *  - The panel is sized by CSS and the ladder is drawn to whatever room it
  *    has, so it stays legible when the panel is resized or collapsed.
  */
 import type { SceneContext } from '../render';
 import type { Molecule } from '../mol-parser';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
-import { DEGENERATE_TOLERANCE_EV } from '../chem/extended-huckel/canonicalize-degenerate';
+import { CANONICAL_TOLERANCE_EV, DEGENERATE_TOLERANCE_EV } from '../chem/extended-huckel/canonicalize-degenerate';
 import { labelIrreps } from '../chem/extended-huckel/irrep-labels';
 import { MO_SIGNIFICANT } from '../render/mo-lobes';
 
@@ -37,8 +38,10 @@ const ABOVE_OCCUPIED = 6;
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
 
-// The same tolerance the solver canonicalizes degenerate sets with, so the
-// panel groups exactly the orbitals that were treated as one set.
+// Wider than the solver's exactness cut, on purpose: two levels a few meV
+// apart would land on the same pixel and only the last would be clickable.
+// The canonicalization note below is gated on the solver's own tolerance,
+// so a near-miss is not described as a symmetry degeneracy.
 const DEGENERATE_TOLERANCE = DEGENERATE_TOLERANCE_EV;
 
 export function setupMoPanel(ctx: SceneContext) {
@@ -134,7 +137,7 @@ export function setupMoPanel(ctx: SceneContext) {
     // The picture controls only mean something with a level selected — say so
     // rather than letting a drag do nothing.
     const hasSelection = selected !== null && !!result;
-    for (const control of [smooth, opacity]) if (control) control.disabled = !hasSelection;
+    for (const control of [smooth, opacity, isovalue]) if (control) control.disabled = !hasSelection;
     if (panel.classList.contains('collapsed')) return;
 
     if (!result) {
@@ -147,7 +150,7 @@ export function setupMoPanel(ctx: SceneContext) {
     const width = Math.max(240, diagram.clientWidth || 340);
     const height = Math.max(200, diagram.clientHeight || 300);
     drawn = { width: diagram.clientWidth, height: diagram.clientHeight };
-    const occupations = closedShellOccupations(result.electronCount, result.energies.length);
+    const occupations = closedShellOccupations(result.electronCount, result.energies.length, result.energies);
     const levels = result.energies.map((energy, index) => ({
       index,
       energy,
@@ -292,13 +295,16 @@ export function setupMoPanel(ctx: SceneContext) {
         + (isLinear(ctx.currentMolecule)
           ? '\u2003(linear molecule: the perpendicular p axes are degenerate, so these px/py/pz names are the calculation frame\'s choice)'
           : '');
-      if (partners.length > 0) {
+      const exactPartners = partners.filter((mo) => Math.abs(result.energies[mo - 1] - energy) < CANONICAL_TOLERANCE_EV);
+      if (exactPartners.length > 0) {
         // Worth saying out loud: a degenerate set is *a* subspace, and any
         // orthogonal combination inside it is the same physics. The solver
         // canonicalizes each set against x², y², z², which is what makes it
         // the combination a textbook draws (and another program's, too) —
         // but which member carries the nodes follows the frame's own axes.
-        note.textContent = `Degenerate set of ${partners.length + 1}: canonicalized against x², y², z², so these are the symmetry-adapted orbitals a textbook draws — which member carries the nodal plane follows the molecule's own frame.`;
+        // Only an exact set was rotated. A level merely within the drawing
+        // tolerance was not, and saying so would be a false label.
+        note.textContent = `Degenerate set of ${exactPartners.length + 1}: canonicalized against x², y², z², so these are the symmetry-adapted orbitals a textbook draws — which member carries the nodal plane follows the molecule's own frame.`;
         return;
       }
     } else {
@@ -321,7 +327,8 @@ export function setupMoPanel(ctx: SceneContext) {
 /** Is every atom on one line? The frame cannot tell a linear molecule's two
  *  perpendicular axes apart, which is what the note above is about. */
 function isLinear(molecule: Molecule | null | undefined): boolean {
-  if (!molecule || molecule.atoms.length < 3) return molecule !== null && molecule !== undefined;
+  if (!molecule || molecule.atoms.length < 2) return false;
+  if (molecule.atoms.length === 2) return true;
   const [first] = molecule.atoms;
   let farthest = molecule.atoms[1];
   for (const atom of molecule.atoms) {

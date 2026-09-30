@@ -21,7 +21,7 @@ import { solveGeneralized } from '../../utils/eigen';
 import { countValenceElectrons } from '../valence-electrons';
 import { alignToPrincipalAxes, type PrincipalFrame } from './align-principal-axes';
 import { assignBasis, type BasisFunction } from './assign-basis';
-import { canonicalizeDegenerateSets } from './canonicalize-degenerate';
+import { CANONICAL_TOLERANCE_EV, canonicalizeDegenerateSets } from './canonicalize-degenerate';
 import { hamiltonianMatrix } from './hamiltonian';
 import { overlapMatrix } from './slater-overlap';
 
@@ -74,14 +74,34 @@ export function solveExtendedHuckel(molecule: Molecule): ExtendedHuckelResult | 
  * Closed-shell occupation numbers for a ladder of `moCount` orbitals:
  * two electrons in each of the lowest `electronCount/2`, none above.
  *
- * An odd electron count (a radical, a triplet) returns null: extended
- * Hückel as built here has no spin, so the honest answer is to refuse rather
- * than to draw a half-filled level as if it were physics. The refusal lives
- * here, with the filling, while the solver above still reports the levels.
+ * An odd electron count (a radical) returns null. So does an even count that
+ * would put electrons in only some members of a degenerate set — O₂'s π*
+ * pair holds two electrons between two orbitals, and filling one while
+ * leaving the other empty draws a closed shell the molecule does not have.
+ * Extended Hückel as built here has no spin, so the honest answer is to
+ * refuse rather than to invent the filling. The refusal lives here, with
+ * the filling, while the solver above still reports the levels.
+ *
+ * Pass `energies` to catch the degenerate case. Without them only the odd
+ * count is visible, which is what the pure numeric checks do.
  */
-export function closedShellOccupations(electronCount: number, moCount: number): number[] | null {
+export function closedShellOccupations(
+  electronCount: number,
+  moCount: number,
+  energies?: number[],
+): number[] | null {
   if (electronCount < 0 || electronCount > 2 * moCount) return null;
   if (electronCount % 2 !== 0) return null;
   const filled = electronCount / 2;
+  if (energies) {
+    let start = 0;
+    while (start < energies.length) {
+      let end = start + 1;
+      while (end < energies.length && Math.abs(energies[end] - energies[start]) < CANONICAL_TOLERANCE_EV) end++;
+      const occupiedInSet = Math.max(0, Math.min(filled, end) - start);
+      if (occupiedInSet > 0 && occupiedInSet < end - start) return null;
+      start = end;
+    }
+  }
   return Array.from({ length: moCount }, (_, i) => (i < filled ? 2 : 0));
 }

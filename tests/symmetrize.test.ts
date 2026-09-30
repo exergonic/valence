@@ -14,7 +14,8 @@ import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { embedAndRefine } from '../src/geometry/mmff-refine';
-import { SYMMETRY_TOLERANCE, symmetrizeMolecule } from '../src/geometry/symmetrize';
+import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
+import { SYMMETRY_TOLERANCE, detectPointGroup, mirrorNormal, symmetrizeMolecule } from '../src/geometry/symmetrize';
 
 const embedded = (name: string): Molecule => {
   const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith(name))!.mol)!;
@@ -58,6 +59,28 @@ describe('the symmetrizer', () => {
       expect(twice.maxShift).toBeLessThan(1e-9);
       expect(twice.symbol).toBe(once.symbol);
     }
+  });
+
+  it('still names the group after the calculation frame lays a ring in xy', () => {
+    // M − I = −2nnᵀ, so a mirror standing on the yz plane (normal along z,
+    // the σh of a ring the frame has put in xy) has a zero first column.
+    // Reading only that column dropped σh and called benzene D6d, ethene D2d.
+    for (const [name, symbol] of [['Benzene', 'D6h'], ['Ethene', 'D2h'], ['Water', 'C2v'], ['Methane', 'Td']] as const) {
+      const snapped = symmetrizeMolecule(embedded(name));
+      const frame = alignToPrincipalAxes({ atoms: snapped.atoms, bonds: [] });
+      const detected = detectPointGroup({ atoms: frame.atoms, bonds: [] });
+      expect(`${name}: ${detected.symbol}`).toBe(`${name}: ${symbol}`);
+    }
+  });
+
+  it('reads a mirror normal from the long column of M − I', () => {
+    // σh, normal along z. Column 0 of M − I is zero.
+    const horizontal = mirrorNormal([[1, 0, 0], [0, 1, 0], [0, 0, -1]]);
+    expect(Math.hypot(horizontal[0], horizontal[1])).toBeLessThan(1e-12);
+    expect(Math.abs(horizontal[2])).toBeCloseTo(1, 12);
+    // a vertical mirror, where the first column happens to be the long one
+    const vertical = mirrorNormal([[-1, 0, 0], [0, 1, 0], [0, 0, 1]]);
+    expect(Math.abs(vertical[0])).toBeCloseTo(1, 12);
   });
 
   it('the group it reports is a symmetry of the geometry it returns', () => {

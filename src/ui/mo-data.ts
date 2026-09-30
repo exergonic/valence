@@ -19,7 +19,7 @@ import { MO_SIGNIFICANT } from '../render/mo-lobes';
 const PRINT_THRESHOLD = 0.001;
 
 export function moDataText(molecule: Molecule, result: ExtendedHuckelResult): string {
-  const occupations = closedShellOccupations(result.electronCount, result.energies.length);
+  const occupations = closedShellOccupations(result.electronCount, result.energies.length, result.energies);
   const lines: string[] = [];
   lines.push('Valence — extended-Hückel MO data');
   lines.push('model: semiempirical — Alvarez parameters (YAeHMOP\'s eht_parms.dat),');

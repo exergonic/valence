@@ -14,9 +14,11 @@ import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { embedAndRefine } from '../src/geometry/mmff-refine';
-import { symmetrizeMolecule } from '../src/geometry/symmetrize';
+import { detectPointGroup, symmetrizeMolecule } from '../src/geometry/symmetrize';
+import { assignBasis } from '../src/chem/extended-huckel/assign-basis';
+import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
 import { solveExtendedHuckel, closedShellOccupations } from '../src/chem/extended-huckel/solve';
-import { labelIrreps } from '../src/chem/extended-huckel/irrep-labels';
+import { labelIrreps, representationMatrix } from '../src/chem/extended-huckel/irrep-labels';
 
 function labelled(name: string): {
   symbol: string;
@@ -35,7 +37,9 @@ function labelled(name: string): {
     energies: result.energies,
     // the EH eigenvalues are all negative — occupancy comes from the electron
     // count, not from the sign
-    occupiedCount: (closedShellOccupations(result.electronCount, result.energies.length) ?? []).filter((o) => o > 0).length,
+    // energies included: a partly filled degenerate set (O₂) is a refusal, the
+    // same one the panel applies. These molecules are closed shells.
+    occupiedCount: (closedShellOccupations(result.electronCount, result.energies.length, result.energies) ?? []).filter((o) => o > 0).length,
   };
 }
 
@@ -68,6 +72,47 @@ describe('irrep labels', () => {
     expect(labels.slice(13, 15)).toEqual(['e1g', 'e1g']);
     expect(labels.slice(15, 17)).toEqual(['e2u', 'e2u']);
     expect(labels[17]).toBe('b2g');
+  });
+
+  it('methane’s representation multiplies: D(a) D(b) = D(ab)', () => {
+    // Rotating the target p axis instead of the source leaves every diagonal
+    // right and every off-diagonal wrong. Characters of pure pz (benzene’s π,
+    // water’s b1) never see an off-diagonal, so they stayed textbook while a
+    // C3 that mixes px with py was not a representation. Td is the group
+    // where that shows: 24 operations, and the product rule on all of them.
+    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Methane'))!.mol)!;
+    const raw = embedAndRefine(sketch).molecule;
+    const snapped = symmetrizeMolecule(raw);
+    const molecule: Molecule = { atoms: snapped.atoms, bonds: raw.bonds };
+    const frame = alignToPrincipalAxes(molecule);
+    const group = detectPointGroup({ atoms: frame.atoms, bonds: [] });
+    expect(group.symbol).toBe('Td');
+    const basis = assignBasis(molecule)!;
+
+    const multiply = (a: number[][], b: number[][]) => a.map((row) =>
+      b[0].map((_, j) => row.reduce((sum, aik, k) => sum + aik * b[k][j], 0)));
+    const maxDiff = (a: number[][], b: number[][]) => {
+      let worst = 0;
+      for (let i = 0; i < a.length; i++) {
+        for (let j = 0; j < a[i].length; j++) worst = Math.max(worst, Math.abs(a[i][j] - b[i][j]));
+      }
+      return worst;
+    };
+
+    let worst = 0;
+    for (const a of group.operations) {
+      const da = representationMatrix(basis, a);
+      for (const b of group.operations) {
+        const composed = multiply(a.matrix, b.matrix);
+        const perm = b.permutation.map((dest) => a.permutation[dest]);
+        const ab = group.operations.find((op) => maxDiff(op.matrix, composed) < 1e-6);
+        expect(ab, 'every product of Td operations is in the group').toBeDefined();
+        expect(ab!.permutation).toEqual(perm);
+        const product = multiply(da, representationMatrix(basis, b));
+        worst = Math.max(worst, maxDiff(product, representationMatrix(basis, ab!)));
+      }
+    }
+    expect(worst).toBeLessThan(1e-8);
   });
 
   it('labels every MO, and agrees with the degeneracy it reports', () => {

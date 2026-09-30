@@ -32,7 +32,9 @@ import {
   DEGENERATE_TOLERANCE_EV,
 } from '../src/chem/extended-huckel/canonicalize-degenerate';
 import { symmetrizeMolecule } from '../src/geometry/symmetrize';
+import { embedAndRefine } from '../src/geometry/mmff-refine';
 import { MO_SIGNIFICANT } from '../src/render/mo-lobes';
+import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 
@@ -363,6 +365,20 @@ describe('the extended-Hückel refusals', () => {
     expect(closedShellOccupations(8, 6)).toEqual([2, 2, 2, 2, 0, 0]);
     expect(closedShellOccupations(7, 6)).toBeNull(); // a radical
     expect(closedShellOccupations(13, 6)).toBeNull(); // more electrons than orbitals
+  });
+
+  it('refuses a partly filled degenerate set — O₂’s π* holds two electrons between two orbitals', () => {
+    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Oxygen'))!.mol)!;
+    const raw = embedAndRefine(sketch).molecule;
+    const snapped = symmetrizeMolecule(raw);
+    const result = solveExtendedHuckel({ atoms: snapped.atoms, bonds: raw.bonds })!;
+    // 12 valence electrons, an even count. Without the energies the degeneracy
+    // is invisible and the numeric filling happily doubles six orbitals.
+    expect(result.electronCount).toBe(12);
+    expect(closedShellOccupations(result.electronCount, result.energies.length)).toEqual(
+      [2, 2, 2, 2, 2, 2, 0, 0],
+    );
+    expect(closedShellOccupations(result.electronCount, result.energies.length, result.energies)).toBeNull();
   });
 
   it('the Wolfsberg–Helmholz constant is Hoffmann 1963, not a tuned number', () => {
