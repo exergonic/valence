@@ -194,7 +194,8 @@ export function setupMoPanel(ctx: SceneContext) {
     const basis = ctx.ehResult?.basis;
     if (!orbitals || !molecule || !basis) {
       note.textContent = ctx.currentMolecule
-        ? 'No localized orbitals: extended Hückel refused this molecule, or its shell is open (an odd electron count, or a degenerate set the count would only partly fill).'
+        ? 'No localized orbitals: the shell is not closed — an odd electron count, a degenerate set the '
+          + 'count would only partly fill, or a molecule known to be open-shell.'
         : 'Load a molecule to see its orbitals.';
       return;
     }
@@ -287,7 +288,9 @@ export function setupMoPanel(ctx: SceneContext) {
     const width = Math.max(240, diagram.clientWidth || 340);
     const height = Math.max(200, diagram.clientHeight || 300);
     drawn = { width: diagram.clientWidth, height: diagram.clientHeight };
-    const occupations = closedShellOccupations(result.electronCount, result.energies.length, result.energies);
+    const occupations = closedShellOccupations(
+      result.electronCount, result.energies.length, result.energies, ctx.currentMolecule?.multiplicity ?? 1,
+    );
     const levels = result.energies.map((energy, index) => ({
       index,
       energy,
@@ -455,7 +458,11 @@ export function setupMoPanel(ctx: SceneContext) {
       return;
     }
     if (occupations === null) {
-      note.textContent = `Open shell (${result.electronCount} electrons): extended Hückel as built here has no spin, so occupancies are not shown.`;
+      const multiplicity = ctx.currentMolecule?.multiplicity ?? 1;
+      note.textContent = multiplicity > 1
+        ? `Open shell (a ${SPIN_NAME[multiplicity] ?? `multiplicity-${multiplicity}`}): extended `
+          + 'Hückel as built here is closed-shell and has no spin, so no occupancy arrows and no localized orbitals.'
+        : `Open shell (${result.electronCount} electrons): extended Hückel as built here has no spin, so occupancies are not shown.`;
     } else {
       const hidden = levels.filter((l) => l.energy < lo || l.energy > hi).length;
       if (hidden > 0) {
@@ -466,6 +473,9 @@ export function setupMoPanel(ctx: SceneContext) {
 
   draw();
 }
+
+/** The spin names a chemist reads, for the open-shell note. */
+const SPIN_NAME: Record<number, string> = { 2: 'doublet', 3: 'triplet', 4: 'quartet', 5: 'quintet' };
 
 /** The elements in this molecule the table carries s+p only for (Zn, Cd). */
 function spOnlyMetals(molecule: Molecule | null | undefined): string[] {

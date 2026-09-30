@@ -28,4 +28,12 @@ export interface Bond {
 export interface Molecule {
   atoms: Atom[];
   bonds: Bond[];
+  /**
+   * Spin multiplicity — 1 (a singlet) when absent, which is every sketch and
+   * every MOL block: V2000 has no field for it. A caller that KNOWS better sets
+   * it (an example whose reference calculation was a triplet, say), and the
+   * extended-Hückel layer then refuses to fill the orbitals rather than
+   * inventing a closed shell the molecule does not have.
+   */
+  multiplicity?: number;
 }

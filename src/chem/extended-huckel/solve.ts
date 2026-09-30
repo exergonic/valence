@@ -89,7 +89,12 @@ export function closedShellOccupations(
   electronCount: number,
   moCount: number,
   energies?: number[],
+  multiplicity = 1,
 ): number[] | null {
+  // A molecule known to be open-shell gets no filling at all. The count alone
+  // cannot tell: a triplet's electrons are even, and filling them pairwise
+  // would draw the singlet the molecule is not.
+  if (multiplicity > 1) return null;
   if (electronCount < 0 || electronCount > 2 * moCount) return null;
   if (electronCount % 2 !== 0) return null;
   const filled = electronCount / 2;

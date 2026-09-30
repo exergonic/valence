@@ -525,6 +525,24 @@ describe('the extended-Hückel refusals', () => {
     expect(solveExtendedHuckel(zinc)).not.toBeNull();
   });
 
+  it('a molecule known to be open-shell gets no filling, whatever its count', () => {
+    // Tetrahedral NiCl4(2-) is a triplet — the ORCA run in the example says so —
+    // and its 40 electrons are EVEN, so the count alone would fill them
+    // pairwise and draw the singlet the molecule is not. The multiplicity has
+    // to come from somewhere, and a MOL block has no field for it.
+    const example = EXAMPLES.find((e) => e.name.includes('NiCl'))!;
+    expect(example.multiplicity).toBe(3);
+    const molecule: Molecule = { ...parseMolBlock(example.mol), multiplicity: example.multiplicity };
+    const result = solveExtendedHuckel(molecule)!;
+    expect(result.electronCount).toBe(40);
+    expect(closedShellOccupations(result.electronCount, result.basis.length, result.energies, 3)).toBeNull();
+    // the ionic formal charges are what make the count 40 (Ni 8 + four Cl 8)
+    expect(molecule.atoms.map((a) => a.charge)).toEqual([2, -1, -1, -1, -1]);
+    // ...and without the flag it would not even get that far, because a
+    // degenerate pair straddles the frontier
+    expect(closedShellOccupations(result.electronCount, result.basis.length, result.energies, 1)).toBeNull();
+  });
+
   it('closed-shell filling refuses an odd electron count instead of half-filling', () => {
     expect(closedShellOccupations(8, 6)).toEqual([2, 2, 2, 2, 0, 0]);
     expect(closedShellOccupations(7, 6)).toBeNull(); // a radical

@@ -259,7 +259,9 @@ export function localizeOrbitals(
   molecule: Molecule,
   result: ExtendedHuckelResult,
 ): LocalizedSets | null {
-  const occupations = closedShellOccupations(result.electronCount, result.basis.length, result.energies);
+  const occupations = closedShellOccupations(
+    result.electronCount, result.basis.length, result.energies, molecule.multiplicity ?? 1,
+  );
   if (!occupations) return null;
   const occupied = occupations.filter((o) => o > 0).length;
   if (occupied === 0) return null;

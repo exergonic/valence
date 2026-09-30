@@ -9,6 +9,7 @@ import { setupAnnotations } from './ui/annotations';
 import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, applyViewState } from './ui/view-state';
 import { parseMolBlock } from './mol-parser';
 import { EXAMPLES } from './ui/examples';
+import { isVseprElement } from './chem/vsepr/assign-orbitals';
 
 function setupSplitter() {
   const splitter = document.getElementById('splitter')!;
@@ -38,10 +39,12 @@ function setupSplitter() {
   });
 }
 
-function loadMolecule(ctx: SceneContext, molBlock: string) {
+function loadMolecule(ctx: SceneContext, molBlock: string, multiplicity = 1) {
   const molecule = parseMolBlock(molBlock);
   if (molecule.atoms.length === 0) return;
-  ctx.currentMolecule = molecule;
+  // the MOL block cannot carry a multiplicity, so a caller that knows one sets
+  // it here (see Example.multiplicity)
+  ctx.currentMolecule = multiplicity > 1 ? { ...molecule, multiplicity } : molecule;
   buildScene(ctx);
 }
 
@@ -62,7 +65,20 @@ function setupExamples(ctx: SceneContext) {
     const ex = EXAMPLES[idx];
     if (!ex) return;
 
-    loadMolecule(ctx, ex.mol);
+    loadMolecule(ctx, ex.mol, ex.multiplicity ?? 1);
+
+    // The valence model has nothing to say about a metal centre, so a complex
+    // drawn from it has no orbital lobes to show — and the app's default hides
+    // the atom layer in favour of those lobes, which would leave an example
+    // like NiCl4(2-) opening to bare element labels. Show the molecule.
+    const parsed = parseMolBlock(ex.mol);
+    if (parsed.atoms.some((a) => !isVseprElement(a.element))) {
+      const toggle = document.getElementById('ctrl-show-mol') as HTMLInputElement | null;
+      if (toggle && !toggle.checked) {
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+    }
 
     // Populate the molecule info header for examples
     const molecule = parseMolBlock(ex.mol);

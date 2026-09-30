@@ -1,6 +1,13 @@
 export interface Example {
   name: string;
   mol: string;
+  /**
+   * The multiplicity of the reference calculation, when it is not a singlet.
+   * A MOL block cannot say, so an example whose structure came from an
+   * open-shell calculation says here — the MO panel then shows the ladder
+   * without occupancies rather than a closed-shell filling it does not have.
+   */
+  multiplicity?: number;
 }
 
 const HEADER = 'JME\n\n\n';
@@ -365,6 +372,25 @@ const ZNCL2 = HEADER + `  3  2  0  0  0  0  0  0  0  0999 V2000
   2  3  1  0  0  0  0
 M  END`;
 
+
+// Tetrachloronickelate(II): the tetrahedral d8 complex, from the ORCA
+// optimisation in ~/Code/orca_calcs/nickel-complexes/NiCl4 (wB97X-D/def2-TZVP,
+// no imaginary modes). ORCA ran it as charge -2, MULTIPLICITY 3 — which is the
+// right ground state for tetrahedral Ni(II), and is why the example carries a
+// multiplicity: the app shows the ladder and refuses to fill it.
+const NICL4 = HEADER + `  5  4  0  0  0  0  0  0  0  0999 V2000
+   -0.0296   -0.0296    0.0296 Ni  0  0  0  0  0  0  0  0  0  0  0  0
+    1.3539    1.3539    1.2733 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    1.3539   -1.2733   -1.3539 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+   -1.2733    1.3539   -1.3539 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+   -1.4049   -1.4049    1.4049 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  CHG  5   1   2   2  -1   3  -1   4  -1   5  -1
+M  END`;
+
 export const EXAMPLES: Example[] = [
   { name: 'Methane (CH₄)', mol: METHANE },
   { name: 'Ethene (C₂H₄)', mol: ETHENE },
@@ -383,4 +409,5 @@ export const EXAMPLES: Example[] = [
   { name: 'Ferrocene (Fe(C₅H₅)₂)', mol: FERROCENE },
   { name: 'Diborane (B₂H₆)', mol: DIBORANE },
   { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2 },
+  { name: 'Tetrachloronickelate(II) ([NiCl₄]²⁻, triplet)', mol: NICL4, multiplicity: 3 },
 ];

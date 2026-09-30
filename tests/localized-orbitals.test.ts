@@ -259,6 +259,16 @@ describe('the refusals', () => {
     expect(localizeOrbitals(molecule, result)).toBeNull();
   });
 
+  it('a molecule known to be open-shell gets none, even with an even count', () => {
+    // Tetrahedral NiCl4(2-) is a triplet with 40 electrons — an even count, so
+    // only the multiplicity can refuse it
+    const example = EXAMPLES.find((e) => e.name.includes('NiCl'))!;
+    const molecule: Molecule = { ...parseMolBlock(example.mol), multiplicity: example.multiplicity };
+    const result = solveExtendedHuckel(molecule)!;
+    expect(result.electronCount % 2).toBe(0);
+    expect(localizeOrbitals(molecule, result)).toBeNull();
+  });
+
   it('an odd electron count gets none either', () => {
     const molecule = example('Water (H₂O)');
     molecule.atoms[0] = { ...molecule.atoms[0], charge: 1 };
