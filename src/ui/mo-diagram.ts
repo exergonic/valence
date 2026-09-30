@@ -67,6 +67,17 @@ export function setupMoPanel(ctx: SceneContext) {
     });
   }
 
+  const isovalue = document.getElementById('ctrl-mo-isovalue') as HTMLSelectElement | null;
+  if (isovalue) {
+    isovalue.value = String(ctx.display.moIsovalue);
+    isovalue.addEventListener('change', () => {
+      ctx.display.moIsovalue = parseFloat(isovalue.value);
+      // the surface is cached per level, so a new isovalue re-extracts it
+      ctx.moSurface = null;
+      ctx.rerender();
+    });
+  }
+
   const smooth = document.getElementById('ctrl-smooth-mo') as HTMLInputElement | null;
   if (smooth) {
     smooth.checked = ctx.display.smoothMo;

@@ -5,7 +5,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
-import type { MoSurfaceData } from '../chem/extended-huckel/mo-surface';
+import { MO_SURFACE_ISOVALUE, type MoSurfaceData } from '../chem/extended-huckel/mo-surface';
 import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
@@ -47,6 +47,8 @@ export interface DisplaySettings {
   smoothMo: boolean;
   /** Opacity of the MO picture (both views) — 0.15..0.9. */
   moOpacity: number;
+  /** Isosurface level for the MO surface (see MO_SURFACE_ISOVALUES). */
+  moIsovalue: number;
 }
 
 export interface SceneContext {
@@ -80,6 +82,7 @@ export interface SceneContext {
    *  molecule changes (the surface does not depend on opacity or style). */
   moSurface: MoSurfaceData | null;
   moSurfaceIndex: number | null;
+  moSurfaceIsovalue: number | null;
   /** Cached extended-Hückel result for the current molecule (computed once in
    *  buildScene, like the dipole); null when an element is outside the
    *  parameter table. */
@@ -218,6 +221,7 @@ export function initScene(container: HTMLElement): SceneContext {
       espOpacity: 0.5,
       smoothMo: true,
       moOpacity: 0.85,
+      moIsovalue: MO_SURFACE_ISOVALUE,
     },
     atomOrbitals: null,
     dipole: null,
@@ -225,6 +229,7 @@ export function initScene(container: HTMLElement): SceneContext {
     espSurface: null,
     moSurface: null,
     moSurfaceIndex: null,
+    moSurfaceIsovalue: null,
     ehResult: null,
     rerender: () => {},
     onSceneBuilt: () => {},

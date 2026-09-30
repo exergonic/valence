@@ -47,37 +47,20 @@ export const MO_SURFACE_MARGIN = 2.5;
  *  which is what "jagged" was. */
 const MAX_EVALUATIONS = 4_000_000;
 
-/** The isovalue as a fraction of the MO's largest amplitude on the grid — a
- *  fraction so the pictures are comparable as the user clicks down the level
- *  diagram, and a bonding/antibonding pair reads as a shape difference rather
- *  than a size difference. */
-export const MO_SURFACE_FRACTION = 0.2;
-
 /**
- * A ceiling on the isovalue (bohr^-3/2, the natural units of these Slater
- * amplitudes).
+ * The isovalue, in the natural units of these Slater amplitudes (bohr^-3/2).
  *
- * The fraction alone fails when one centre dominates the MO, and it fails in a
- * way that looks like a rendering bug rather than a level choice. The halides'
- * HOMOs peak on sulfur; at 20% of *that* peak the halogen lobes are drawn so
- * tightly that they sit *inside the atom's drawn sphere* (0.3 × vdW — 0.56 Å
- * for bromine, 0.59 for iodine) and the atom simply hides them, leaving the
- * crescent of shell that pokes out. Measured on SBr₂'s HOMO, the bromine's
- * amplitude falls below 0.045 at 0.55 Å from the nucleus — exactly the sphere.
- *
- * Set just above what a typical MO's fraction gives (water and benzene peak
- * near 0.22, so 20% of that is 0.0447): a normal MO is untouched, while a
- * strong-peak MO is drawn at a relatively lower level so its weak lobes are
- * visible at all. Lowering it further — 0.02 draws a lobe that envelops its
- * atom — fixes the halides but turns benzene's HOMO into a blob, so the cap
- * stops where normal molecules stop changing.
- *
- * What remains, and is a *display* question rather than a level one: a halogen
- * lobe is about as wide as its atom's drawn sphere (0.3 × vdW), so the sphere
- * still hides the lobe's waist and only its caps show. Hiding the atoms (the
- * existing toggle) shows the lobe whole.
+ * This is a display choice and it is the user's: how much of an orbital you see
+ * is exactly what an isosurface level decides, and no single number suits both
+ * a compact bonding orbital and the weak, diffuse lobes a heavy halogen
+ * contributes to a MO that peaks elsewhere. The panel offers a range; the
+ * default is the level that was calibrated by eye against other programs'
+ * pictures (water and benzene peak near 0.22, so 20% of that is 0.0447).
  */
-export const MO_SURFACE_MAX_ISOVALUE = 0.045;
+export const MO_SURFACE_ISOVALUE = 0.04;
+
+/** The levels the panel offers. */
+export const MO_SURFACE_ISOVALUES = [0.02, 0.03, 0.04, 0.06, 0.1];
 
 /** Grid points above which the spacing is coarsened, so a large delocalized
  *  MO cannot stall the frame. */
@@ -255,9 +238,9 @@ export function computeMoSurface(
   molecule: Molecule,
   basis: BasisFunction[],
   coefficients: number[],
+  isovalue = MO_SURFACE_ISOVALUE,
   spacing = MO_SURFACE_SPACING,
   margin = MO_SURFACE_MARGIN,
-  fraction = MO_SURFACE_FRACTION,
 ): MoSurfaceData {
   const empty: MoSurfaceData = {
     positions: new Float32Array(0),
@@ -326,18 +309,15 @@ export function computeMoSurface(
   const count = nx * ny * nz;
   const field = new Float32Array(count);
   const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
-  let peak = 0;
   for (let gz = 0; gz < nz; gz++) {
     for (let gy = 0; gy < ny; gy++) {
       for (let gx = 0; gx < nx; gx++) {
         evaluatePrepared(minX + gx * step, minY + gy * step, minZ + gz * step, prepared, probe);
         const index = gx + gy * nx + gz * nx * ny;
         field[index] = probe.value;
-        peak = Math.max(peak, Math.abs(probe.value));
       }
     }
   }
-  const isovalue = Math.min(peak * fraction, MO_SURFACE_MAX_ISOVALUE);
   if (isovalue <= 0) return empty;
 
   const positions: number[] = [];

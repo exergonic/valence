@@ -158,9 +158,12 @@ export function rebuildDisplay(ctx: SceneContext) {
     if (ctx.display.smoothMo) {
       // one continuous surface of constant amplitude — the picture other
       // programs draw. Cached per selection: it costs ~50 ms to extract.
-      if (!ctx.moSurface || ctx.moSurfaceIndex !== mo) {
-        ctx.moSurface = computeMoSurface(ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients[mo]);
+      if (!ctx.moSurface || ctx.moSurfaceIndex !== mo || ctx.moSurfaceIsovalue !== ctx.display.moIsovalue) {
+        ctx.moSurface = computeMoSurface(
+          ctx.currentMolecule, ctx.ehResult.basis, ctx.ehResult.coefficients[mo], ctx.display.moIsovalue,
+        );
         ctx.moSurfaceIndex = mo;
+        ctx.moSurfaceIsovalue = ctx.display.moIsovalue;
       }
       renderMoIsosurface(ctx.moGroup, ctx.moSurface, ctx.display.orbitalPreset, ctx.display.moOpacity);
     } else {
@@ -208,6 +211,7 @@ export function buildScene(ctx: SceneContext) {
   ctx.espSurface = null;
   ctx.moSurface = null;
   ctx.moSurfaceIndex = null;
+  ctx.moSurfaceIsovalue = null;
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is
   // computed once here and cached; null when an element is outside the
   // parameter table. A new molecule also clears any selected MO.
