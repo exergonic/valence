@@ -1,6 +1,6 @@
 import type { SceneContext } from './render';
 import { initScene, buildScene, ATOM_LAYER } from './render';
-import { mountJsmePanel } from './ui/jsme-panel';
+import { mountJsmePanel, toggleJsmeCollapsed, setJsmeCollapsed } from './ui/jsme-panel';
 import { setupControls } from './ui/controls';
 import { setupTooltip } from './ui/tooltip';
 import { setupContextMenu } from './ui/context-menu';
@@ -19,6 +19,8 @@ function setupSplitter() {
   splitter.addEventListener('pointerdown', (e) => {
     dragging = true;
     splitter.classList.add('active');
+    // A drag starts from a visible panel — undock the sketcher first.
+    if (jsmePanel.classList.contains('collapsed')) setJsmeCollapsed(false);
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
   });
 
@@ -123,6 +125,9 @@ function setupKeyboardShortcuts(ctx: SceneContext) {
     } else if (e.key === 'o' || e.key === 'O') {
       // Dock/undock the Orbitals panel — it is 380 px wide when open
       document.getElementById('mo-collapse')?.click();
+    } else if (e.key === 'b' || e.key === 'B') {
+      // Dock/undock the sketcher panel
+      toggleJsmeCollapsed();
     } else if (e.key === 'Escape') {
       // Close any open dialogs
       document.getElementById('cite-dialog')?.classList.add('hidden');

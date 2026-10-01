@@ -201,6 +201,60 @@ html, body {
 #render-btn:active { background: #1e40af; }
 #render-btn:disabled { background: #93c5fd; cursor: default; }
 
+/* ── Collapsible sketcher panel ──
+   The sketcher docks to a slim Build rail on the left edge — the mirror of
+   the Orbitals rail on the right. JSME sizes to its container, so nothing
+   here touches the applet itself; it repaints on expand (see jsme-panel). */
+
+#jsme-panel.collapsed {
+  width: 40px;
+  min-width: 0;
+  padding: 8px 6px;
+}
+
+#jsme-panel.collapsed #brand-bar,
+#jsme-panel.collapsed #jsme_container,
+#jsme-panel.collapsed #render-btn {
+  display: none;
+}
+
+#jsme-rail {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  background: none;
+  border: 1px dashed #ccc;
+  border-radius: 6px;
+  color: #555;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+#jsme-panel.collapsed #jsme-rail {
+  display: flex;
+}
+
+#jsme-rail:hover {
+  border-color: #4488ff;
+  color: #4488ff;
+}
+
+.rail-expand {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.rail-label {
+  writing-mode: vertical-rl;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
 #splitter {
   width: 5px;
   cursor: col-resize;

@@ -18,6 +18,32 @@ declare global {
   }
 }
 
+/** localStorage key for the sketcher panel's collapsed state. */
+const JSME_COLLAPSED_KEY = 'valence:jsme-collapsed';
+
+/**
+ * Dock or undock the sketcher panel. Collapsing clears a dragged width so
+ * the rail is always its own slim size; expanding falls back to the CSS
+ * width. JSME sizes to its container, so expanding repaints the applet.
+ */
+export function setJsmeCollapsed(collapsed: boolean) {
+  const panel = document.getElementById('jsme-panel');
+  if (!panel) return;
+  if (collapsed) panel.style.width = '';
+  panel.classList.toggle('collapsed', collapsed);
+  try {
+    localStorage.setItem(JSME_COLLAPSED_KEY, collapsed ? '1' : '0');
+  } catch {
+    // private mode or no storage: the panel just won't remember
+  }
+  if (!collapsed && window.jsmeApplet) setTimeout(() => window.jsmeApplet.repaint(), 50);
+}
+
+export function toggleJsmeCollapsed() {
+  const panel = document.getElementById('jsme-panel');
+  if (panel) setJsmeCollapsed(!panel.classList.contains('collapsed'));
+}
+
 function showLoading(text: string) {
   const overlay = document.getElementById('loading-overlay')!;
   const loadingText = document.getElementById('loading-text')!;
@@ -348,5 +374,19 @@ export function mountJsmePanel(ctx: SceneContext) {
         hideLoading();
       }
     };
+  }
+
+  // The sketcher docks to a slim Build rail — a workspace preference that
+  // survives reloads, like the Orbitals rail.
+  const jsmeCollapse = document.getElementById('jsme-collapse') as HTMLButtonElement | null;
+  const jsmeRail = document.getElementById('jsme-rail') as HTMLButtonElement | null;
+  jsmeCollapse?.addEventListener('click', () => setJsmeCollapsed(true));
+  jsmeRail?.addEventListener('click', () => setJsmeCollapsed(false));
+  try {
+    if (localStorage.getItem(JSME_COLLAPSED_KEY) === '1') {
+      document.getElementById('jsme-panel')?.classList.add('collapsed');
+    }
+  } catch {
+    // no storage: open every time
   }
 }
