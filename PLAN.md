@@ -549,6 +549,16 @@ Open follow-ups, in the order they would pay off:
       time, and its own docs say "for exploration, not a production scientific
       environment".
 
+   **A second candidate changes the licence arithmetic.** OCC — an independent
+   *C++17* GFN2 implementation — ships wasm on npm as `@peterspackman/occjs`
+   under a **dual licence, GPL-3 *or* LGPL-3**, with `cheminfo/xtb-wasm` on top
+   returning optimised geometries, wavenumbers, IR/Raman and thermochemistry.
+   xTB itself is LGPL-3 (so a self-build was never the licence problem), but a
+   Fortran-to-wasm port is a toolchain project rather than a task and would
+   rebuild what xTBloom already has. So the real choice is xTBloom (GPL-only,
+   pinned and verified) against OCC (LGPL available, unverified here, API
+   unstable). Run the same parity protocol against OCC before deciding.
+
    **The spike is DONE and it passes.** Full xTB is installed on lenovo as the
    oracle (`~/opt/xtb/bin/xtb`, 6.7.1, hash-verified). The engine loads
    client-side (949 kB + 39 kB side module, "engine ready", no errors). And on
