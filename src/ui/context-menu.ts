@@ -24,6 +24,14 @@ export function setupContextMenu(ctx: SceneContext, container: HTMLElement) {
 
   let at = { x: 0, y: 0 };
   let toastTimer = 0;
+  // Where the current right-button gesture pressed — a press that drags is a
+  // pan, not a menu request. Null outside a right-button gesture (a keyboard
+  // menu key carries no press, and still earns its menu).
+  let downAt: { x: number; y: number } | null = null;
+  // Whether the current press travelled past a tremor.
+  let dragged = false;
+  // A press that moves a few pixels is a hand tremor, not a drag.
+  const RIGHT_CLICK_TOLERANCE_PX = 5;
 
   function close() {
     menu.classList.add('hidden');
@@ -77,6 +85,14 @@ export function setupContextMenu(ctx: SceneContext, container: HTMLElement) {
 
   container.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+    // A right-drag pans the view — the menu is for a plain right-click, so a
+    // press that travelled earns no menu. The menu event carries the release
+    // point, which a drag parks far from the press.
+    const dist = downAt ? Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) : 0;
+    const suppress = dragged || dist > RIGHT_CLICK_TOLERANCE_PX;
+    downAt = null;
+    dragged = false;
+    if (suppress) return;
     // Nothing to copy from an empty display — no menu full of dead items.
     if (!ctx.currentMolecule) return;
     // MO data needs orbitals: an element outside the parameter table has none.
@@ -95,6 +111,24 @@ export function setupContextMenu(ctx: SceneContext, container: HTMLElement) {
 
   document.addEventListener('pointerdown', (e) => {
     if (!menu.contains(e.target as Node)) close();
+  });
+  container.addEventListener('pointerdown', (e) => {
+    if (e.button === 2) {
+      downAt = { x: e.clientX, y: e.clientY };
+      dragged = false;
+    }
+  });
+  container.addEventListener('pointerup', (e) => {
+    // A release far from the press was a drag even if the menu event lands
+    // back near the press.
+    if (e.button === 2 && downAt) {
+      dragged = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > RIGHT_CLICK_TOLERANCE_PX;
+    }
+  });
+  // An aborted gesture leaves no anchor behind for a later menu key.
+  container.addEventListener('pointercancel', () => {
+    downAt = null;
+    dragged = false;
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') close();
