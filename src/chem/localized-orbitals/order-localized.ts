@@ -139,7 +139,14 @@ interface AtomShare {
 }
 
 /** A same-n d shell: Si, P, S, Cl. It polarizes the valence s and p; it is
- *  not the valence shell the way a metal's d (one n below the s) is. */
+ *  not the valence shell the way a metal's d (one n below the s) is.
+ *
+ *  The rule exists because our d is a BASIS ARTIFACT as much as a chemistry
+ *  one: measured, sulfur's 3d carries ~10% of an iodine lone pair here, where a
+ *  converged calculation gives under 1% (avo_ibo's SO₃ labels name s and p
+ *  alone). A minimal-basis d is kept because the MO energies need it — SF₆ is
+ *  only readable with one — and it is about an order of magnitude too heavy for
+ *  populations, so it does not vote on topology. NOTES.md has the table. */
 function polarizationD(element: string): boolean {
   const row = EH_PARAMETERS[element.toUpperCase()];
   return !!row?.d && row.d.n === row.s.n;
