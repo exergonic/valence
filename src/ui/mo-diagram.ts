@@ -28,6 +28,7 @@ import { labelIrreps } from '../chem/extended-huckel/irrep-labels';
 import { MO_PHASE_PAIRS, MO_SIGNIFICANT } from '../render/mo-lobes';
 import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import { SP_ONLY_METALS } from '../chem/extended-huckel/parameters';
+import { ENERGY_UNIT, formatEnergy } from './units';
 
 /** How each localized-orbital class reads in the list — avo_ibo's own tokens,
  *  so our rows can be read beside an ibos.txt. */
@@ -332,9 +333,10 @@ export function setupMoPanel(ctx: SceneContext) {
     const rows: string[] = [];
     for (const group of [...groups].reverse()) {
       // the frontier can sit inside a degenerate set, so the tag belongs to the
-      // group rather than to whichever member happens to be listed first
+      // group rather than to whichever member happens to be listed first.
+      // Degenerate partners simply share an energy; a ×n marker beside the
+      // number read as a multiplier on the orbital and was dropped.
       const tag = group.some((l) => l.homo) ? 'HOMO' : group.some((l) => l.lumo) ? 'LUMO' : '';
-      const degenerate = group.length > 1 ? ` ×${group.length}` : '';
       for (const level of group) {
         const drawn = ctx.display.moIndex === level.index;
         const phase = drawn
@@ -344,10 +346,9 @@ export function setupMoPanel(ctx: SceneContext) {
         rows.push(
           `<button class="orb-item${drawn ? ' selected' : ''}" data-index="${level.index}">`
           + `<span class="orb-dot"${phase}></span>`
-          + `<span class="orb-type">MO ${level.index + 1}${degenerate}`
+          + `<span class="orb-type">MO ${level.index + 1}`
           + (irrep ? ` · ${irrep}` : '')
-          + (level.occupied ? ' · ↑↓' : '')
-          + ` · ${level.energy.toFixed(3)} eV</span>`
+          + ` · ${formatEnergy(level.energy)} ${ENERGY_UNIT}</span>`
           + (tag ? `<span class="orb-tag">${tag}</span>` : '')
           + '</button>',
         );
@@ -372,7 +373,7 @@ export function setupMoPanel(ctx: SceneContext) {
         .filter(({ e, i }) => i !== selected && Math.abs(e - energy) < DEGENERATE_TOLERANCE)
         .map(({ i }) => i + 1);
       const irrep = irreps()[selected];
-      readout.textContent = `MO ${selected + 1} · ${energy.toFixed(3)} eV`
+      readout.textContent = `MO ${selected + 1} · ${formatEnergy(energy)} ${ENERGY_UNIT}`
         + (irrep ? ` · ${irrep}` : '')
         + (occupancy === null ? '' : occupancy > 0 ? ' · occupied' : ' · empty')
         + (partners.length > 0 ? ` · degenerate with MO ${partners.join(', ')}` : '')

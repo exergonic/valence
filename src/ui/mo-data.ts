@@ -13,6 +13,7 @@ import type { Molecule } from '../mol-parser';
 import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
 import { MO_SIGNIFICANT } from '../render/mo-lobes';
+import { ENERGY_UNIT, KCAL_PER_EV } from './units';
 
 /** Coefficients below this are left out of the printout (they are rounding
  *  noise, not chemistry) — the same threshold the picture is drawn with. */
@@ -42,10 +43,10 @@ export function moDataText(molecule: Molecule, result: ExtendedHuckelResult): st
     lines.push(`  ${String(i + 1).padStart(3)}  ${orbital.label}`);
   });
   lines.push('');
-  lines.push(`orbitals — energy (eV), occupation, then coefficients with |c| >= ${PRINT_THRESHOLD}:`);
+  lines.push(`orbitals — energy (${ENERGY_UNIT}, ${KCAL_PER_EV} per eV), occupation, then coefficients with |c| >= ${PRINT_THRESHOLD}:`);
   result.energies.forEach((energy, mo) => {
     const occupation = occupations ? occupations[mo] : null;
-    lines.push(`MO ${String(mo + 1).padStart(3)}  ${energy.toFixed(4).padStart(10)}  ${occupation === null ? 'open shell' : occupation.toFixed(2)}`);
+    lines.push(`MO ${String(mo + 1).padStart(3)}  ${(energy * KCAL_PER_EV).toFixed(4).padStart(11)}  ${occupation === null ? 'open shell' : occupation.toFixed(2)}`);
     const coefficients = result.coefficients[mo];
     const largest = Math.max(...coefficients.map(Math.abs));
     coefficients.forEach((c, ao) => {
