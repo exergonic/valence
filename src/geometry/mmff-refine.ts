@@ -12,10 +12,10 @@
  * mmff94-ts cannot type — returns null and the caller keeps the
  * unrefined geometry.
  *
- * A symmetry-breaking kick precedes the optimization for RING
- * molecules only: the embedder's ring seed is a symmetric saddle the
- * kick escapes faster, while acyclic molecules are best optimized
- * as-is (see refineWithMMFF94's comment for the measurements).
+ * A symmetry-breaking kick precedes the optimization for every molecule:
+ * the embedder emits exact symmetries, and a symmetric start can trap the
+ * optimizer at a spurious stationary point (see breakSymmetry for the
+ * measurements).
  */
 import { optimize_lbfgs } from 'mmff94-ts';
 import type { Molecule as MMFFMolecule } from 'mmff94-ts';
@@ -59,6 +59,38 @@ export function toMMFFMol(molecule: Molecule): MMFFMolecule {
 /** Deterministic ±0.5 hash of the atom index (reproducible tests). */
 function hash(i: number, seed: number): number {
   return (((i + 1) * 2654435761 + seed * 97) % 1000) / 1000 - 0.5;
+}
+
+/**
+ * The deterministic symmetry-breaking kick both refinement bridges share:
+ * the embedder emits exact symmetries (a drawn H–O–H lands exactly linear),
+ * and a symmetric start can trap an optimizer at a spurious stationary
+ * point. Measured on vinyl phosphine (2026-08-06): from the placed start
+ * the plain descent converged at a trigonal-planar P (E 20.77 — a real
+ * stationary point of the potential, Tinker's potential agrees), while a
+ * 0.01 Å perturbation escaped to the pyramidal minimum (E 10.45, H-P-H
+ * 101°). The magnitude matters: ring molecules need the 0.1 Å nudge to
+ * leave their equal-amplitude pucker saddle (cyclooctane 390→223 ms),
+ * while acyclic molecules grind on a 0.1 Å kick (vinyl phosphine:
+ * 1000+ iterations never converged — the old strong-Wolfe stall) but
+ * converge cleanly with 0.05 Å (157 iterations, 172 ms — the measured
+ * sweet spot; 0.01 Å is slower and 0.1 Å re-triggers the grind). Water is
+ * the same trap through the GFN2 tier (linear-start report): D∞h H₂O is a
+ * saddle whose bend gradient is exactly zero by symmetry, so the descent
+ * relaxes the stretch and reports converged at 180° — the kick gives it
+ * the transverse component it needs.
+ */
+export function breakSymmetry(molecule: Molecule): Molecule {
+  const kick = hasRingBonds(molecule) ? 0.1 : 0.05;
+  return {
+    atoms: molecule.atoms.map((a, i) => ({
+      ...a,
+      x: a.x + kick * hash(i, 1),
+      y: a.y + kick * hash(i, 2),
+      z: a.z + kick * hash(i, 3),
+    })),
+    bonds: molecule.bonds,
+  };
 }
 
 /**
@@ -202,33 +234,9 @@ export function embedAndRefine(molecule: Molecule): EmbedResult {
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {
   try {
-    // The symmetry-breaking kick applies to every molecule: the
-    // embedder emits exact symmetries, and a symmetric start can
-    // trap the optimizer at a spurious stationary point. Measured on
-    // vinyl phosphine (2026-08-06): from the placed start the plain
-    // descent converged at a trigonal-planar P (E 20.77 — a real
-    // stationary point of the potential, Tinker's potential agrees),
-    // while a 0.01 Å perturbation escaped to the pyramidal minimum
-    // (E 10.45, H-P-H 101°). The magnitude matters: ring molecules
-    // need the 0.1 Å nudge to leave their equal-amplitude pucker
-    // saddle (cyclooctane 390→223 ms), while acyclic molecules grind
-    // on a 0.1 Å kick (vinyl phosphine: 1000+ iterations never
-    // converged — the old strong-Wolfe stall) but converge cleanly
-    // with 0.05 Å (157 iterations, 172 ms — the measured sweet spot;
-    // 0.01 Å is slower and 0.1 Å re-triggers the grind). The kick is
-    // deterministic (index-hashed) for reproducible tests.
-    const kick = hasRingBonds(molecule) ? 0.1 : 0.05;
-    const start: Molecule = kick
-      ? {
-          atoms: molecule.atoms.map((a, i) => ({
-            ...a,
-            x: a.x + kick * hash(i, 1),
-            y: a.y + kick * hash(i, 2),
-            z: a.z + kick * hash(i, 3),
-          })),
-          bonds: molecule.bonds,
-        }
-      : molecule;
+    // The kick lives in breakSymmetry (shared with the GFN2 bridge) — the
+    // measurements behind the magnitudes are on that function.
+    const start = breakSymmetry(molecule);
 
     // toMMFFMol passes formal_charge only for genuinely charged atoms —
     // mmff94-ts derives primary BCI charges from the assigned atom type

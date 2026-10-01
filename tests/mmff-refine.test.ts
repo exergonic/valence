@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { refineWithMMFF94, embedAndRefine } from '../src/geometry/mmff-refine';
+import { refineWithMMFF94, embedAndRefine, breakSymmetry } from '../src/geometry/mmff-refine';
 import { place3D } from '../src/geometry/place3d';
 import { parseMolBlock } from '../src/mol-parser';
 import { calc_energy } from 'mmff94-ts';
@@ -347,5 +347,41 @@ M  END
     // the caller keeps its own geometry — never a crash, never NaN,
     // never a kicked displacement.
     expect(refineWithMMFF94(argon)).toBeNull();
+  });
+});
+
+describe('breakSymmetry', () => {
+  // Water as the embedder emits it: exactly linear on ±x.
+  const linearWater: Molecule = {
+    atoms: [
+      { element: 'O', x: 0, y: 0, z: 0 },
+      { element: 'H', x: 0.97, y: 0, z: 0 },
+      { element: 'H', x: -0.97, y: 0, z: 0 },
+    ],
+    bonds: [
+      { atom1Index: 0, atom2Index: 1, order: 1 },
+      { atom1Index: 0, atom2Index: 2, order: 1 },
+    ],
+  };
+
+  it('breaks an exactly-linear start with a bounded nudge', () => {
+    const kicked = breakSymmetry(linearWater);
+    // The 180° saddle is gone — by a nudge, not a rebuild.
+    const bent = angleDeg(kicked, 1, 0, 2);
+    expect(bent).toBeLessThan(180);
+    expect(bent).toBeGreaterThan(170);
+    // Acyclic molecules get the 0.05 Å kick: no atom travels far.
+    for (let i = 0; i < kicked.atoms.length; i++) {
+      const a = kicked.atoms[i], b = linearWater.atoms[i];
+      expect(Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)).toBeLessThan(0.05);
+    }
+  });
+
+  it('is deterministic and leaves the input untouched', () => {
+    const a = breakSymmetry(linearWater);
+    const b = breakSymmetry(linearWater);
+    expect(a).toEqual(b);
+    // The input still sits exactly linear — the kick copies.
+    expect(angleDeg(linearWater, 1, 0, 2)).toBe(180);
   });
 });

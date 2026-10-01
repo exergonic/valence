@@ -85,4 +85,34 @@ describe('GFN2-xTB', () => {
     for (const d of axial) expect(d).toBeCloseTo(2.156, 2);
     for (const d of equatorial) expect(d).toBeCloseTo(2.027, 2);
   }, 180_000);
+
+  // A drawn H-O-H reaches the engine exactly linear (the embedder's
+  // LINEAR_VECTORS ±x), and linear water is a saddle the descent cannot
+  // leave — the bend gradient is exactly zero by symmetry (measured:
+  // start 180.0°, end 180.0°, converged, E -5.02063 Eh against the bent
+  // minimum). The pipeline breaks the symmetry first (breakSymmetry, the
+  // same kick the MMFF94 bridge uses — this test composes exactly what
+  // the manager posts to the worker), so a linear start must come back
+  // bent and below the saddle energy.
+  it('bends a linear-start water instead of keeping it linear', async () => {
+    const linear: Molecule = {
+      atoms: [atom('O', 0, 0, 0), atom('H', 0.97, 0, 0), atom('H', -0.97, 0, 0)],
+      bonds: [bond(0, 1), bond(0, 2)],
+    };
+    const { breakSymmetry } = await import('../src/geometry/mmff-refine');
+    const result = await refine(breakSymmetry(linear));
+    expect(result).not.toBeNull();
+    expect(result!.converged).toBe(true);
+    const [o, h1, h2] = result!.molecule.atoms;
+    const u = [h1.x - o.x, h1.y - o.y, h1.z - o.z];
+    const v = [h2.x - o.x, h2.y - o.y, h2.z - o.z];
+    const angle =
+      (Math.acos(
+        (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) /
+          (Math.hypot(...u) * Math.hypot(...v)),
+      ) * 180) / Math.PI;
+    expect(angle).toBeGreaterThan(95);
+    expect(angle).toBeLessThan(115);
+    expect(result!.energyHartree).toBeLessThan(-5.02063);
+  }, 180_000);
 });

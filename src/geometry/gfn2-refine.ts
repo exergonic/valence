@@ -16,6 +16,7 @@
  * each resolve only their own result.
  */
 import type { Molecule } from '../mol-parser';
+import { breakSymmetry } from './mmff-refine';
 
 export interface Gfn2Result {
   /** The optimised structure, in Angstrom, same atom order as the input. */
@@ -80,6 +81,10 @@ export function refineWithGfn2(molecule: Molecule): Promise<Gfn2Result | null> {
   const resolvers = Promise.withResolvers<Gfn2Result | null>();
   const id = nextId++;
   pending.set(id, resolvers);
-  w.postMessage({ id, molecule });
+  // The embedder emits exact symmetries and a symmetric start traps the
+  // descent at a spurious stationary point (drawn water arrives exactly
+  // linear and comes back exactly linear) — the same deterministic kick
+  // the MMFF94 bridge uses, before the engine ever sees the structure.
+  w.postMessage({ id, molecule: breakSymmetry(molecule) });
   return resolvers.promise;
 }
