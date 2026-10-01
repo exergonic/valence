@@ -511,6 +511,14 @@ Open follow-ups, in the order they would pay off:
    the level is the honest route to the same end. NOTES.md has the timings, the
    accuracy, and the panel's behaviour.
 
+11. **The delocalized view: ranked rows and a rename — SHIPPED 2026-09-30.**
+   "Ladder" became "Delocalized", and its rows are ranked rather than placed by
+   energy: a fixed row height makes every level as clickable as a row in the
+   localized list, at the cost of proportional spacing, which the energy printed
+   on each row pays back. Degenerate sets still share a row as side-by-side
+   bars, and the reading is ascending, matching the localized list. NOTES.md has
+   the reasoning and the tag bug it surfaced.
+
 ## House rules that apply to every phase
 
 - No new dependencies. A hand-rolled Jacobi solver is fine at these

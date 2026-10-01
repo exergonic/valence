@@ -33,8 +33,6 @@ import { MO_PHASE_PAIRS, MO_SIGNIFICANT } from '../render/mo-lobes';
 import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import { SP_ONLY_METALS } from '../chem/extended-huckel/parameters';
 
-const PAD = { top: 16, bottom: 20, left: 44, right: 58 };
-
 /** How each localized-orbital class reads in the list — avo_ibo's own tokens,
  *  so our rows can be read beside an ibos.txt. */
 const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
@@ -51,9 +49,10 @@ const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
   antibond: 'anti*',
   virtual: 'virt',
 };
-/** Levels this far outside the occupied ladder still get axis room. */
-const BELOW_OCCUPIED = 4;
-const ABOVE_OCCUPIED = 6;
+/** Height of one ladder row (px). Rows are ranked rather than placed by
+ *  energy, so this is what decides how big a click target a level gets — and
+ *  every level gets the same one. */
+const MO_ROW_PITCH = 26;
 
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
@@ -73,7 +72,7 @@ export function setupMoPanel(ctx: SceneContext) {
   const note = document.getElementById('mo-note')!;
   const clear = document.getElementById('ctrl-mo-clear') as HTMLButtonElement | null;
   const collapse = document.getElementById('mo-collapse') as HTMLButtonElement | null;
-  const ladderTab = document.getElementById('mo-view-ladder') as HTMLButtonElement | null;
+  const delocalizedTab = document.getElementById('mo-view-delocalized') as HTMLButtonElement | null;
   const localizedTab = document.getElementById('mo-view-localized') as HTMLButtonElement | null;
 
   const select = (index: number | null) => {
@@ -94,7 +93,7 @@ export function setupMoPanel(ctx: SceneContext) {
     ctx.rerender();
   };
 
-  const setView = (view: 'ladder' | 'localized') => {
+  const setView = (view: 'delocalized' | 'localized') => {
     if (ctx.display.orbitalView === view) return;
     ctx.display.orbitalView = view;
     // one picture at a time: the other view's selection stops drawing
@@ -104,7 +103,7 @@ export function setupMoPanel(ctx: SceneContext) {
     draw();
     ctx.rerender();
   };
-  ladderTab?.addEventListener('click', () => setView('ladder'));
+  delocalizedTab?.addEventListener('click', () => setView('delocalized'));
   localizedTab?.addEventListener('click', () => setView('localized'));
 
   clear?.addEventListener('click', () => {
@@ -306,7 +305,7 @@ export function setupMoPanel(ctx: SceneContext) {
       ? !!ctx.localizedOrbitals && ctx.display.localizedSelection.length > 0
       : result !== null && ctx.display.moIndex !== null;
     for (const control of [smooth, opacity, isovalue]) if (control) control.disabled = !hasSelection;
-    ladderTab?.classList.toggle('active', view === 'ladder');
+    delocalizedTab?.classList.toggle('active', view === 'delocalized');
     localizedTab?.classList.toggle('active', view === 'localized');
     diagram.classList.toggle('hidden', view === 'localized');
     list.classList.toggle('hidden', view !== 'localized');
@@ -327,7 +326,6 @@ export function setupMoPanel(ctx: SceneContext) {
     const spOnly = spOnlyMetals(ctx.currentMolecule);
 
     const width = Math.max(240, diagram.clientWidth || 340);
-    const height = Math.max(200, diagram.clientHeight || 300);
     drawn = { width: diagram.clientWidth, height: diagram.clientHeight };
     const occupations = closedShellOccupations(
       result.electronCount, result.energies.length, result.energies, ctx.currentMolecule?.multiplicity ?? 1,
@@ -345,40 +343,42 @@ export function setupMoPanel(ctx: SceneContext) {
       if (filled < levels.length) levels[filled].lumo = true;
     }
 
-    // The energy window: the occupied ladder plus a margin, so a deep σ level
-    // or a very high virtual does not squash the frontier into one line.
-    const occupiedEnergies = levels.filter((l) => l.occupied).map((l) => l.energy);
-    const anchor = occupiedEnergies.length > 0 ? occupiedEnergies : levels.map((l) => l.energy);
-    const lo = Math.min(...anchor) - BELOW_OCCUPIED;
-    const hi = Math.max(...anchor) + ABOVE_OCCUPIED;
-    const y = (energy: number) => PAD.top + ((hi - energy) / (hi - lo)) * (height - PAD.top - PAD.bottom);
-
-    const parts: string[] = [];
-    parts.push(`<line class="mo-axis" x1="${PAD.left}" y1="${PAD.top}" x2="${PAD.left}" y2="${height - PAD.bottom}"/>`);
-    for (const tick of axisTicks(lo, hi)) {
-      const ty = y(tick);
-      parts.push(`<line class="mo-tick" x1="${PAD.left - 5}" y1="${ty.toFixed(1)}" x2="${PAD.left}" y2="${ty.toFixed(1)}"/>`);
-      parts.push(`<text class="mo-tick-label" x="${PAD.left - 8}" y="${(ty + 4).toFixed(1)}">${tick}</text>`);
+    // Rows are RANKED, not placed by energy. The true spacing is didactic, but
+    // it squashes a dense virtual block into one line, and a line is a poor
+    // click target — that was the complaint. So every level gets the same row
+    // height, the degeneracy view is untouched (a set shares one row, side by
+    // side, each still its own target), and the energy is printed ON the row
+    // instead of encoded in where the row sits. The diagram scrolls, so
+    // nothing is clipped away to keep the frontier readable either.
+    const groups: typeof levels[] = [];
+    for (const level of levels) {
+      const last = groups[groups.length - 1];
+      if (last && Math.abs(last[0].energy - level.energy) < DEGENERATE_TOLERANCE) last.push(level);
+      else groups.push([level]);
     }
-
-    const x0 = PAD.left + 12;
-    const x1 = width - PAD.right;
-    // a generous click target, but never wider than the row spacing or a
-    // click could land on the neighbouring orbital
-    const spacing = (height - PAD.top - PAD.bottom) / Math.max(1, levels.length);
-    const hit = Math.max(6, Math.min(16, spacing)).toFixed(1);
+    const pitch = MO_ROW_PITCH;
+    const top = 8;
+    const height = Math.max(200, top + groups.length * pitch + 8);
+    // ascending, lowest at the bottom — the same reading as the localized list
+    // and the same as the textbook diagram, so the two views agree about which
+    // way is up
+    const y = (row: number) => top + (groups.length - 1 - row) * pitch + pitch / 2;
+    const x0 = 12;
+    const x1 = width - 104;
+    // the whole row is the target, capped to the row so a click cannot land on
+    // the level above or below
+    const hit = Math.min(24, pitch - 4);
 
     /** One clickable bar — a segment of a degenerate group, or a lone level. */
     const bar = (
       level: (typeof levels)[number], sx0: number, sx1: number, ly: number,
-      opts: { clipped: boolean; tag: string; hitWidth: number },
+      opts: { tag: string; hitWidth: number },
     ) => {
       const classes = ['mo-level'];
       if (level.occupied) classes.push('occupied');
       if (level.index === selected) classes.push('selected');
-      if (opts.clipped) classes.push('clipped');
-      const arrows = level.occupied && !opts.clipped
-        ? `<text class="mo-arrows" x="${(sx1 + 4).toFixed(1)}" y="${(ly + 5).toFixed(1)}">↑↓</text>`
+      const arrows = level.occupied
+        ? `<text class="mo-arrows" x="${(sx1 + 4).toFixed(1)}" y="${(ly + 4).toFixed(1)}">↑↓</text>`
         : '';
       parts.push(
         `<g class="${classes.join(' ')}" data-index="${level.index}">`
@@ -391,59 +391,36 @@ export function setupMoPanel(ctx: SceneContext) {
       );
     };
 
-    // In the window: one row per energy, and degenerate orbitals as
-    // side-by-side bars — each its own click target, the way a textbook
-    // orbital diagram shows them. Drawn as a single line, all but the last are
-    // unreachable, which is what the reporter hit.
-    const inWindow = levels.filter((l) => l.energy >= lo && l.energy <= hi);
-    const groups: typeof levels[] = [];
-    for (const level of inWindow) {
-      const last = groups[groups.length - 1];
-      if (last && Math.abs(last[0].energy - level.energy) < DEGENERATE_TOLERANCE) last.push(level);
-      else groups.push([level]);
-    }
-    for (const group of groups) {
+    // One row per energy, degenerate orbitals as side-by-side bars — each its
+    // own click target, the way a textbook orbital diagram shows them. The
+    // energy and the HOMO/LUMO tag sit where the axis used to.
+    const parts: string[] = [];
+    groups.forEach((group, row) => {
+      const ly = y(row);
       const first = group[0];
-      const ly = y(first.energy);
-      const tag = first.homo ? 'HOMO' : first.lumo ? 'LUMO' : '';
-      const gap = 4;
+      // the frontier can sit inside a degenerate set, so the tag belongs to the
+      // group rather than to whichever member happens to be listed first
+      const tag = group.some((l) => l.homo) ? 'HOMO' : group.some((l) => l.lumo) ? 'LUMO' : '';
+      // a real gap: degenerate partners have to read as separate orbitals, not
+      // as one bar with a seam in it
+      const gap = 16;
       const segmentWidth = (x1 - x0 - (group.length - 1) * gap) / group.length;
       group.forEach((level, k) => {
         const sx0 = x0 + k * (segmentWidth + gap);
-        bar(level, sx0, sx0 + segmentWidth, ly, {
-          clipped: false,
-          tag: k === group.length - 1 ? tag : '',
-          hitWidth: Number(hit),
-        });
+        bar(level, sx0, sx0 + segmentWidth, ly, { tag: '', hitWidth: hit });
       });
-    }
-
-    // Outside the window: stacked in a compact band at the edge, off-scale but
-    // still clickable (the readout names the energy). Grouping these by energy
-    // would be wrong — they are not degenerate, just far away.
-    const band = Math.min(30, (height - PAD.top - PAD.bottom) / 5);
-    const outside: Array<[typeof levels, boolean]> = [
-      [levels.filter((l) => l.energy > hi), true],
-      [levels.filter((l) => l.energy < lo), false],
-    ];
-    for (const [list, atTop] of outside) {
-      const step = band / Math.max(1, list.length);
-      list.forEach((level, i) => {
-        const ly = atTop
-          ? PAD.top + 2 + i * step
-          : height - PAD.bottom - 2 - (list.length - 1 - i) * step;
-        bar(level, x0 + 12, x1 - 12, ly, {
-          clipped: true,
-          tag: '',
-          // the band is tight: cap the target to the band's own spacing so
-          // each off-scale level is still reachable
-          hitWidth: Math.max(3, Math.min(Number(hit), step)),
-        });
-      });
-    }
+      parts.push(`<text class="mo-energy" x="${x1 + 96}" y="${(ly + 4).toFixed(1)}">${first.energy.toFixed(3)}</text>`);
+      if (tag) parts.push(`<text class="mo-tag" x="${x1 + 8}" y="${(ly + 4).toFixed(1)}">${tag}</text>`);
+    });
 
     diagram.innerHTML =
       `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" class="mo-svg">${parts.join('')}</svg>`;
+    // Nothing is clipped away any more, so the frontier has to be brought into
+    // view instead: centre the HOMO's row, which is where a chemist starts.
+    const homoRow = groups.findIndex((group) => group.some((l) => l.homo));
+    if (homoRow >= 0) {
+      diagram.scrollTop = Math.max(0, y(homoRow) - diagram.clientHeight / 2);
+    }
     diagram.querySelectorAll<SVGGElement>('g.mo-level').forEach((node) => {
       node.addEventListener('click', () => select(Number(node.dataset.index)));
     });
@@ -504,11 +481,6 @@ export function setupMoPanel(ctx: SceneContext) {
         ? `Open shell (a ${SPIN_NAME[multiplicity] ?? `multiplicity-${multiplicity}`}): extended `
           + 'Hückel as built here is closed-shell and has no spin, so no occupancy arrows and no localized orbitals.'
         : `Open shell (${result.electronCount} electrons): extended Hückel as built here has no spin, so occupancies are not shown.`;
-    } else {
-      const hidden = levels.filter((l) => l.energy < lo || l.energy > hi).length;
-      if (hidden > 0) {
-        note.textContent = `${hidden} level${hidden === 1 ? '' : 's'} outside the window, stacked at the edge — click one to read its energy.`;
-      }
     }
   }
 
@@ -602,12 +574,4 @@ function localizedType(molecule: Molecule, orbital: LocalizedOrbital): string {
   // a two-centre bond, in index order; a one-atom virtual keeps its own form
   const pair = orbital.atoms.slice(0, 2).sort((a, b) => a - b);
   return pair.length === 1 ? `${joined(pair)} ${kind}` : `${joined(pair)} ${kind}`;
-}
-
-/** Tick values at 5 eV steps inside [lo, hi]. */
-function axisTicks(lo: number, hi: number): number[] {
-  const ticks: number[] = [];
-  const first = Math.ceil(lo / 5) * 5;
-  for (let v = first; v <= hi; v += 5) ticks.push(v);
-  return ticks;
 }

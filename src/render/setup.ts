@@ -40,7 +40,7 @@ export interface DisplaySettings {
   moIndex: number | null;
   /** The MO panel's view: the energy ladder, or the localized orbitals
    *  (Pipek–Mezey). Only one of the two selections draws at a time. */
-  orbitalView: 'ladder' | 'localized';
+  orbitalView: 'delocalized' | 'localized';
   /** Which localized orbitals are drawn over the molecule, in the order they
    *  were picked (empty = none). More than one is the hyperconjugation
    *  picture: a filled orbital and the empty one it reaches into, each with
@@ -274,7 +274,7 @@ export function initScene(container: HTMLElement): SceneContext {
       autoRotate: false,
       highlightPiSystems: false,
       moIndex: null,
-      orbitalView: 'ladder',
+      orbitalView: 'delocalized',
       localizedSelection: [],
       showOrbitals: true,
       showEsp: false,
