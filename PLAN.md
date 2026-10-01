@@ -519,6 +519,43 @@ Open follow-ups, in the order they would pay off:
    ascending — lowest at the bottom — matching the localized list. NOTES.md has
    the reasoning, the tag bug it surfaced, and what the SVG took with it.
 
+12. **A self-consistent engine in the browser — CANDIDATE, unresearched.**
+   [xTBloom](https://github.com/jinzhezenggroup/xtbloom) is native GFN1/GFN2-xTB
+   (Grimme's semiempirical tight binding) for C, C++, Python and CUDA, and it
+   has a **client-side WASM build** — verified here, not taken from the README:
+   949 kB engine + 39 kB Eigen/LAPACK side module + a 152 kB viewer, "engine
+   ready" in a headless browser, no errors, no Pyodide, no upload.
+
+   **What it would settle.** Everything this plan has recorded as out of reach
+   is out of reach for one reason: extended Hückel has no electron repulsion.
+   GFN2-xTB is self-consistent (SCC) and runs **unrestricted** — so Δ in eV, the
+   high-spin/low-spin question, the pairing energy, and the ligand-field
+   splittings all become answerable rather than refused. It also optimises
+   geometry *quantum-mechanically*, which is where MMFF94 is weakest here
+   (SF₆, PCl₅ and the metal complexes run on generic parameters today), and it
+   is the premise-change that un-parks Phase 5: a static page *can* produce a
+   wavefunction now.
+
+   **Three gates, all the user's to open.**
+   1. **GPL-3.0-or-later.** Vendoring or linking it makes the combined work
+      GPL. Constitution-level, and AGENTS.md says ask first. (Evaluating it
+      costs nothing: the licence binds on distribution.)
+   2. **No orbitals in the public API.** It publishes energies, forces, charges
+      and dipoles — not MO coefficients. So it buys the app *energetics and
+      geometry* while the orbital pictures stay on extended Hückel. That is a
+      two-engine, two-label architecture, not a replacement.
+   3. **The web path is the experimental one** (the native path is the mature
+      one): single-threaded wasm32, SIMD128 required, Eigen fetched at build
+      time, and its own docs say "for exploration, not a production scientific
+      environment".
+
+   **First step, if any: a spike**, in this project's own style — load the
+   deployed engine in a throwaway page, run water, benzene and OH· (the demo
+   already ships a radical preset, so unrestricted paths are exercised), check
+   energy and forces against the native/published values, and measure size and
+   speed. Legally free, and it answers the feasibility questions before the
+   licence conversation starts.
+
 ## House rules that apply to every phase
 
 - No new dependencies. A hand-rolled Jacobi solver is fine at these
