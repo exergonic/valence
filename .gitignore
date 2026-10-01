@@ -5,6 +5,7 @@ dist/
 
 AGENTS.md
 NOTES.md
+PLAN.md
 
 # Dev-only bench assets (Ketcher standalone build, OpenChemLib bundle) —
 # see playground/sketchers.html for how to fetch them.
