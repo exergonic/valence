@@ -120,6 +120,9 @@ function setupKeyboardShortcuts(ctx: SceneContext) {
     } else if (e.key === 'r' || e.key === 'R') {
       // Reset view
       document.getElementById('reset-view-btn')?.click();
+    } else if (e.key === 'o' || e.key === 'O') {
+      // Dock/undock the Orbitals panel — it is 380 px wide when open
+      document.getElementById('mo-collapse')?.click();
     } else if (e.key === 'Escape') {
       // Close any open dialogs
       document.getElementById('cite-dialog')?.classList.add('hidden');

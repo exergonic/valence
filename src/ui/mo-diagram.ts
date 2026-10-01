@@ -55,6 +55,9 @@ const TOP_CONTRIBUTORS = 6;
 // so a near-miss is not described as a symmetry degeneracy.
 const DEGENERATE_TOLERANCE = DEGENERATE_TOLERANCE_EV;
 
+/** localStorage key for the MO panel's collapsed state (see setupMoPanel). */
+const MO_COLLAPSED_KEY = 'valence:mo-collapsed';
+
 export function setupMoPanel(ctx: SceneContext) {
   const panel = document.getElementById('mo-panel')!;
   const list = document.getElementById('mo-list')!;
@@ -168,10 +171,27 @@ export function setupMoPanel(ctx: SceneContext) {
   }
   collapse?.addEventListener('click', () => {
     const collapsed = panel.classList.toggle('collapsed');
+    try {
+      localStorage.setItem(MO_COLLAPSED_KEY, collapsed ? '1' : '0');
+    } catch {
+      // private mode or no storage: the panel just won't remember
+    }
     collapse.textContent = collapsed ? '+' : '−';
     collapse.title = collapsed ? 'Expand' : 'Collapse';
     draw();
   });
+
+  // A collapsed panel survives reloads — it is a workspace preference,
+  // not a per-molecule state.
+  try {
+    if (localStorage.getItem(MO_COLLAPSED_KEY) === '1' && collapse) {
+      panel.classList.add('collapsed');
+      collapse.textContent = '+';
+      collapse.title = 'Expand';
+    }
+  } catch {
+    // no storage: open every time
+  }
 
   // The panel is always on screen, so it has to follow the molecule: redraw
   // when a new scene is built (a new molecule means new orbitals).

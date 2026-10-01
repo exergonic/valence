@@ -434,8 +434,9 @@ html, body {
   width: 190px;
   /* the MO panel below owns most of the dock: it has to hold one row per
      orbital, the controls panel scrolls */
-  max-height: 34%;
+  max-height: 42%;
   overflow-y: auto;
+  overflow-x: hidden;
   pointer-events: auto;
   background: rgba(30, 30, 35, 0.92);
   border-radius: 8px;
@@ -445,28 +446,33 @@ html, body {
   user-select: none;
   backdrop-filter: blur(6px);
   z-index: 10;
-  overflow: hidden;
 }
 
 #controls-tabs {
   display: flex;
   border-bottom: 1px solid rgba(255,255,255,0.08);
+  /* the panel scrolls, so the tabs stay pinned while the sections move */
+  position: sticky;
+  top: 0;
+  background: rgba(30, 30, 35, 0.97);
+  z-index: 1;
 }
 
 .tab-btn {
   flex: 1;
   min-width: 0;
-  padding: 8px 2px;
+  padding: 8px 1px;
   border: none;
   background: transparent;
   color: #888;
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.12s;
   text-transform: uppercase;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.1px;
   white-space: nowrap;
+  overflow: hidden;
 }
 
 .tab-btn:hover {
@@ -499,6 +505,55 @@ html, body {
   margin-bottom: 0;
   padding-bottom: 0;
   border-bottom: none;
+}
+
+/* ── Collapsible Build-tab groups ──
+   The Build tab outgrew a flat list, so its sections fold into groups.
+   Same disclosure pattern as the PubChem record dropdown. */
+
+.ctrl-group {
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+}
+
+.ctrl-group:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ctrl-group > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #bbb;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 0;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.ctrl-group > summary::-webkit-details-marker { display: none; }
+
+.ctrl-group > summary::before {
+  content: '▸';
+  color: #888;
+  font-size: 9px;
+  transition: transform 0.12s;
+}
+
+.ctrl-group[open] > summary::before { transform: rotate(90deg); }
+
+.ctrl-group > summary:hover { color: #fff; }
+
+.ctrl-group .ctrl-section {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
 }
 
 /* ── Model Info log (bottom of the controls panel) ──
@@ -1157,7 +1212,9 @@ html, body {
 #mo-panel {
   width: 380px;
   flex: 1;
-  min-height: 420px;
+  /* a floor, not a fit: the list scrolls inside, so a short window
+     squeezes the panel instead of pushing it off the dock */
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: rgba(30, 30, 35, 0.92);
@@ -1172,9 +1229,28 @@ html, body {
 #mo-panel.collapsed {
   flex: 0 0 auto;
   min-height: 0;
+  /* shrink-wrap the rail instead of holding the full panel width */
+  width: auto;
 }
 
 #mo-panel.collapsed #mo-body { display: none; }
+
+/* Collapsed, the panel docks as a slim rail on the right edge: the expand
+   button on top, the title running vertically beneath it. */
+#mo-panel.collapsed .mo-head {
+  flex-direction: column-reverse;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 7px;
+  border-bottom: none;
+}
+
+#mo-panel.collapsed .mo-head .ctrl-label {
+  writing-mode: vertical-rl;
+  margin: 0;
+  font-size: 9px;
+  letter-spacing: 1px;
+}
 
 .mo-head {
   display: flex;

@@ -60,57 +60,17 @@
         <!-- Tabbed controls panel -->
         <div id="controls-panel">
           <div id="controls-tabs">
-            <button class="tab-btn active" data-tab="build">Build</button>
-            <button class="tab-btn" data-tab="style">Style</button>
+            <button class="tab-btn active" data-tab="molecule">Molecule</button>
+            <button class="tab-btn" data-tab="view">View</button>
+            <button class="tab-btn" data-tab="analyze">Analyze</button>
             <button class="tab-btn" data-tab="export">Export</button>
-            <button class="tab-btn" data-tab="measure">Measure</button>
           </div>
-          <div id="tab-build" class="tab-content active">
+          <div id="tab-molecule" class="tab-content active">
             <div class="ctrl-section">
               <span class="ctrl-label">Examples</span>
               <select id="examples-dropdown" class="label-mode-select">
                 <option value="">Pick an example…</option>
               </select>
-            </div>
-            <div class="ctrl-section">
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-show-mol" />
-                <span>Atoms & Bonds</span>
-              </label>
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-show-orb" checked />
-                <span>Orbitals</span>
-              </label>
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-show-dipole" />
-                <span>Dipole (MMFF94)</span>
-              </label>
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-show-esp" />
-                <span>ESP (charge model)</span>
-              </label>
-              <label class="ctrl-slider">
-                <span>ESP Opacity</span>
-                <input type="range" id="ctrl-esp-opacity" min="0.15" max="0.9" step="0.05" />
-              </label>
-              <span class="ctrl-label">Labels</span>
-              <select id="ctrl-label-mode" class="label-mode-select">
-                <option value="atom">Element Symbols</option>
-                <option value="orbital">Orbital Types (σ/π/lp)</option>
-                <option value="hybrid">Hybridization (sp², sp³)</option>
-                <option value="charge">Partial Charges</option>
-                <option value="off">Off</option>
-              </select>
-            </div>
-            <div class="ctrl-section">
-              <label class="ctrl-slider">
-                <span>Atom Size</span>
-                <input type="range" id="ctrl-atom-scale" min="0.2" max="2.5" step="0.05" />
-              </label>
-              <label class="ctrl-slider">
-                <span>Bond Size</span>
-                <input type="range" id="ctrl-bond-scale" min="0.2" max="3" step="0.1" />
-              </label>
             </div>
             <div class="ctrl-section">
               <label class="ctrl-toggle">
@@ -122,24 +82,20 @@
                 <span>Snap to point group</span>
               </label>
             </div>
-            <div class="ctrl-section">
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-space-filling" />
-                <span>Space-filling (CPK)</span>
-              </label>
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-auto-rotate" />
-                <span>Auto-rotate</span>
-              </label>
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-highlight-pi" />
-                <span>Highlight π Systems</span>
-              </label>
-            </div>
           </div>
-          <div id="tab-style" class="tab-content">
+          <div id="tab-view" class="tab-content">
+            <details class="ctrl-group" open>
+              <summary>Show</summary>
             <div class="ctrl-section">
-              <span class="ctrl-label">View Preset</span>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-mol" />
+                <span>Atoms & Bonds</span>
+              </label>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-orb" checked />
+                <span>Orbitals</span>
+              </label>
+              <span class="ctrl-label">Orbital set</span>
               <div class="preset-row">
                 <button class="view-preset-btn active" data-preset="all">All</button>
                 <button class="view-preset-btn" data-preset="sigma-only">σ</button>
@@ -148,7 +104,35 @@
                 <button class="view-preset-btn" data-preset="pi-only">π</button>
                 <button class="view-preset-btn" data-preset="lone-pairs-only">LP</button>
               </div>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-highlight-pi" />
+                <span>Highlight π Systems</span>
+              </label>
+              <span class="ctrl-label">Labels</span>
+              <select id="ctrl-label-mode" class="label-mode-select">
+                <option value="atom">Element Symbols</option>
+                <option value="orbital">Orbital Types (σ/π/lp)</option>
+                <option value="hybrid">Hybridization (sp², sp³)</option>
+                <option value="charge">Partial Charges</option>
+                <option value="off">Off</option>
+              </select>
             </div>
+            </details>
+            <details class="ctrl-group">
+              <summary>Sizes</summary>
+            <div class="ctrl-section">
+              <label class="ctrl-slider">
+                <span>Atom Size</span>
+                <input type="range" id="ctrl-atom-scale" min="0.2" max="2.5" step="0.05" />
+              </label>
+              <label class="ctrl-slider">
+                <span>Bond Size</span>
+                <input type="range" id="ctrl-bond-scale" min="0.2" max="3" step="0.1" />
+              </label>
+            </div>
+            </details>
+            <details class="ctrl-group">
+              <summary>Materials</summary>
             <div class="ctrl-section">
               <span class="ctrl-label">Atoms</span>
               <select id="ctrl-atom-style" class="ctrl-select">
@@ -196,6 +180,20 @@
                 <input type="color" id="ctrl-bg-custom" value="#ffffff" title="Custom" />
               </div>
             </div>
+            </details>
+            <details class="ctrl-group">
+              <summary>Modes</summary>
+            <div class="ctrl-section">
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-space-filling" />
+                <span>Space-filling (CPK)</span>
+              </label>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-auto-rotate" />
+                <span>Auto-rotate</span>
+              </label>
+            </div>
+            </details>
           </div>
           <div id="tab-export" class="tab-content">
             <div class="ctrl-section">
@@ -229,7 +227,22 @@
               </div>
             </div>
           </div>
-          <div id="tab-measure" class="tab-content">
+          <div id="tab-analyze" class="tab-content">
+            <div class="ctrl-section">
+              <span class="ctrl-label">Overlays</span>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-dipole" />
+                <span>Dipole (MMFF94)</span>
+              </label>
+              <label class="ctrl-toggle">
+                <input type="checkbox" id="ctrl-show-esp" />
+                <span>ESP (charge model)</span>
+              </label>
+              <label class="ctrl-slider">
+                <span>ESP Opacity</span>
+                <input type="range" id="ctrl-esp-opacity" min="0.15" max="0.9" step="0.05" />
+              </label>
+            </div>
             <div class="ctrl-section">
               <span class="ctrl-label">Measurement Mode</span>
               <div class="export-row">
@@ -360,9 +373,10 @@
           <li><strong>Hover</strong> orbitals to see their type (σ, π, lone pair)</li>
           <li><strong>Rotate</strong> the view by dragging, <strong>zoom</strong> with scroll</li>
           <li>Press <strong>R</strong> to reset the view</li>
-          <li>Try the <strong>Examples</strong> dropdown in the <strong>Build</strong> tab for pre-built molecules</li>
-          <li>Use the <strong>Style</strong> tab to change colors and materials</li>
-          <li>Use <strong>Measure</strong> tab to click atoms and measure distances/angles/dihedrals</li>
+          <li>Press <strong>O</strong> to collapse the Orbitals panel to the screen edge</li>
+          <li>Try the <strong>Examples</strong> dropdown in the <strong>Molecule</strong> tab for pre-built molecules</li>
+          <li>Use the <strong>View</strong> tab to change what is shown, and colors and materials</li>
+          <li>Use <strong>Analyze</strong> tab to click atoms and measure distances/angles/dihedrals</li>
           <li><strong>Export</strong> as PNG, SDF, XYZ, or copy the SMILES</li>
           <li><strong>Right-click</strong> the molecule to copy it as XYZ, SDF, or PNG</li>
         </ul>
