@@ -557,6 +557,13 @@ Open follow-ups, in the order they would pay off:
    whole resolution. Reference values for water, SF₆ and PCl₅ are recorded in
    NOTES.md.
 
+   **Wiring is answered too**: three files (glue 99 kB, wasm 1.83 MB, side
+   package 163 kB — 2.09 MB decoded, ~950 kB over the wire), driven through the
+   standard Emscripten hooks into a Worker, with four JS-callable entry points.
+   Their app layer, viewer and SMILES path are all optional. The licence is the
+   remaining question and it is not dodgeable: the wasm *is* the GPL-3 work, so
+   adopting it makes Valence GPL-3.0-or-later. NOTES.md has the full accounting.
+
    Two things sharpen the case. Their demo's SMILES path pre-relaxes with
    MMFF94 and *refuses SF₆* ("MMFF94 pre-optimization failed") — the same wall
    this app hits, which makes geometry the strongest argument for adopting it,
