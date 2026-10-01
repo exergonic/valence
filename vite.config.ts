@@ -3,6 +3,9 @@ import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, sta
 import { extname, join } from 'path';
 
 function copyDir(src: string, dest: string) {
+  // A vendored directory may legitimately be absent (e.g. the GFN2 wasm before
+  // it has been built and vendored); copying nothing beats crashing the dev server.
+  if (!existsSync(src)) return;
   mkdirSync(dest, { recursive: true });
   for (const entry of readdirSync(src)) {
     if (entry.endsWith('.json')) continue;
@@ -27,6 +30,18 @@ const VENDOR_TYPES: Record<string, string> = {
 export default defineConfig({
   base: process.env.TAURI_ENV_PLATFORM ? '/' : '/valence/',
   build: { target: 'esnext' },
+  worker: {
+    // The worker is created with `{ type: 'module' }`, and the vendored
+    // emscripten glue uses top-level await (its Node-detection branches), which
+    // the default 'iife' worker format cannot express. ES is both correct here
+    // and what the worker is declared as.
+    format: 'es',
+    rollupOptions: {
+      // The glue's Node-only branches are never executed in a browser, but
+      // their bare specifiers would otherwise need resolving at build time.
+      external: ['node:module', 'node:worker_threads'],
+    },
+  },
   plugins: [
     {
       name: 'copy-jsme',

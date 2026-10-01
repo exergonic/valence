@@ -3,6 +3,7 @@ import { optimizeTorsions } from './torsions';
 import { applyWedgeStereo } from './stereo-wedge';
 import { vecDot, crossProduct, vecNormalize, rotateRodrigues } from '../utils/vec3';
 import { idealVseprVectors } from '../chem/vsepr/ideal-vsepr-vectors';
+import { getCovalentRadius } from '../chem/radii';
 
 const BOND_LENGTH = 1.0;
 
@@ -71,6 +72,31 @@ function ringBonds(molecule: Molecule): Set<string> {
  *  kick in the refinement path applies only to ring molecules.) */
 export function hasRingBonds(molecule: Molecule): boolean {
   return ringBonds(molecule).size > 0;
+}
+
+/**
+ * Rescale a unit skeleton (`BOND_LENGTH`) to a chemically plausible size: one
+ * uniform factor, the mean covalent-radius sum over the molecule's bonds.
+ *
+ * A uniform factor keeps the *shape* the embedder got right, which is what a
+ * refiner's basin depends on, while giving it a starting scale it can work
+ * from. Per-bond lengths would need `place3D` itself to take a length function;
+ * a quantum refiner corrects individual lengths from any sane scale, so this is
+ * enough — and it leaves MMFF94's unit-skeleton contract untouched.
+ */
+export function scaleSkeleton(molecule: Molecule): Molecule {
+  let total = 0;
+  for (const bond of molecule.bonds) {
+    total += getCovalentRadius(molecule.atoms[bond.atom1Index].element)
+      + getCovalentRadius(molecule.atoms[bond.atom2Index].element);
+  }
+  const factor = molecule.bonds.length > 0 ? total / molecule.bonds.length : 1;
+  return {
+    atoms: molecule.atoms.map((a) => ({
+      ...a, x: a.x * factor, y: a.y * factor, z: a.z * factor,
+    })),
+    bonds: molecule.bonds,
+  };
 }
 
 // Fallback 3D embedder: graph-walk placement along ideal hybrid vectors,

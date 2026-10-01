@@ -4,6 +4,7 @@ import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { computeLocalGeometry } from '../geometry/local-geometry';
+import { refineWithGfn2, GFN2_NOTE } from '../geometry/gfn2-refine';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import { symmetrizeMolecule } from '../geometry/symmetrize';
@@ -68,11 +69,17 @@ function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: string[
   };
 }
 
-function composeNotes(warnings: string[], molecule: Molecule, dipole: DipoleResult | null): {
-  warnings: string[];
-  info: string[];
-} {
-  const gaps = parameterGapWarnings(molecule);
+function composeNotes(
+  warnings: string[],
+  molecule: Molecule,
+  dipole: DipoleResult | null,
+  engine?: 'mmff94' | 'gfn2',
+): { warnings: string[]; info: string[] } {
+  // The parameter-gap warnings are phrased about the geometry ("refined
+  // geometry approximate"), so they only apply when MMFF94 produced it. The
+  // charge model still runs on those parameters either way, which is what the
+  // dipole caveats below are for.
+  const gaps = engine === 'gfn2' ? [] : parameterGapWarnings(molecule);
   const info = [...gaps];
   if (dipole && gaps.length > 0) info.push(DIPOLE_APPROXIMATE);
   if (dipole?.residualCharge) info.push(DIPOLE_RESIDUAL_CHARGE);
@@ -93,6 +100,7 @@ function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null; 
   weightEl.textContent = info.weight ? ` · MW ${info.weight}` : '';
   sourceEl.textContent = info.source === 'pubchem' ? 'PubChem 3D' :
     info.source === 'cir' ? 'CIR' :
+    info.source === 'gfn2' ? 'GFN2-xTB' :
     'Local MMFF94';
   sourceEl.className = info.source;
 
@@ -256,10 +264,10 @@ export function mountJsmePanel(ctx: SceneContext) {
         molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         const dipole = computeDipole(molecule);
-        const notes = composeNotes(local.warnings, molecule, dipole);
+        const notes = composeNotes(local.warnings, molecule, dipole, local.engine);
         notes.info.push(...snapped.info);
         updateMoleculeInfo({
-          source: 'local',
+          source: local.engine === 'gfn2' ? 'gfn2' : 'local',
           formula,
           weight: `${weight}`,
           dipole,
@@ -286,4 +294,59 @@ export function mountJsmePanel(ctx: SceneContext) {
       hideLoading();
     }
   };
+
+  // GFN2-xTB refinement, on demand. The engine is ~22 MB of wasm and loads
+  // lazily inside its worker on first use — a user who never asks for it never
+  // pays for it. This is the tier for structures MMFF94 cannot describe; the
+  // Info log says exactly that (GFN2_NOTE).
+  const gfn2Btn = document.getElementById('ctrl-gfn2-refine') as HTMLButtonElement | null;
+  if (gfn2Btn) {
+    gfn2Btn.onclick = async () => {
+      const molecule = ctx.currentMolecule;
+      if (!molecule) return;
+      gfn2Btn.textContent = 'Refining...';
+      gfn2Btn.disabled = true;
+      hideRenderError();
+      showLoading('Refining with GFN2-xTB (first use downloads ~22 MB)...');
+      try {
+        const refined = await refineWithGfn2(molecule);
+        if (!refined) {
+          showRenderError(
+            'GFN2-xTB could not refine this structure — the geometry is unchanged. It needs a browser '
+            + 'with Workers and elements its parameter table covers.'
+          );
+          return;
+        }
+        const snapped = snapToSymmetry(refined.molecule);
+        const next = snapped.molecule;
+        ctx.currentMolecule = next;
+        buildScene(ctx);
+        const { formula, weight } = computeFormula(next.atoms.map(a => a.element));
+        const dipole = computeDipole(next);
+        // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
+        // the geometry no longer comes from MMFF94, so calling it "approximate"
+        // would be stale. The charge model still runs on those parameters, so
+        // the dipole caveats do still apply.
+        const info: string[] = [];
+        if (dipole && parameterGapWarnings(next).length > 0) info.push(DIPOLE_APPROXIMATE);
+        if (dipole?.residualCharge) info.push(DIPOLE_RESIDUAL_CHARGE);
+        info.push(GFN2_NOTE);
+        info.push(...snapped.info);
+        info.push(
+          refined.converged
+            ? `GFN2-xTB converged in ${refined.iterations} steps to ${refined.energyHartree.toFixed(6)} Eh `
+              + `(${(refined.milliseconds / 1000).toFixed(1)} s).`
+            : `GFN2-xTB stopped after ${refined.iterations} steps at ${refined.energyHartree.toFixed(6)} Eh `
+              + 'without reaching its convergence threshold — treat the geometry as approximate.',
+        );
+        updateMoleculeInfo({ source: 'gfn2', formula, weight: `${weight}`, dipole, warnings: [], info });
+      } catch {
+        showRenderError('GFN2-xTB refinement failed — the geometry is unchanged.');
+      } finally {
+        gfn2Btn.textContent = 'Refine with GFN2-xTB';
+        gfn2Btn.disabled = false;
+        hideLoading();
+      }
+    };
+  }
 }

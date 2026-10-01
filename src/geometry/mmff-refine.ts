@@ -108,34 +108,30 @@ export interface EmbedResult {
   molecule: Molecule;
   /** Stereo-enforcement failures from applyWedgeStereo (see stereo-wedge.ts). */
   warnings: string[];
+  /** Which engine produced the geometry — the app labels it honestly. */
+  engine?: 'mmff94' | 'gfn2';
 }
 
 /**
- * The full local geometry pipeline: add implicit hydrogens, embed with
- * the graph-walk embedder, separate any overlapping atoms, then refine
- * with MMFF94. Returns the best geometry available (refined, or the
- * separated placed guess when the refinement cannot type the
- * molecule) plus any stereo-enforcement warnings the sketch drew but
- * the geometry could not honor. Runs inside the geometry worker for
- * large molecules; also the synchronous fallback when Workers are
- * unavailable.
+ * Never hand a NaN molecule to the renderer — a degenerate start (e.g. a
+ * 5-coordinate center whose 5th substituent overlapped the 1st) can poison a
+ * refinement.
  */
-export function embedAndRefine(molecule: Molecule): EmbedResult {
+export function finite(molecule: Molecule): boolean {
+  return molecule.atoms.every(
+    (a) => Number.isFinite(a.x) && Number.isFinite(a.y) && Number.isFinite(a.z),
+  );
+}
+
+/**
+ * The starting geometry both engines share: add implicit hydrogens, embed with
+ * the graph-walk embedder, then push any overlapping atoms apart. GFN2-xTB
+ * needs a sane 3D start as much as MMFF94 does, and this is where it comes
+ * from — the embeddder's idealised VSEPR vectors are themselves a correct
+ * starting point, unlike a flat sketch.
+ */
+export function embed3D(molecule: Molecule): { placed: Molecule; separated: Molecule } {
   const withH = fillMissingHydrogens(molecule);
-  // Re-assert the drawn wedges on a finished geometry: pull the positions,
-  // run the enforcement, write the corrected coordinates back. Shared by the
-  // refined path (post-MMFF94) and the unrefined path (post-separateOverlaps).
-  const enforceStereo = (m: Molecule): EmbedResult => {
-    const pos = m.atoms.map((a) => [a.x, a.y, a.z] as [number, number, number]);
-    const warnings = applyWedgeStereo(withH, pos);
-    return {
-      molecule: {
-        atoms: m.atoms.map((a, i) => ({ ...a, x: pos[i][0], y: pos[i][1], z: pos[i][2] })),
-        bonds: m.bonds,
-      },
-      warnings,
-    };
-  };
   const coords = place3D(withH);
   const placed: Molecule = {
     atoms: withH.atoms.map((a, i) => ({
@@ -143,14 +139,48 @@ export function embedAndRefine(molecule: Molecule): EmbedResult {
     })),
     bonds: withH.bonds,
   };
-  const fallback = separateOverlaps(placed);
-  // Never hand a NaN molecule to the renderer — a degenerate start
-  // (e.g. a 5-coordinate center whose 5th substituent overlapped the
-  // 1st) can poison the refine; the separated guess must be finite
-  // or the caller keeps its own geometry (the Ar no-op contract).
-  const finite = (m: Molecule) =>
-    m.atoms.every((a) => Number.isFinite(a.x) && Number.isFinite(a.y) && Number.isFinite(a.z));
-  const refined = refineWithMMFF94(fallback);
+  return { placed, separated: separateOverlaps(placed) };
+}
+
+/**
+ * Re-assert the drawn wedges on a finished geometry: pull the positions, run
+ * the enforcement, write the corrected coordinates back. The sketch is the
+ * specification, so this runs after the refinement rather than before — the
+ * optimizer walks downhill to the nearest minimum, and for a strained drawn
+ * stereoisomer that minimum can belong to a different one. Shared by both
+ * engines.
+ */
+function finish(embedded: Molecule, refined: Molecule): EmbedResult {
+  const pos = refined.atoms.map((a) => [a.x, a.y, a.z] as [number, number, number]);
+  const warnings = applyWedgeStereo(embedded, pos);
+  return {
+    molecule: {
+      atoms: refined.atoms.map((a, i) => ({ ...a, x: pos[i][0], y: pos[i][1], z: pos[i][2] })),
+      bonds: refined.bonds,
+    },
+    warnings,
+  };
+}
+
+/** The sketch's wedges are honoured, or the geometry is left as the engine made it. */
+export function honourWedges(embedded: Molecule, refined: Molecule): EmbedResult {
+  if (!embedded.bonds.some((b) => b.stereo)) return { molecule: refined, warnings: [] };
+  return finish(embedded, refined);
+}
+
+/**
+ * The MMFF94 local geometry pipeline: add implicit hydrogens, embed with
+ * the graph-walk embedder, separate any overlapping atoms, then refine
+ * with MMFF94. Returns the best geometry available (refined, or the
+ * separated placed guess when the refinement cannot type the
+ * molecule) plus any stereo-enforcement warnings the sketch drew but
+ * the geometry could not honor. Runs inside the geometry worker for
+ * large molecules; also the synchronous fallback when Workers are
+ * unavailable — and the last resort when GFN2 cannot run.
+ */
+export function embedAndRefine(molecule: Molecule): EmbedResult {
+  const { placed, separated } = embed3D(molecule);
+  const refined = refineWithMMFF94(separated);
   if (refined && finite(refined)) {
     // MMFF94 has no reference angle for a trigonal center's substituent in
     // a 3-ring, so its minimum puckers the ring's exocyclic bonds out of
@@ -159,23 +189,15 @@ export function embedAndRefine(molecule: Molecule): EmbedResult {
     // planar there, so restore it after the refinement and before the
     // stereo enforcement, so the sketch's wedge still wins.
     const planar = restoreThreeRingPlanarity(refined);
-    // The optimizer walks downhill to the nearest minimum, and for a strained
-    // drawn stereoisomer that minimum can belong to a different one: the
-    // all-cis hexol's first hydroxyl came back trans (its all-cis chair has
-    // three 1,3-diaxial hydroxyls, so the descent preferred the epimer). The
-    // sketch is the specification, so re-assert it on the relaxed geometry —
-    // the enforcement moves only the wedged branch, and it runs after the
-    // refinement rather than before so nothing can undo it.
-    if (planar.bonds.some((b) => b.stereo)) return enforceStereo(planar);
-    return { molecule: planar, warnings: [] };
+    return { ...honourWedges(separated, planar), engine: 'mmff94' };
   }
   // The unrefined path kept place3D's geometry, whose enforcement ran before
   // separateOverlaps moved nonbonded pairs apart — a push through a
   // stereocenter can undo the very flip just made. Re-assert the sketch here
   // too, so the fallback never ships a wedge it has silently dropped.
-  const unrefined = finite(fallback) ? fallback : placed;
-  if (unrefined.bonds.some((b) => b.stereo)) return enforceStereo(unrefined);
-  return { molecule: restoreThreeRingPlanarity(unrefined), warnings: [] };
+  const unrefined = finite(separated) ? separated : placed;
+  if (unrefined.bonds.some((b) => b.stereo)) return { ...honourWedges(unrefined, unrefined), engine: 'mmff94' };
+  return { molecule: restoreThreeRingPlanarity(unrefined), warnings: [], engine: 'mmff94' };
 }
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {

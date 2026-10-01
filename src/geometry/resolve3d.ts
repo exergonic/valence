@@ -4,7 +4,7 @@ import { structuresMatch, unrepresentableCharge } from './validate-structure';
 import { ATOMIC_MASS } from '../chem/assign-mass';
 
 export interface PubChemInfo {
-  source: 'pubchem' | 'cir' | 'local';
+  source: 'pubchem' | 'cir' | 'local' | 'gfn2';
   cid?: string;
   name?: string; // Title from the PubChem property record
   formula?: string; // computed from the parsed molecule (all sources)
