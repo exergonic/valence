@@ -549,12 +549,20 @@ Open follow-ups, in the order they would pay off:
       time, and its own docs say "for exploration, not a production scientific
       environment".
 
-   **First step, if any: a spike**, in this project's own style — load the
-   deployed engine in a throwaway page, run water, benzene and OH· (the demo
-   already ships a radical preset, so unrestricted paths are exercised), check
-   energy and forces against the native/published values, and measure size and
-   speed. Legally free, and it answers the feasibility questions before the
-   licence conversation starts.
+   **The spike is DONE and it passes.** Full xTB is installed on lenovo as the
+   oracle (`~/opt/xtb/bin/xtb`, 6.7.1, hash-verified). The engine loads
+   client-side (949 kB + 39 kB side module, "engine ready", no errors). And on
+   the *same* geometry, GFN2 gives −31.755200321765 Eh from the native binary
+   against −31.755200 Eh from the browser engine — 3.2e-7 Eh, the readout's
+   whole resolution. Reference values for water, SF₆ and PCl₅ are recorded in
+   NOTES.md.
+
+   Two things sharpen the case. Their demo's SMILES path pre-relaxes with
+   MMFF94 and *refuses SF₆* ("MMFF94 pre-optimization failed") — the same wall
+   this app hits, which makes geometry the strongest argument for adopting it,
+   not the weakest. And the remaining question is no longer feasibility but
+   integration: how the loader, the module graph and the licence would fit a
+   static site, and which of the two engines owns geometry once it does.
 
 ## House rules that apply to every phase
 
