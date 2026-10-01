@@ -1228,9 +1228,9 @@ html, body {
   color: #fff;
 }
 
-#mo-diagram.hidden { display: none; }
-
-/* The localized list: one row per orbital, in the classifier's order. */
+/* One row per orbital, in both views: the delocalized ladder and the localized
+   list are the same molecules' orbitals described two ways, so they are the
+   same row — same height, same dot, same selected state. */
 #mo-list {
   flex: 1;
   min-height: 240px;
@@ -1241,10 +1241,8 @@ html, body {
   overflow-y: auto;
 }
 
-#mo-list.hidden { display: none; }
-
-/* Section headers: what is filled, then what is empty. */
-.lmo-group {
+/* Section headers: what is filled vs empty in the localized list. */
+.orb-group {
   margin: 6px 0 2px;
   color: #888;
   font-size: 10px;
@@ -1252,9 +1250,9 @@ html, body {
   text-transform: uppercase;
 }
 
-#mo-list .lmo-group:first-child { margin-top: 0; }
+#mo-list .orb-group:first-child { margin-top: 0; }
 
-.lmo-item {
+.orb-item {
   display: flex;
   align-items: baseline;
   gap: 8px;
@@ -1268,23 +1266,32 @@ html, body {
   cursor: pointer;
 }
 
-.lmo-item:hover { background: rgba(255, 255, 255, 0.1); }
+.orb-item:hover { background: rgba(255, 255, 255, 0.1); }
 
-.lmo-item.selected {
+.orb-item.selected {
   background: rgba(127, 168, 216, 0.25);
   border-color: rgba(127, 168, 216, 0.6);
   color: #fff;
 }
 
-.lmo-type {
+.orb-type {
   flex: 1;
   color: #9db8d8;
   font-variant-numeric: tabular-nums;
 }
 
+/* HOMO / LUMO, right-aligned on the row */
+.orb-tag {
+  flex: 0 0 auto;
+  color: #4488ff;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
 /* The dot shows the phase colour the orbital is drawn in, so the list and the
    picture agree when more than one orbital is up. Empty when unpicked. */
-.lmo-dot {
+.orb-dot {
   flex: 0 0 8px;
   width: 8px;
   height: 8px;
@@ -1294,7 +1301,7 @@ html, body {
   align-self: center;
 }
 
-.lmo-item.selected .lmo-type { color: #dceaff; }
+.orb-item.selected .orb-type { color: #dceaff; }
 
 
 #mo-body {
@@ -1305,85 +1312,6 @@ html, body {
   padding: 8px 10px 10px;
   overflow-y: auto;
 }
-
-#mo-diagram {
-  flex: 1;
-  min-height: 240px;
-  margin-bottom: 6px;
-  /* rows are ranked, so the diagram can be taller than the panel: nothing is
-     clipped away to fit, the frontier is scrolled into view instead */
-  overflow-y: auto;
-}
-
-.mo-svg {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-/* the visible bar: fat enough to read as a level rather than a hairline, and
-   separated from its neighbours by the row pitch */
-.mo-level .mo-bar {
-  stroke: #7fa8d8;
-  stroke-width: 6;
-  stroke-linecap: round;
-}
-
-.mo-level.occupied .mo-bar {
-  stroke: #cfd8e6;
-  stroke-width: 8;
-}
-
-/* the target is the whole row, so a level is as easy to hit as a row in the
-   localized list — degenerate sets included, each member its own slice */
-.mo-level .mo-hit {
-  stroke: transparent;
-  cursor: pointer;
-}
-
-.mo-level:hover .mo-bar {
-  stroke: #ffffff;
-}
-
-.mo-level.selected .mo-bar {
-  stroke: #4488ff;
-  stroke-width: 10;
-}
-
-.mo-arrows {
-  fill: #cfd8e6;
-  font-size: 10px;
-}
-
-/* the energy reads on the row now that position no longer encodes it */
-.mo-energy {
-  fill: #8a94a6;
-  font-size: 10px;
-  text-anchor: end;
-  font-variant-numeric: tabular-nums;
-}
-
-.mo-tag {
-  fill: #4488ff;
-  font-size: 8px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-}
-
-.mo-readout {
-  font-size: 10px;
-  color: #bbb;
-  margin-bottom: 4px;
-  min-height: 13px;
-}
-
-#mo-note:empty { display: none; }
-#mo-note { flex-shrink: 0; }
-
-/* MO panel: bigger type and hit areas now that there is room */
-.mo-svg .mo-arrows { font-size: 13px; }
-.mo-svg .mo-energy { font-size: 11px; }
-.mo-svg .mo-tag { font-size: 10px; }
 
 .mo-composition {
   font-size: 11px;

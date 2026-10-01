@@ -513,11 +513,11 @@ Open follow-ups, in the order they would pay off:
 
 11. **The delocalized view: ranked rows and a rename — SHIPPED 2026-09-30.**
    "Ladder" became "Delocalized", and its rows are ranked rather than placed by
-   energy: a fixed row height makes every level as clickable as a row in the
-   localized list, at the cost of proportional spacing, which the energy printed
-   on each row pays back. Degenerate sets still share a row as side-by-side
-   bars, and the reading is ascending, matching the localized list. NOTES.md has
-   the reasoning and the tag bug it surfaced.
+   energy: the levels are rows, styled exactly like the localized list's rows,
+   so both views read as one panel rather than two. The energy moves onto each
+   row, where it reads as well as it did on an axis, and the ordering is
+   ascending — lowest at the bottom — matching the localized list. NOTES.md has
+   the reasoning, the tag bug it surfaced, and what the SVG took with it.
 
 ## House rules that apply to every phase
 
