@@ -331,7 +331,23 @@ export function setupMoPanel(ctx: SceneContext) {
     }
     const labels = irreps();
     const rows: string[] = [];
+    const emptyCount = occupations ? levels.filter((l) => !l.occupied).length : 0;
+    let section: boolean | null = null;
     for (const group of [...groups].reverse()) {
+      // The occupied/empty split, as the localized list has it. Only when the
+      // filling is known: an open shell (or a partly-filled degenerate set)
+      // has levels but no determined occupancy, and a header would invent one.
+      if (occupations) {
+        const occupied = group[0].occupied;
+        if (occupied !== section) {
+          section = occupied;
+          rows.push(
+            `<div class="orb-group">${occupied
+              ? `Occupied · ${levels.length - emptyCount}`
+              : `Empty · ${emptyCount}`}</div>`,
+          );
+        }
+      }
       // the frontier can sit inside a degenerate set, so the tag belongs to the
       // group rather than to whichever member happens to be listed first.
       // Degenerate partners simply share an energy; a ×n marker beside the
