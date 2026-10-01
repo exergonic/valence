@@ -179,7 +179,9 @@ export function rebuildDisplay(ctx: SceneContext) {
   if (picks.length > 0 && ctx.ehResult) {
     if (ctx.display.smoothMo) {
       // one continuous surface of constant amplitude — the picture other
-      // programs draw. Cached per orbital: it costs ~50 ms to extract.
+      // programs draw. Cached per orbital: extracting one costs 100 ms on
+      // water and 300-950 ms on benzene, PCl₅ or I₂ (measured 2026-09-30, and
+      // it grows with the vertex count), so a level is paid for once.
       for (const pick of picks) {
         let surface = ctx.moSurfaces.get(pick.key);
         if (!surface) {

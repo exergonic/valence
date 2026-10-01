@@ -238,8 +238,12 @@ describe('the topology PM recovers', () => {
   });
 
   it('labels the way avo_ibo labels — their classes, in their words', () => {
-    // The classifier is a port of avo_ibo's `_classify_orbital`: the same
-    // names, the same gates, so our rows can be read beside an ibos.txt.
+    // The classifier is a port of avo_ibo's `_classify_orbital`: their names
+    // and their gates, plus four fixes they do not have — a polarization d is
+    // not a second centre, a same-n 3d is not a valence d, a neighbour under
+    // 0.10 leaves a lone pair a lone pair, and p density along the bond axis
+    // is σ. So our rows read beside an ibos.txt with those differences in
+    // mind, and the organic cases — where none of the four fires — agree.
     const water = localize('Water (H₂O)');
     // the classes present in the occupied block, whatever order the ladder
     // puts them in

@@ -49,9 +49,12 @@ export const MO_SURFACE_MARGIN = 2.5;
 
 /** Amplitudes evaluated per surface, i.e. grid points × orbitals. The step is
  *  chosen to stay inside this: a small molecule gets a fine grid (water lands
- *  at 0.1 Å, ~30 ms) and a large one a coarser grid rather than a stall. The
- *  facets were the complaint — at 0.25 Å a 1 Å lobe shows a dozen flat faces,
- *  which is what "jagged" was. */
+ *  at 0.1 Å) and a large one a coarser grid rather than a stall. Measured
+ *  2026-09-30, whole-surface extraction: 100 ms on water, 300-950 ms on
+ *  benzene, PCl₅ and I₂ — the cost tracks the vertex count, and it is paid
+ *  once per orbital because the renderer caches. The facets were the
+ *  complaint — at 0.25 Å a 1 Å lobe shows a dozen flat faces, which is what
+ *  "jagged" was. */
 const MAX_EVALUATIONS = 4_000_000;
 
 /**
