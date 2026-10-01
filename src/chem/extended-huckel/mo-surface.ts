@@ -19,9 +19,12 @@
  * and YAeHMOP): (2ζ)^(n+½)/√((2n)!) · r^(n−1) e^(−ζr) · Y, with that
  * orbital's own principal quantum number. The basis runs from 1s (hydrogen)
  * to 5p (iodine); a radial power written out for n ≤ 2 collapses every
- * heavier lobe onto the nucleus. Both sheets of the MO (ψ = +c and ψ = −c)
- * are extracted in one pass over |ψ|; the sign travels with each vertex so
- * the renderer can paint the two phases.
+ * heavier lobe onto the nucleus. The contour is a fraction of each atomic
+ * orbital's own peak: the normalized peak falls as the shell gets larger, and
+ * a fixed |ψ| that draws fluorine draws nothing on iodine. Both sheets
+ * (ψ = +c and ψ = −c) are extracted separately, so an edge that straddles a
+ * node cannot fuse the two lobes. The sign travels with each vertex so the
+ * renderer can paint the two phases.
  *
  * Pure — no Three.js — so the field and the surface are unit-testable.
  */
@@ -52,14 +55,16 @@ export const MO_SURFACE_MARGIN = 2.5;
 const MAX_EVALUATIONS = 4_000_000;
 
 /**
- * The isovalue, in the natural units of these Slater amplitudes (bohr^-3/2).
+ * The isovalue, as a fraction of a full atomic orbital's own peak.
  *
- * This is a display choice and it is the user's: how much of an orbital you see
- * is exactly what an isosurface level decides, and no single number suits both
- * a compact bonding orbital and the weak, diffuse lobes a heavy halogen
- * contributes to a MO that peaks elsewhere. The panel offers a range; the
- * default is the level that was calibrated by eye against other programs'
- * pictures (water and benzene peak near 0.22, so 20% of that is 0.0447).
+ * The surface is not drawn at a fixed |ψ|. A normalized Slater orbital's peak
+ * falls as the shell spreads out — fluorine 2p reaches ~0.78, iodine 5p ~0.19,
+ * a potassium 4s ~0.035 — so one absolute contour that sits inside a 2p lies
+ * above a 5p entirely, and the heavy atom's lobe never appears. Each basis
+ * function is divided by its own peak before the contour is taken (see
+ * `prepareOrbitals`), and the number here is that fraction: 0.04 draws the
+ * outer part of every shell, 0.30 only its core. The same setting then shows
+ * a hydrogen and an iodine.
  */
 export const MO_SURFACE_ISOVALUE = 0.04;
 
@@ -107,23 +112,24 @@ export interface MoSurfaceData {
 type Vec3 = [number, number, number];
 
 /**
- * ψ and ∇ψ at a point, in the frame's coordinates (Å). The gradient is the
- * analytic one — the normals are what the eye reads as the shape, and a
- * finite difference of the grid would facet it. Exported for the tests, which
- * check it against finite differences and against the known normalization of
- * a 1s Slater orbital.
- */
-/**
  * The per-orbital constants, flattened: [x, y, z, zeta, c·norm, ax, ay, az,
  * angular] per contributing AO. The inner loop runs once per grid point per
  * orbital, so the normalization (a power and a factorial) and the coefficient
  * are folded in here rather than recomputed a million times — that alone is
  * the difference between a 150 ms stall and a usable toggle.
+ *
+ * `unitPeak` divides each AO by the maximum of |χ| at coefficient 1. The
+ * overlap integrals need the true normalization; the picture does not. Without
+ * that division a coefficient of 1 on iodine peaks at a quarter of the same
+ * coefficient on fluorine, and the isovalue that draws the fluorine deletes
+ * the iodine. Both terms of a contracted d share one peak — the maximum of
+ * the sum, which is the orbital the basis actually contains.
  */
 export function prepareOrbitals(
   atoms: Molecule['atoms'],
   basis: BasisFunction[],
   coefficients: number[],
+  unitPeak = false,
 ): Float64Array {
   const prepared: number[] = [];
   for (let i = 0; i < basis.length; i++) {
@@ -137,6 +143,7 @@ export function prepareOrbitals(
     const angular = orbital.angular === 's'
       ? 1
       : orbital.angular === 'p' ? 2 : 3 + D_FUNCTIONS.indexOf(orbital.d!);
+    const peak = unitPeak ? aoPeakAmplitude(orbital) : 1;
     // One entry per Slater term: a contracted d contributes two, and the
     // evaluator's sum over entries is the sum over ζ for free.
     for (const term of slaterTerms(orbital)) {
@@ -144,12 +151,89 @@ export function prepareOrbitals(
       for (let k = 2; k <= 2 * orbital.n; k++) factorial *= k;
       const norm = Math.pow(2 * term.zeta, orbital.n + 0.5) / Math.sqrt(factorial);
       prepared.push(
-        atom.x, atom.y, atom.z, term.zeta, c * term.coefficient * norm,
+        atom.x, atom.y, atom.z, term.zeta, c * term.coefficient * norm / peak,
         orbital.axis[0], orbital.axis[1], orbital.axis[2], orbital.n, angular,
       );
     }
   }
   return new Float64Array(prepared);
+}
+
+/** Where a shell's |χ| is largest: along its lobe, or anywhere for an s. */
+function lobeDirection(orbital: BasisFunction): [number, number, number] {
+  if (orbital.angular === 'p') return orbital.axis;
+  if (orbital.angular !== 'd') return [0, 0, 1];
+  const h = Math.SQRT1_2;
+  switch (orbital.d) {
+    case 'z2': return [0, 0, 1];
+    case 'x2-y2': return [1, 0, 0];
+    case 'xy': return [h, h, 0];
+    case 'xz': return [h, 0, h];
+    default: return [0, h, h];
+  }
+}
+
+const peakCache = new Map<string, number>();
+
+/**
+ * The maximum of |χ| for this basis function at coefficient 1, in the same
+ * units `evaluateMo` returns. Cached per shell: every carbon 2p in a molecule
+ * is the same number, and the surface divides by it.
+ */
+export function aoPeakAmplitude(orbital: BasisFunction): number {
+  const key = [
+    orbital.n, orbital.angular, orbital.d ?? '',
+    orbital.zeta, orbital.zeta2 ?? '', orbital.coefficients?.join(',') ?? '',
+  ].join('|');
+  const cached = peakCache.get(key);
+  if (cached !== undefined) return cached;
+
+  const prepared = prepareOrbitals(
+    [{ element: 'X', x: 0, y: 0, z: 0, charge: 0 }],
+    [{ ...orbital, atomIndex: 0 }],
+    [1],
+  );
+  const [dx, dy, dz] = lobeDirection(orbital);
+  const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
+  let peak = 0;
+  let rPeak = 0;
+  // 0.01 Å is fine on the scale of 1/ζ; a second pass tightens the sample.
+  for (let i = 0; i <= 500; i++) {
+    const r = i * 0.01;
+    evaluatePrepared(r * dx, r * dy, r * dz, prepared, probe);
+    const amplitude = Math.abs(probe.value);
+    if (amplitude > peak) { peak = amplitude; rPeak = r; }
+  }
+  for (let i = -20; i <= 20; i++) {
+    const r = Math.max(0, rPeak + i * 0.0005);
+    evaluatePrepared(r * dx, r * dy, r * dz, prepared, probe);
+    peak = Math.max(peak, Math.abs(probe.value));
+  }
+  // a vanished shell must not turn the coefficient into an infinity
+  if (peak < 1e-12) peak = 1;
+  peakCache.set(key, peak);
+  return peak;
+}
+
+/** How far from its nucleus this AO stays above the display isovalue (Å).
+ *  The grid's margin has to reach it, or a diffuse shell is clipped open
+ *  while a compact one still fits in the old fixed pad. */
+function lobeReach(orbital: BasisFunction, coefficient: number, isovalue: number): number {
+  const prepared = prepareOrbitals(
+    [{ element: 'X', x: 0, y: 0, z: 0, charge: 0 }],
+    [{ ...orbital, atomIndex: 0 }],
+    [coefficient],
+    true,
+  );
+  const [dx, dy, dz] = lobeDirection(orbital);
+  const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
+  let outer = 0;
+  for (let i = 0; i <= 800; i++) {
+    const r = i * 0.01;
+    evaluatePrepared(r * dx, r * dy, r * dz, prepared, probe);
+    if (Math.abs(probe.value) >= isovalue) outer = r;
+  }
+  return outer;
 }
 
 /**
@@ -344,10 +428,21 @@ export function computeMoSurface(
   }
   if (contributing === 0) return empty;
 
-  const prepared = prepareOrbitals(atoms, basis, coefficients);
+  // Display scale: each AO divided by its own peak, so the isovalue is a
+  // fraction of a full shell and means the same thing on every element.
+  const prepared = prepareOrbitals(atoms, basis, coefficients, true);
 
-  minX -= margin; minY -= margin; minZ -= margin;
-  maxX += margin; maxY += margin; maxZ += margin;
+  // The fixed pad is enough for a first-row atom. A diffuse shell at the same
+  // fraction extends further, and clipping it leaves the mesh open.
+  let pad = margin;
+  for (let i = 0; i < basis.length; i++) {
+    if (Math.abs(coefficients[i]) / largest < 0.02) continue;
+    pad = Math.max(pad, lobeReach(basis[i], coefficients[i], isovalue) + 0.5);
+  }
+  pad = Math.min(pad, 8);
+
+  minX -= pad; minY -= pad; minZ -= pad;
+  maxX += pad; maxY += pad; maxZ += pad;
 
   // Choose the step from the budget rather than fixing it: a small molecule
   // can afford a fine grid, and its lobes are small enough that a coarse one
@@ -396,8 +491,7 @@ export function computeMoSurface(
   const cx = new Float64Array(4);
   const cy = new Float64Array(4);
   const cz = new Float64Array(4);
-  const cf = new Float64Array(4); // |ψ|
-  const cSigned = new Float64Array(4); // ψ, for the phase
+  const cSigned = new Float64Array(4); // ψ
   const px = new Float64Array(4);
   const py = new Float64Array(4);
   const pz = new Float64Array(4);
@@ -434,47 +528,54 @@ export function computeMoSurface(
 
   const EDGE: number[][] = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
 
-  for (let gz = 0; gz < nz - 1; gz++) {
-    for (let gy = 0; gy < ny - 1; gy++) {
-      for (let gx = 0; gx < nx - 1; gx++) {
-        for (const tet of TETRAHEDRA) {
-          let mask = 0;
-          for (let c = 0; c < 4; c++) {
-            const corner = tet[c];
-            const index = (gx + CORNER[corner][0]) + (gy + CORNER[corner][1]) * nx + (gz + CORNER[corner][2]) * nx * ny;
-            const signed = field[index];
-            const magnitude = Math.abs(signed);
-            cx[c] = minX + (gx + CORNER[corner][0]) * step;
-            cy[c] = minY + (gy + CORNER[corner][1]) * step;
-            cz[c] = minZ + (gz + CORNER[corner][2]) * step;
-            cf[c] = magnitude;
-            cSigned[c] = signed;
-            if (magnitude > isovalue) mask |= 1 << c;
-          }
-          if (mask === 0 || mask === 15) continue;
+  // One pass per phase sheet, on the signed field. Marching |ψ| instead looks
+  // the same until a grid edge straddles the node with both samples above the
+  // contour: |ψ| is then "inside" at both ends, the dip through zero is
+  // invisible, and the two lobes fuse. ψ = +c and ψ = −c each cross that edge
+  // once, and the gap between them stays empty.
+  for (const positive of [true, false]) {
+    const level = positive ? isovalue : -isovalue;
+    for (let gz = 0; gz < nz - 1; gz++) {
+      for (let gy = 0; gy < ny - 1; gy++) {
+        for (let gx = 0; gx < nx - 1; gx++) {
+          for (const tet of TETRAHEDRA) {
+            let mask = 0;
+            for (let c = 0; c < 4; c++) {
+              const corner = tet[c];
+              const index = (gx + CORNER[corner][0]) + (gy + CORNER[corner][1]) * nx + (gz + CORNER[corner][2]) * nx * ny;
+              const signed = field[index];
+              cx[c] = minX + (gx + CORNER[corner][0]) * step;
+              cy[c] = minY + (gy + CORNER[corner][1]) * step;
+              cz[c] = minZ + (gz + CORNER[corner][2]) * step;
+              cSigned[c] = signed;
+              const inside = positive ? signed > isovalue : signed < -isovalue;
+              if (inside) mask |= 1 << c;
+            }
+            if (mask === 0 || mask === 15) continue;
 
-          let crossings = 0;
-          for (const [i, j] of EDGE) {
-            const insideI = (mask >> i) & 1;
-            const insideJ = (mask >> j) & 1;
-            if (insideI === insideJ) continue;
-            const denom = cf[j] - cf[i];
-            const t = denom === 0 ? 0.5 : (isovalue - cf[i]) / denom;
-            px[crossings] = cx[i] + t * (cx[j] - cx[i]);
-            py[crossings] = cy[i] + t * (cy[j] - cy[i]);
-            pz[crossings] = cz[i] + t * (cz[j] - cz[i]);
-            pSign[crossings] = cSigned[i] + t * (cSigned[j] - cSigned[i]) >= 0 ? 1 : -1;
-            crossings++;
+            let crossings = 0;
+            for (const [i, j] of EDGE) {
+              const insideI = (mask >> i) & 1;
+              const insideJ = (mask >> j) & 1;
+              if (insideI === insideJ) continue;
+              const denom = cSigned[j] - cSigned[i];
+              const t = denom === 0 ? 0.5 : (level - cSigned[i]) / denom;
+              px[crossings] = cx[i] + t * (cx[j] - cx[i]);
+              py[crossings] = cy[i] + t * (cy[j] - cy[i]);
+              pz[crossings] = cz[i] + t * (cz[j] - cz[i]);
+              pSign[crossings] = positive ? 1 : -1;
+              crossings++;
+            }
+            if (crossings === 3) {
+              emit(0, 1, 2);
+            } else if (crossings === 4) {
+              // the quad in edge order (a-c, a-d, b-d, b-c for inside a,b)
+              emit(0, 1, 3);
+              emit(0, 3, 2);
+            }
+            // 6 crossings would mean a degenerate tet; the 6-tet decomposition
+            // cannot produce one, and emitting nothing keeps the mesh closed
           }
-          if (crossings === 3) {
-            emit(0, 1, 2);
-          } else if (crossings === 4) {
-            // the quad in edge order (a-c, a-d, b-d, b-c for inside a,b)
-            emit(0, 1, 3);
-            emit(0, 3, 2);
-          }
-          // 6 crossings would mean a degenerate tet; the 6-tet decomposition
-          // cannot produce one, and emitting nothing keeps the mesh closed
         }
       }
     }

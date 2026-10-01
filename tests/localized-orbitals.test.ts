@@ -267,7 +267,75 @@ describe('the topology PM recovers', () => {
       expect(bridge.atoms.some((a) => diborane.molecule.atoms[a].element === 'B')).toBe(true);
     }
   });
+
+  it('sulfur diiodide is two σ bonds and eight lone pairs — the 3d tail is not a δ bond', () => {
+    // PubChem CID 20583912, the 3D conformer. An iodine lone pair here is
+    // 0.90 on I and 0.10 on sulfur, and that 0.10 is the 3d. Read as a bond
+    // and typed by the d shape, it came out δ or π. Lewis: two S–I bonds,
+    // two lone pairs on S, three on each I.
+    const molecule = parseMolBlock(SULFUR_DIIODIDE);
+    const result = solveExtendedHuckel(molecule)!;
+    const rows = localizeOrbitals(molecule, result)!;
+    const list = orderLocalizedOrbitals(molecule, result, rows).filter((o) => o.occupied);
+    expect(count(list, 'sigma')).toBe(2);
+    expect(count(list, 'lone pair')).toBe(8);
+    expect(count(list, 'pi')).toBe(0);
+    expect(count(list, 'delta')).toBe(0);
+    for (const bond of list.filter((o) => o.character === 'sigma')) {
+      const elements = bond.atoms.map((index) => molecule.atoms[index].element);
+      expect(elements).toContain('S');
+      expect(elements).toContain('I');
+    }
+    for (const lonePair of list.filter((o) => o.character === 'lone pair')) {
+      expect(lonePair.atoms).toHaveLength(1);
+    }
+  });
+
+  it('I₂\'s bond is σ — the two 5p orbitals point along the axis', () => {
+    // PubChem CID 807. Both atoms are almost pure p, which is the π test,
+    // but the lobes run along the bond.
+    const molecule = parseMolBlock(DIIODINE);
+    const result = solveExtendedHuckel(molecule)!;
+    const rows = localizeOrbitals(molecule, result)!;
+    const list = orderLocalizedOrbitals(molecule, result, rows).filter((o) => o.occupied);
+    expect(count(list, 'sigma')).toBe(1);
+    expect(count(list, 'lone pair')).toBe(6);
+    expect(count(list, 'pi')).toBe(0);
+  });
+
+  it('phosphorus pentachloride is five σ bonds and fifteen chlorine lone pairs', () => {
+    // Three of the chlorine lone pairs sit at 0.90 on Cl with the rest on
+    // phosphorus's 3d, and that tail was being labelled σ or π.
+    const pcl5 = localize('Phosphorus pentachloride (PCl₅)');
+    expect(countIn(pcl5, 'sigma')).toBe(5);
+    expect(countIn(pcl5, 'lone pair')).toBe(15);
+    expect(countIn(pcl5, 'pi')).toBe(0);
+    expect(countIn(pcl5, 'delta')).toBe(0);
+  });
 });
+
+// PubChem 3D conformers (record_type=3d).
+const SULFUR_DIIODIDE = `20583912
+  -OEChem-09302622053D
+
+  3  2  0     0  0  0  0  0  0999 V2000
+   -1.7658   -0.5125    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0
+    1.7661   -0.5122    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0003    1.0247    0.0000 S   0  0  0  0  0  0  0  0  0  0  0  0
+  1  3  1  0  0  0  0
+  2  3  1  0  0  0  0
+M  END
+`;
+
+const DIIODINE = `807
+  -OEChem-09302622053D
+
+  2  1  0     0  0  0  0  0  0999 V2000
+   -1.3260    0.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3260    0.0000    0.0000 I   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+`;
 
 describe('the refusals', () => {
   it('an open shell (O2\'s partly-filled π*) gets no localized orbitals', () => {
@@ -312,6 +380,26 @@ describe('the refusals', () => {
     const result = solveExtendedHuckel(molecule)!;
     expect(result.electronCount % 2).toBe(0);
     expect(localizeOrbitals(molecule, result)).toBeNull();
+  });
+
+  it('localizes zinc chloride — the d¹⁰ electrons are core, not valence', () => {
+    // Zn is carried s+p only. Counting Nvalen's 12 puts the ten 3d electrons
+    // into a basis that has no d shell, and the filling stops inside a
+    // degenerate pair, so the molecule used to get no localized orbitals at
+    // all. The bonding count is the 4s².
+    const molecule = example('Zinc chloride (ZnCl₂)');
+    const result = solveExtendedHuckel(molecule)!;
+    expect(result.electronCount).toBe(16);
+    const localized = localizeOrbitals(molecule, result);
+    expect(localized).not.toBeNull();
+    const ordered = orderLocalizedOrbitals(molecule, result, localized!);
+    const bonds = ordered.filter((orbital) => orbital.occupied && orbital.character === 'sigma');
+    expect(bonds).toHaveLength(2);
+    for (const bond of bonds) {
+      const elements = bond.atoms.map((index) => molecule.atoms[index].element);
+      expect(elements).toContain('Zn');
+      expect(elements).toContain('Cl');
+    }
   });
 
   it('an odd electron count gets none either', () => {

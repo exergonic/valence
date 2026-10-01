@@ -17,7 +17,9 @@ import { embedAndRefine } from '../src/geometry/mmff-refine';
 import { symmetrizeMolecule } from '../src/geometry/symmetrize';
 import { solveExtendedHuckel } from '../src/chem/extended-huckel/solve';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
-import { computeMoSurface, evaluateMo } from '../src/chem/extended-huckel/mo-surface';
+import { aoPeakAmplitude, computeMoSurface, evaluateMo } from '../src/chem/extended-huckel/mo-surface';
+import { localizeOrbitals } from '../src/chem/localized-orbitals/localize-pm';
+import { orderLocalizedOrbitals } from '../src/chem/localized-orbitals/order-localized';
 import type { BasisFunction } from '../src/chem/extended-huckel/assign-basis';
 
 /** CODATA Bohr radius in Å, written out rather than imported. The 1s value
@@ -83,9 +85,77 @@ describe('the MO isosurface', () => {
         surface.positions[i * 3], surface.positions[i * 3 + 1], surface.positions[i * 3 + 2],
       ));
     }
-    // (n−1)/ζ = 0.91 Å is the radial maximum; |ψ| = 0.10 crosses again near 1.53 Å.
-    // The 2p formula's whole sheet lived inside 0.58 Å.
+    // (n−1)/ζ = 0.91 Å is the radial maximum. The contour is a fraction of
+    // that shell's own peak, so 0.10 sits further out than the old absolute
+    // |ψ| = 0.10 (which crossed near 1.53 Å). The 2p formula's whole sheet
+    // lived inside 0.58 Å, which is what this bound still catches.
     expect(maxRadius).toBeGreaterThan(1.2);
+  });
+
+  it('draws a compact 2p and a diffuse 5p at the same isovalue', () => {
+    // Fluorine 2p peaks near 0.78 and iodine 5p near 0.19, in the true
+    // amplitude. An absolute contour of 0.20 is inside the fluorine lobe and
+    // above the entire iodine lobe, so the iodine surface never appears.
+    // Dividing each shell by its own peak makes 0.20 a fifth of either lobe.
+    const shells = [
+      { element: 'F', n: 2, zeta: 2.425 },
+      { element: 'I', n: 5, zeta: 2.322 },
+    ];
+    const peaks: number[] = [];
+    for (const { element, n, zeta } of shells) {
+      const basis: BasisFunction = {
+        atomIndex: 0, angular: 'p', axis: [0, 0, 1], n, zeta, hii: -12, label: `${element} ${n}pz`,
+      };
+      peaks.push(aoPeakAmplitude(basis));
+      const molecule: Molecule = { atoms: [{ element, x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
+      const surface = computeMoSurface(molecule, [basis], [1], 0.2);
+      expect(surface.vertexCount).toBeGreaterThan(0);
+      let positive = 0;
+      let negative = 0;
+      let maxRadius = 0;
+      for (let i = 0; i < surface.vertexCount; i++) {
+        maxRadius = Math.max(maxRadius, Math.hypot(
+          surface.positions[i * 3], surface.positions[i * 3 + 1], surface.positions[i * 3 + 2],
+        ));
+        if (surface.phases[i] > 0) positive++;
+        else negative++;
+      }
+      // past the radial maximum: the lobe is drawn, not a scrap at the peak
+      const rMax = ((n - 1) / zeta) * 0.529177210903;
+      expect(maxRadius).toBeGreaterThan(rMax);
+      // both sheets, so the nodal plane was not marched over
+      expect(positive).toBeGreaterThan(0);
+      expect(negative).toBeGreaterThan(0);
+    }
+    expect(peaks[0] / peaks[1]).toBeGreaterThan(3);
+  });
+
+  it('draws both ends of an S–F bond at the localized default', () => {
+    // At an absolute 0.10 the sulfur end of an SF₆ σ bond peaks near 0.04
+    // and the surface is entirely on fluorine. The bond is the case the
+    // peak scaling exists for.
+    const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Sulfur hexafluoride'))!.mol)!;
+    const result = solveExtendedHuckel(molecule)!;
+    const localized = localizeOrbitals(molecule, result)!;
+    const bond = orderLocalizedOrbitals(molecule, result, localized)
+      .find((orbital) => orbital.occupied && orbital.character === 'sigma')!;
+    const surface = computeMoSurface(molecule, result.basis, bond.coefficients, 0.1);
+    const near = new Map<string, number>();
+    for (let i = 0; i < surface.vertexCount; i++) {
+      const x = surface.positions[i * 3];
+      const y = surface.positions[i * 3 + 1];
+      const z = surface.positions[i * 3 + 2];
+      let best = 0;
+      let bestD = Infinity;
+      molecule.atoms.forEach((atom, a) => {
+        const d = Math.hypot(x - atom.x, y - atom.y, z - atom.z);
+        if (d < bestD) { bestD = d; best = a; }
+      });
+      const element = molecule.atoms[best].element;
+      near.set(element, (near.get(element) ?? 0) + 1);
+    }
+    expect(near.get('S') ?? 0).toBeGreaterThan(30);
+    expect(near.get('F') ?? 0).toBeGreaterThan(30);
   });
 
   it('evaluates a normalized 3d Slater orbital, and its gradient, exactly', () => {

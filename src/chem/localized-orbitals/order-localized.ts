@@ -25,6 +25,8 @@
  * string, so nothing is lost by not also sorting on it.
  */
 import type { Molecule } from '../../mol-parser';
+import { alignToPrincipalAxes } from '../extended-huckel/align-principal-axes';
+import { EH_PARAMETERS } from '../extended-huckel/parameters';
 import type { ExtendedHuckelResult } from '../extended-huckel/solve';
 import type { DFunction } from '../extended-huckel/assign-basis';
 import { aoWeights, atomicPopulations, bondPopulations } from './mulliken-populations';
@@ -63,7 +65,7 @@ export interface LocalizedOrbital {
   /** Coefficients per AO, in the calculation frame and the solver's basis
    *  order — the same shape the MO renderers already take. */
   coefficients: number[];
-  /** ⟨φ|H|φ⟩ in eV. The sort key within a class, and never displayed. */
+  /** ⟨φ|H|φ⟩ in eV. The sort key within a section, and never displayed. */
   energy: number;
   character: LocalizedCharacter;
   /** Doubly occupied (an occupied-space orbital), or empty (a
@@ -72,9 +74,9 @@ export interface LocalizedOrbital {
   occupied: boolean;
   /** Mulliken population per atom, in atom order. */
   populations: number[];
-  /** The atoms that carry it, strongest first — the same `ATOM_CARRIER`
-   *  threshold the character test uses, so a percent-scale tail on a
-   *  neighbouring atom is not listed as a second centre. */
+  /** The atoms that carry it, strongest first. A share under 0.10 is a
+   *  tail, and so is population that sits only in a same-n polarization d,
+   *  so a lone pair names one atom. */
   atoms: number[];
 }
 
@@ -97,6 +99,9 @@ const LP_S_S_CHARACTER = 0.5;
 /** Their 2e3c: a third atom above this, and no fourth above the gate. */
 const THREE_CENTRE_THIRD = 0.10;
 const THREE_CENTRE_FOURTH_MAX = 0.03;
+/** An atom carries an orbital at this much of it — the three-centre gate,
+ *  reused for the centre list the panel prints. A smaller share is a tail. */
+const ATOM_CARRIER = THREE_CENTRE_THIRD;
 /** Their π test inside a bond: both atoms this rich in p, or it is a σ. */
 const PI_P_FRACTION = 0.85;
 /** The virtuals' looser gates, theirs: the same sigma/pi test, then a
@@ -129,21 +134,41 @@ interface AtomShare {
   d: number;
   /** The dominant d function on this atom by |weight|; null when it has none. */
   dominantD: DFunction | null;
+  /** Weight in a same-n d shell (Si, P, S, Cl). Polarization, not a centre. */
+  polarization: number;
+}
+
+/** A same-n d shell: Si, P, S, Cl. It polarizes the valence s and p; it is
+ *  not the valence shell the way a metal's d (one n below the s) is. */
+function polarizationD(element: string): boolean {
+  const row = EH_PARAMETERS[element.toUpperCase()];
+  return !!row?.d && row.d.n === row.s.n;
+}
+
+/** A valence d shell, n one below the s: the d block. 4d and 5d included;
+ *  the same-n polarization functions are not. */
+function valenceDShell(element: string): boolean {
+  const row = EH_PARAMETERS[element.toUpperCase()];
+  return !!row?.d && row.d.n < row.s.n;
+}
+
+/** What counts as this atom carrying the orbital. Polarization d dresses a
+ *  tail — sulfur's 3d under an iodine lone pair — and is not a second centre. */
+function centreShare(share: AtomShare): number {
+  return Math.max(0, share.total - Math.max(0, share.polarization));
 }
 
 /** Per-atom s/p/d shares of an orbital, from the same AO weights the
  *  populations use. A negative total (an out-of-phase tail) counts as none. */
 function atomShares(
-  coefficients: number[],
-  overlap: number[][],
+  weights: number[],
   basis: ExtendedHuckelResult['basis'],
-  atomCount: number,
+  elements: string[],
 ): AtomShare[] {
-  const weights = aoWeights(coefficients, overlap);
-  const shares: AtomShare[] = Array.from({ length: atomCount }, (_, atom) => ({
-    atom, total: 0, s: 0, p: 0, d: 0, dominantD: null,
+  const shares: AtomShare[] = Array.from({ length: elements.length }, (_, atom) => ({
+    atom, total: 0, s: 0, p: 0, d: 0, dominantD: null, polarization: 0,
   }));
-  const bestD = new Array<number>(atomCount).fill(0);
+  const bestD = new Array<number>(elements.length).fill(0);
   for (let m = 0; m < basis.length; m++) {
     const orbital = basis[m];
     const share = shares[orbital.atomIndex];
@@ -153,6 +178,7 @@ function atomShares(
     else if (orbital.angular === 'p') share.p += weight;
     else {
       share.d += weight;
+      if (polarizationD(elements[orbital.atomIndex])) share.polarization += weight;
       if (Math.abs(weight) > bestD[orbital.atomIndex]) {
         bestD[orbital.atomIndex] = Math.abs(weight);
         share.dominantD = orbital.d ?? null;
@@ -163,19 +189,66 @@ function atomShares(
   return shares;
 }
 
+/** True when both atoms' p density lies along the bond rather than across it.
+ *  The basis axes are the calculation frame's, so the bond has to be too. */
+function pPointsAlongBond(
+  a: number,
+  b: number,
+  weights: number[],
+  basis: ExtendedHuckelResult['basis'],
+  frameAtoms: Molecule['atoms'],
+): boolean {
+  const dx = frameAtoms[a].x - frameAtoms[b].x;
+  const dy = frameAtoms[a].y - frameAtoms[b].y;
+  const dz = frameAtoms[a].z - frameAtoms[b].z;
+  const norm = Math.hypot(dx, dy, dz);
+  if (norm < 1e-8) return false;
+  const bx = dx / norm;
+  const by = dy / norm;
+  const bz = dz / norm;
+  const alongFraction = (atom: number) => {
+    let along = 0;
+    let total = 0;
+    for (let m = 0; m < basis.length; m++) {
+      const orbital = basis[m];
+      if (orbital.atomIndex !== atom || orbital.angular !== 'p') continue;
+      const w = Math.max(0, weights[m]);
+      const proj = orbital.axis[0] * bx + orbital.axis[1] * by + orbital.axis[2] * bz;
+      total += w;
+      along += w * proj * proj;
+    }
+    return total > 1e-8 ? along / total : 0;
+  };
+  return alongFraction(a) > 0.5 && alongFraction(b) > 0.5;
+}
+
 /**
  * σ, π or δ for a two-centre orbital — avo_ibo's `_two_center_bond_type`.
  *
  * The organic default is π when BOTH atoms draw their share mostly from p
- * functions, and σ otherwise. A metal overrides it: when one of the two atoms
- * carries a d shell and its share there is majority d, the shape of the
- * dominant d decides — z² is σ, xz and yz are π, xy and x²−y² are δ. Their
- * code restricts that branch to Z 21–30 because their examples were 3d; here it
- * applies to any element whose d shell is in the basis, which is the same rule
- * carried to the 4d and 5d rows this app also has.
+ * functions, and σ otherwise. That calls I₂'s bond a π: it is two 5p orbitals
+ * pointing at each other and has almost no s, so both atoms clear the p gate.
+ * When that happens the bond direction decides. p density along the
+ * internuclear axis is σ, across it is π.
+ *
+ * A metal overrides either answer. When a valence d shell carries the majority
+ * of that atom's share, the dominant d decides — z² is σ, xz and yz are π, xy
+ * and x²−y² are δ. avo_ibo restricts the branch to Z 21–30; the same rule
+ * covers the 4d and 5d rows and stops there. The same-n d on Si, P, S and Cl
+ * is polarization. A sulfur 3d tail under an iodine lone pair is not a δ bond.
  */
-function twoCentreType(a: AtomShare, b: AtomShare): 'sigma' | 'pi' | 'delta' {
-  const metal = [a, b].find((share) => share.dominantD !== null && share.d > 0.5 * share.total);
+function twoCentreType(
+  a: AtomShare,
+  b: AtomShare,
+  elements: string[],
+  weights: number[],
+  basis: ExtendedHuckelResult['basis'],
+  frameAtoms: Molecule['atoms'],
+): 'sigma' | 'pi' | 'delta' {
+  const metal = [a, b].find((share) =>
+    share.dominantD !== null
+    && share.d > 0.5 * share.total
+    && valenceDShell(elements[share.atom]));
   if (metal) {
     const kind = metal.dominantD;
     if (kind === 'xy' || kind === 'x2-y2') return 'delta';
@@ -183,7 +256,8 @@ function twoCentreType(a: AtomShare, b: AtomShare): 'sigma' | 'pi' | 'delta' {
     return 'sigma';
   }
   const fraction = (share: AtomShare) => (share.total > 0 ? share.p / share.total : 0);
-  return fraction(a) > PI_P_FRACTION && fraction(b) > PI_P_FRACTION ? 'pi' : 'sigma';
+  if (fraction(a) <= PI_P_FRACTION || fraction(b) <= PI_P_FRACTION) return 'sigma';
+  return pPointsAlongBond(a.atom, b.atom, weights, basis, frameAtoms) ? 'sigma' : 'pi';
 }
 
 /**
@@ -198,16 +272,21 @@ function classify(
   occupied: boolean,
   bondPops: number[],
   molecule: Molecule,
+  weights: number[],
+  basis: ExtendedHuckelResult['basis'],
+  frameAtoms: Molecule['atoms'],
 ): LocalizedCharacter {
   const [first, second, third, fourth] = shares;
   if (!first) return 'virtual';
+  const elements = molecule.atoms.map((atom) => atom.element);
   const share = (n: number) => (shares[n] ? shares[n].total : 0);
   const sFraction = first.total > 0 ? first.s / first.total : 0;
 
   // their two-centre gate, and the σ/π/δ typing behind it
   const twoCentre = (gate: number) => share(0) + share(1) > gate && share(1) > BOND_SECOND_MIN;
   const bondCharacter = (): LocalizedCharacter => {
-    const kind = twoCentreType(first, second);
+    if (!second) return 'sigma';
+    const kind = twoCentreType(first, second, elements, weights, basis, frameAtoms);
     const bondedPair = molecule.bonds.findIndex(
       (b) => (b.atom1Index === first.atom && b.atom2Index === second.atom)
         || (b.atom2Index === first.atom && b.atom1Index === second.atom),
@@ -237,13 +316,21 @@ function classify(
     // n = 1 condition would mislabel a hydride (see the type's comment)
     if (first.total > LP_SHARE) return 'lone pair';
     if (threeCentre) return 'three-centre';
+    // SI₂'s iodine lone pairs sit at 0.90 on the iodine with the rest on
+    // sulfur's 3d, just short of the 0.90 lone-pair gate above. The bond
+    // test then accepts the tail, and the d shape names the orbital δ or π.
+    // With the polarization d set aside the neighbour is a percent or two,
+    // under the 0.10 a second centre has to carry.
+    if (second && first.total > LP_S_SHARE && centreShare(second) <= ATOM_CARRIER) {
+      return sFraction > LP_S_S_CHARACTER ? 'lone pair s' : 'lone pair';
+    }
     if (twoCentre(BOND_SHARE)) return bondCharacter();
     if (first.total > LP_S_SHARE) return sFraction > LP_S_S_CHARACTER ? 'lone pair s' : 'lone pair';
     return 'delocalized';
   }
 
-  if (twoCentre(BOND_SHARE)) {
-    const kind = twoCentreType(first, second);
+  if (second && twoCentre(BOND_SHARE)) {
+    const kind = twoCentreType(first, second, elements, weights, basis, frameAtoms);
     return kind === 'pi' ? 'pi antibond' : kind === 'delta' ? 'delta antibond' : 'sigma antibond';
   }
   if (third && third.total > VIRT_THREE_CENTRE_THIRD) {
@@ -261,49 +348,50 @@ function describe(
   result: ExtendedHuckelResult,
   coefficients: number[],
   occupied: boolean,
+  frameAtoms: Molecule['atoms'],
 ): LocalizedOrbital {
   const atomCount = molecule.atoms.length;
+  const elements = molecule.atoms.map((atom) => atom.element);
   const populations = atomicPopulations(coefficients, result.overlap, result.basis, atomCount);
-  const shares = atomShares(coefficients, result.overlap, result.basis, atomCount)
+  const weights = aoWeights(coefficients, result.overlap);
+  const shares = atomShares(weights, result.basis, elements)
     .sort((x, y) => y.total - x.total);
   const bondPops = bondPopulations(coefficients, result.overlap, result.basis, molecule.bonds);
-  const ordered = shares.filter((share) => share.total > ATOM_CARRIER).map((share) => share.atom);
+  // Polarization d does not make a second centre: SI₂'s sulfur 3d tail is
+  // 0.10 of an iodine lone pair, and listing it draws "lone pair I–S".
+  const ordered = shares.filter((share) => centreShare(share) > ATOM_CARRIER).map((share) => share.atom);
   return {
     coefficients,
     energy: quadratic(result.hamiltonian, coefficients),
-    character: classify(shares, occupied, bondPops, molecule),
+    character: classify(shares, occupied, bondPops, molecule, weights, result.basis, frameAtoms),
     occupied,
     populations,
-    // the atoms that carry it, strongest first. 0.10 is the same gate the
-    // classifier's three-centre test reads, so a percent-scale tail on a
-    // neighbouring atom is not listed as a second centre.
     atoms: ordered,
   };
 }
 
-/** An atom "carries" an orbital at this much of it — the classifier's own
- *  three-centre gate, reused for the centre list the panel prints. */
-const ATOM_CARRIER = 0.10;
 /**
  * Describe and order the localized orbitals. `localized` is the pair of blocks
  * from `localizeOrbitals`.
  *
  * Two sections: the occupied orbitals first, then the empty valence-virtuals.
- * Each is ordered by character and then by energy within the class, so the
- * frontier orbitals of a section are not scattered through it. The sections
- * themselves are the display's split — a chemist reads "what is filled" before
- * "what is empty", and a hyperconjugation pair is one click from each.
+ * Each section is an energy ladder, lowest first — the class is the label,
+ * not the rank. A class-first order was tried and reversed; the note at the
+ * top of this file has the measurement. The sections themselves are the
+ * display's split — a chemist reads "what is filled" before "what is empty",
+ * and a hyperconjugation pair is one click from each.
  *
- * The classifier reads populations and shells only — no geometry — so the
- * calculation frame never enters it.
+ * The σ/π decision for a p–p bond reads the bond direction in the calculation
+ * frame (the basis axes live there). Everything else is populations.
  */
 export function orderLocalizedOrbitals(
   molecule: Molecule,
   result: ExtendedHuckelResult,
   localized: LocalizedSets,
 ): LocalizedOrbital[] {
+  const frameAtoms = alignToPrincipalAxes(molecule).atoms;
   const describeBlock = (rows: number[][], occupied: boolean) => rows.map(
-    (coefficients) => describe(molecule, result, coefficients, occupied),
+    (coefficients) => describe(molecule, result, coefficients, occupied, frameAtoms),
   );
   return [
     ...describeBlock(localized.occupied, true).sort(bySectionThenEnergy),
