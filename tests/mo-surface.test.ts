@@ -17,7 +17,7 @@ import { embedAndRefine } from '../src/geometry/mmff-refine';
 import { symmetrizeMolecule } from '../src/geometry/symmetrize';
 import { solveExtendedHuckel } from '../src/chem/extended-huckel/solve';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
-import { aoPeakAmplitude, computeMoSurface, evaluateMo } from '../src/chem/extended-huckel/mo-surface';
+import { computeMoField, computeMoSurface, evaluateMo, levelForFraction, marchMoField } from '../src/chem/extended-huckel/mo-surface';
 import { localizeOrbitals } from '../src/chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../src/chem/localized-orbitals/order-localized';
 import type { BasisFunction } from '../src/chem/extended-huckel/assign-basis';
@@ -92,23 +92,24 @@ describe('the MO isosurface', () => {
     expect(maxRadius).toBeGreaterThan(1.2);
   });
 
-  it('draws a compact 2p and a diffuse 5p at the same isovalue', () => {
-    // Fluorine 2p peaks near 0.78 and iodine 5p near 0.19, in the true
-    // amplitude. An absolute contour of 0.20 is inside the fluorine lobe and
-    // above the entire iodine lobe, so the iodine surface never appears.
-    // Dividing each shell by its own peak makes 0.20 a fifth of either lobe.
+  it('draws a compact 2p and a diffuse 5p at the same percentile', () => {
+    // The absolute contour at 0.20 sat inside a fluorine 2p and above the whole
+    // iodine 5p, so the iodine never appeared. Dividing each shell by its own
+    // peak fixed that by distorting the field — nodes moved, and the heavy end
+    // was drawn out of proportion. A percentile fixes it honestly: the same
+    // share of either orbital is drawn, at whatever level that share sits.
     const shells = [
       { element: 'F', n: 2, zeta: 2.425 },
       { element: 'I', n: 5, zeta: 2.322 },
     ];
-    const peaks: number[] = [];
     for (const { element, n, zeta } of shells) {
       const basis: BasisFunction = {
         atomIndex: 0, angular: 'p', axis: [0, 0, 1], n, zeta, hii: -12, label: `${element} ${n}pz`,
       };
-      peaks.push(aoPeakAmplitude(basis));
       const molecule: Molecule = { atoms: [{ element, x: 0, y: 0, z: 0, charge: 0 }], bonds: [] };
-      const surface = computeMoSurface(molecule, [basis], [1], 0.2);
+      const grid = computeMoField(molecule, [basis], [1]);
+      expect(grid).not.toBeNull();
+      const surface = marchMoField(grid!, levelForFraction(grid!, 0.9));
       expect(surface.vertexCount).toBeGreaterThan(0);
       let positive = 0;
       let negative = 0;
@@ -127,7 +128,47 @@ describe('the MO isosurface', () => {
       expect(positive).toBeGreaterThan(0);
       expect(negative).toBeGreaterThan(0);
     }
-    expect(peaks[0] / peaks[1]).toBeGreaterThan(3);
+  });
+
+  it('a percentile encloses the share of the orbital it claims', () => {
+    // The property the whole mode rests on, measured straight back off the
+    // field: the level returned for a fraction encloses that fraction. If this
+    // drifts, every picture drawn in the mode is a different cut than the
+    // control says — which is the failure the per-AO scaling was hiding.
+    const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Water'))!.mol)!;
+    const result = solveExtendedHuckel(molecule)!;
+    const grid = computeMoField(molecule, result.basis, result.coefficients[3])!;
+    let total = 0;
+    for (let i = 0; i < grid.values.length; i++) total += grid.values[i] * grid.values[i];
+    for (const fraction of [0.5, 0.8, 0.95]) {
+      const level = levelForFraction(grid, fraction);
+      let inside = 0;
+      for (let i = 0; i < grid.values.length; i++) {
+        const v = grid.values[i];
+        if (Math.abs(v) > level) inside += v * v;
+      }
+      // Within a tenth of a per cent, measured back off the field. The level is
+      // the tightest grid value reaching the share, so the residual is the step
+      // quantization plus the f32 field — and near a core one step is large,
+      // which is why the crossing is found by walking values rather than by
+      // interpolating between bins.
+      expect(Math.abs(inside / total - fraction)).toBeLessThan(0.001);
+    }
+  });
+
+  it('marches a field twice at two levels without re-evaluating it', () => {
+    // The split's contract: one field, many levels. A field that quietly
+    // depended on the level would pass every other test here and still make
+    // the cache useless.
+    const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Benzene'))!.mol)!;
+    const result = solveExtendedHuckel(molecule)!;
+    const grid = computeMoField(molecule, result.basis, result.coefficients[10])!;
+    const tight = marchMoField(grid, levelForFraction(grid, 0.5));
+    const loose = marchMoField(grid, levelForFraction(grid, 0.98));
+    expect(tight.vertexCount).toBeGreaterThan(0);
+    expect(loose.vertexCount).toBeGreaterThan(0);
+    expect(loose.vertexCount).toBeGreaterThan(tight.vertexCount);
+    expect(grid.values.length).toBe(grid.dimensions[0] * grid.dimensions[1] * grid.dimensions[2]);
   });
 
   it('draws both ends of an S–F bond at the localized default', () => {

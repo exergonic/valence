@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { activeIsovalue, type SceneContext } from './setup';
+import { activeIsoValue, type SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
@@ -10,7 +10,7 @@ import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
 import { renderMoOrbitals, MO_PHASE_PAIRS } from './mo-lobes';
 import { computeEspSurface } from '../chem/charge-model/esp';
-import { computeMoSurface } from '../chem/extended-huckel/mo-surface';
+import { computeMoField, levelForFraction, marchMoField } from '../chem/extended-huckel/mo-surface';
 import { renderMoIsosurface } from './mo-isosurface';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
@@ -178,15 +178,30 @@ export function rebuildDisplay(ctx: SceneContext) {
 
   if (picks.length > 0 && ctx.ehResult) {
     if (ctx.display.smoothMo) {
-      // one continuous surface of constant amplitude — the picture other
-      // programs draw. Cached per orbital: extracting one costs 100 ms on
-      // water and 300-950 ms on benzene, PCl₅ or I₂ (measured 2026-09-30, and
-      // it grows with the vertex count), so a level is paid for once.
+      // One continuous surface of constant amplitude — the picture other
+      // programs draw. Two caches, because the work has two halves that depend
+      // on different things (measured 2026-09-30): the FIELD is the expensive
+      // half and does not care what level it will be drawn at, the MESH is
+      // cheaper but keyed by the level. So a level change re-marches a field
+      // already in hand, and a rebuild that changes no level costs nothing.
+      const value = activeIsoValue(ctx.display);
+      const byPercentile = ctx.display.isoMode === 'percentile';
       for (const pick of picks) {
-        let surface = ctx.moSurfaces.get(pick.key);
+        let grid = ctx.moFields.get(pick.key);
+        if (!grid) {
+          grid = computeMoField(ctx.currentMolecule, ctx.ehResult.basis, pick.coefficients) ?? undefined;
+          if (!grid) continue;
+          // A field is a few megabytes; keep a handful of orbitals warm and
+          // no more, rather than growing with every level ever clicked.
+          if (ctx.moFields.size >= 12) ctx.moFields.clear();
+          ctx.moFields.set(pick.key, grid);
+        }
+        const level = byPercentile ? levelForFraction(grid, value) : value;
+        const meshKey = `${pick.key}@${byPercentile ? 'p' : 'a'}${value}`;
+        let surface = ctx.moSurfaces.get(meshKey);
         if (!surface) {
-          surface = computeMoSurface(ctx.currentMolecule, ctx.ehResult.basis, pick.coefficients, activeIsovalue(ctx.display));
-          ctx.moSurfaces.set(pick.key, surface);
+          surface = marchMoField(grid, level);
+          ctx.moSurfaces.set(meshKey, surface);
         }
         renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase);
       }
@@ -236,6 +251,7 @@ export function buildScene(ctx: SceneContext) {
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
   ctx.moSurfaces.clear();
+  ctx.moFields.clear();
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is
   // computed once here and cached; null when an element is outside the
   // parameter table. A new molecule also clears any selected MO.

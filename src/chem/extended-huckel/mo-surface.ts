@@ -30,7 +30,7 @@
  */
 import type { Molecule } from '../../mol-parser';
 import type { BasisFunction } from './assign-basis';
-import { alignToPrincipalAxes } from './align-principal-axes';
+import { alignToPrincipalAxes, type PrincipalFrame } from './align-principal-axes';
 import { BOHR_RADIUS } from './slater-overlap';
 import { D_FUNCTIONS } from './assign-basis';
 import { slaterTerms } from './parameters';
@@ -58,29 +58,46 @@ export const MO_SURFACE_MARGIN = 2.5;
 const MAX_EVALUATIONS = 4_000_000;
 
 /**
- * The isovalue, as a fraction of a full atomic orbital's own peak.
+ * The default level in the PERCENTILE mode: the surface that encloses this
+ * fraction of the orbital's own weight (see `levelForFraction`).
  *
- * The surface is not drawn at a fixed |ψ|. A normalized Slater orbital's peak
- * falls as the shell spreads out — fluorine 2p reaches ~0.78, iodine 5p ~0.19,
- * a potassium 4s ~0.035 — so one absolute contour that sits inside a 2p lies
- * above a 5p entirely, and the heavy atom's lobe never appears. Each basis
- * function is divided by its own peak before the contour is taken (see
- * `prepareOrbitals`), and the number here is that fraction: 0.04 draws the
- * outer part of every shell, 0.30 only its core. The same setting then shows
- * a hydrogen and an iodine.
+ * This is the panel's default, and the reason is the one thing an amplitude
+ * cannot do: a percentile means the same thing on every orbital and every
+ * element. An absolute level does not — 0.10 encloses 80 % of a water O–H bond
+ * but 89 % of its lone pair, so a fixed amplitude is a different cut on each
+ * orbital, which is what the per-AO scaling tried and failed to paper over.
+ *
+ * The two values are where the old absolute defaults landed when measured:
+ * water's O–H bonds enclose 94.7 % at the old MO default of 0.04 and 80.3 % at
+ * the localized default of 0.10. So the pictures stay recognisable, and the
+ * lone pairs tighten slightly rather than the bonds fattening. NOTES.md has
+ * the table.
+ */
+export const MO_SURFACE_PERCENTILE = 0.95;
+
+/** The localized view's percentile default — see MO_SURFACE_PERCENTILE. */
+export const LOCALIZED_PERCENTILE = 0.8;
+
+/** The percentiles the panel offers. A low value is a tight core; 0.995
+ *  brings in the last wisps, including a heavy halogen's weak lobe. */
+export const MO_SURFACE_PERCENTILES = [0.5, 0.7, 0.8, 0.9, 0.95, 0.98, 0.995];
+
+/**
+ * The default ABSOLUTE level, in the true Slater amplitude units (bohr^-3/2) —
+ * the units Avogadro2 (0.03) and MOrbVis (0.04) mean by the same word, so this
+ * mode is how a picture here is reproduced or compared there.
+ *
+ * It is the secondary mode: exact levels are comparable across orbitals by
+ * construction, which is its virtue, but an absolute level is a different cut
+ * on every orbital and can sit above a diffuse orbital's whole peak — water's
+ * 1a1 vanishes at 0.40.
  */
 export const MO_SURFACE_ISOVALUE = 0.04;
 
-/**
- * The localized picture's own default. It sits higher than the MO default
- * because a localized orbital is concentrated on one or two atoms and so is
- * drawn oversized at the MO level; and lower than a single bond would like,
- * because a level that shrinks a σ bond nicely also strips the outer carbons
- * off a delocalized ring orbital. NOTES.md has the measurements behind both.
- */
+/** The localized view's absolute default — see MO_SURFACE_ISOVALUE. */
 export const LOCALIZED_ISOVALUE = 0.1;
 
-/** The levels the panel offers. */
+/** The absolute levels the panel offers. */
 export const MO_SURFACE_ISOVALUES = [0.02, 0.03, 0.04, 0.06, 0.1, 0.2, 0.3];
 
 /** Grid points above which the spacing is coarsened, so a large delocalized
@@ -120,19 +137,11 @@ type Vec3 = [number, number, number];
  * orbital, so the normalization (a power and a factorial) and the coefficient
  * are folded in here rather than recomputed a million times — that alone is
  * the difference between a 150 ms stall and a usable toggle.
- *
- * `unitPeak` divides each AO by the maximum of |χ| at coefficient 1. The
- * overlap integrals need the true normalization; the picture does not. Without
- * that division a coefficient of 1 on iodine peaks at a quarter of the same
- * coefficient on fluorine, and the isovalue that draws the fluorine deletes
- * the iodine. Both terms of a contracted d share one peak — the maximum of
- * the sum, which is the orbital the basis actually contains.
  */
 export function prepareOrbitals(
   atoms: Molecule['atoms'],
   basis: BasisFunction[],
   coefficients: number[],
-  unitPeak = false,
 ): Float64Array {
   const prepared: number[] = [];
   for (let i = 0; i < basis.length; i++) {
@@ -146,7 +155,6 @@ export function prepareOrbitals(
     const angular = orbital.angular === 's'
       ? 1
       : orbital.angular === 'p' ? 2 : 3 + D_FUNCTIONS.indexOf(orbital.d!);
-    const peak = unitPeak ? aoPeakAmplitude(orbital) : 1;
     // One entry per Slater term: a contracted d contributes two, and the
     // evaluator's sum over entries is the sum over ζ for free.
     for (const term of slaterTerms(orbital)) {
@@ -154,7 +162,7 @@ export function prepareOrbitals(
       for (let k = 2; k <= 2 * orbital.n; k++) factorial *= k;
       const norm = Math.pow(2 * term.zeta, orbital.n + 0.5) / Math.sqrt(factorial);
       prepared.push(
-        atom.x, atom.y, atom.z, term.zeta, c * term.coefficient * norm / peak,
+        atom.x, atom.y, atom.z, term.zeta, c * term.coefficient * norm,
         orbital.axis[0], orbital.axis[1], orbital.axis[2], orbital.n, angular,
       );
     }
@@ -176,57 +184,16 @@ function lobeDirection(orbital: BasisFunction): [number, number, number] {
   }
 }
 
-const peakCache = new Map<string, number>();
-
-/**
- * The maximum of |χ| for this basis function at coefficient 1, in the same
- * units `evaluateMo` returns. Cached per shell: every carbon 2p in a molecule
- * is the same number, and the surface divides by it.
- */
-export function aoPeakAmplitude(orbital: BasisFunction): number {
-  const key = [
-    orbital.n, orbital.angular, orbital.d ?? '',
-    orbital.zeta, orbital.zeta2 ?? '', orbital.coefficients?.join(',') ?? '',
-  ].join('|');
-  const cached = peakCache.get(key);
-  if (cached !== undefined) return cached;
-
-  const prepared = prepareOrbitals(
-    [{ element: 'X', x: 0, y: 0, z: 0, charge: 0 }],
-    [{ ...orbital, atomIndex: 0 }],
-    [1],
-  );
-  const [dx, dy, dz] = lobeDirection(orbital);
-  const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
-  let peak = 0;
-  let rPeak = 0;
-  // 0.01 Å is fine on the scale of 1/ζ; a second pass tightens the sample.
-  for (let i = 0; i <= 500; i++) {
-    const r = i * 0.01;
-    evaluatePrepared(r * dx, r * dy, r * dz, prepared, probe);
-    const amplitude = Math.abs(probe.value);
-    if (amplitude > peak) { peak = amplitude; rPeak = r; }
-  }
-  for (let i = -20; i <= 20; i++) {
-    const r = Math.max(0, rPeak + i * 0.0005);
-    evaluatePrepared(r * dx, r * dy, r * dz, prepared, probe);
-    peak = Math.max(peak, Math.abs(probe.value));
-  }
-  // a vanished shell must not turn the coefficient into an infinity
-  if (peak < 1e-12) peak = 1;
-  peakCache.set(key, peak);
-  return peak;
-}
-
-/** How far from its nucleus this AO stays above the display isovalue (Å).
- *  The grid's margin has to reach it, or a diffuse shell is clipped open
- *  while a compact one still fits in the old fixed pad. */
+/** How far from its nucleus this AO stays above a level (Å), so the grid's
+ *  margin can reach it: a diffuse shell is clipped open by a pad that fits a
+ *  compact one. Called at the lowest level the panel offers, because the box
+ *  is built before the level is known — a percentile is derived from the very
+ *  field this box holds. */
 function lobeReach(orbital: BasisFunction, coefficient: number, isovalue: number): number {
   const prepared = prepareOrbitals(
     [{ element: 'X', x: 0, y: 0, z: 0, charge: 0 }],
     [{ ...orbital, atomIndex: 0 }],
     [coefficient],
-    true,
   );
   const [dx, dy, dz] = lobeDirection(orbital);
   const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
@@ -386,25 +353,40 @@ const CORNER: number[][] = [
 ];
 
 /**
- * Build the MO isosurface. Returns an empty surface (vertexCount 0) when the
- * MO has no amplitude, or when every grid point is below the isovalue.
+ * A molecular orbital evaluated on a uniform grid: the field, the geometry to
+ * march it, and the analytic evaluator its normals come from. Cached per
+ * orbital — the expensive half of drawing one, and independent of the level it
+ * will be drawn at.
  */
-export function computeMoSurface(
+export interface MoFieldData {
+  /** ψ on the grid, signed, in true Slater amplitude units. */
+  values: Float32Array;
+  /** The grid's lower corner (Å, calculation frame). */
+  origin: [number, number, number];
+  /** Grid points along each axis. */
+  dimensions: [number, number, number];
+  /** Grid step (Å). */
+  spacing: number;
+  /** The largest |ψ| on the grid — the absolute level's natural ceiling. */
+  peak: number;
+  /** Folded AO constants, kept for the analytic gradient at each vertex. */
+  prepared: Float64Array;
+  /** The frame the field lives in, so a mesh can be rotated into world space. */
+  frame: PrincipalFrame;
+}
+
+/**
+ * The MO's amplitude on a uniform grid. Returns null when there is nothing to
+ * draw: no basis, or no contributing atom.
+ */
+export function computeMoField(
   molecule: Molecule,
   basis: BasisFunction[],
   coefficients: number[],
-  isovalue = MO_SURFACE_ISOVALUE,
   spacing = MO_SURFACE_SPACING,
   margin = MO_SURFACE_MARGIN,
-): MoSurfaceData {
-  const empty: MoSurfaceData = {
-    positions: new Float32Array(0),
-    normals: new Float32Array(0),
-    phases: new Float32Array(0),
-    vertexCount: 0,
-    isovalue: 0,
-  };
-  if (basis.length === 0 || coefficients.length !== basis.length) return empty;
+): MoFieldData | null {
+  if (basis.length === 0 || coefficients.length !== basis.length) return null;
 
   // the calculation frame: the same one the solver used, so "pz" here means
   // the same pz the coefficients do
@@ -416,7 +398,7 @@ export function computeMoSurface(
   // it keeps a localized MO from paying for the whole molecule
   let largest = 0;
   for (const c of coefficients) largest = Math.max(largest, Math.abs(c));
-  if (largest <= 1e-9) return empty;
+  if (largest <= 1e-9) return null;
 
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
@@ -429,18 +411,24 @@ export function computeMoSurface(
     if (atom.y < minY) minY = atom.y; if (atom.y > maxY) maxY = atom.y;
     if (atom.z < minZ) minZ = atom.z; if (atom.z > maxZ) maxZ = atom.z;
   }
-  if (contributing === 0) return empty;
+  if (contributing === 0) return null;
 
-  // Display scale: each AO divided by its own peak, so the isovalue is a
-  // fraction of a full shell and means the same thing on every element.
-  const prepared = prepareOrbitals(atoms, basis, coefficients, true);
+  // True Slater amplitudes, no display scaling: the field is the orbital, and
+  // the level drawn on it is chosen by the caller — a percentile of the
+  // orbital's own weight, or an absolute amplitude to compare with another
+  // program. Dividing each AO by its own peak (2026-09-30, undone here) made
+  // one control fit every element at the cost of moving the nodes.
+  const prepared = prepareOrbitals(atoms, basis, coefficients);
 
-  // The fixed pad is enough for a first-row atom. A diffuse shell at the same
-  // fraction extends further, and clipping it leaves the mesh open.
+  // The fixed pad is enough for a first-row atom; a diffuse shell reaches
+  // further even at a high level, and clipping one leaves the mesh open. Sized
+  // at the LOWEST level the panel offers, because the box is built before the
+  // level is known (a percentile is derived from this very field).
+  const padLevel = Math.min(...MO_SURFACE_ISOVALUES);
   let pad = margin;
   for (let i = 0; i < basis.length; i++) {
     if (Math.abs(coefficients[i]) / largest < 0.02) continue;
-    pad = Math.max(pad, lobeReach(basis[i], coefficients[i], isovalue) + 0.5);
+    pad = Math.max(pad, lobeReach(basis[i], coefficients[i], padLevel) + 0.5);
   }
   pad = Math.min(pad, 8);
 
@@ -473,16 +461,54 @@ export function computeMoSurface(
   const count = nx * ny * nz;
   const field = new Float32Array(count);
   const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
+  let peak = 0;
   for (let gz = 0; gz < nz; gz++) {
     for (let gy = 0; gy < ny; gy++) {
       for (let gx = 0; gx < nx; gx++) {
         evaluatePrepared(minX + gx * step, minY + gy * step, minZ + gz * step, prepared, probe);
         const index = gx + gy * nx + gz * nx * ny;
         field[index] = probe.value;
+        const magnitude = Math.abs(probe.value);
+        if (magnitude > peak) peak = magnitude;
       }
     }
   }
+
+  return {
+    values: field,
+    origin: [minX, minY, minZ],
+    dimensions: [nx, ny, nz],
+    spacing: step,
+    peak,
+    prepared,
+    frame,
+  };
+}
+
+/**
+ * The isosurface of a field at one level, as world-space triangles.
+ *
+ * Cheap next to building the field, and the reason the two are separate: a
+ * level change — or a percentile resolving to one — re-marches the cached field
+ * instead of re-evaluating it. That is what Avogadro2 and MOrbVis both do, and
+ * what this app did not: it kept finished meshes and threw them away whenever
+ * the level moved.
+ */
+export function marchMoField(grid: MoFieldData, isovalue: number): MoSurfaceData {
+  const { values: field, prepared, frame } = grid;
+  const [minX, minY, minZ] = grid.origin;
+  const [nx, ny, nz] = grid.dimensions;
+  const step = grid.spacing;
+  const empty: MoSurfaceData = {
+    positions: new Float32Array(0),
+    normals: new Float32Array(0),
+    phases: new Float32Array(0),
+    vertexCount: 0,
+    isovalue: 0,
+  };
   if (isovalue <= 0) return empty;
+
+  const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
 
   const positions: number[] = [];
   const normals: number[] = [];
@@ -613,4 +639,93 @@ export function computeMoSurface(
     vertexCount: positions.length / 3,
     isovalue,
   };
+}
+
+/**
+ * The level whose surface encloses this fraction of the orbital's weight.
+ *
+ * A histogram of |ψ|² over the grid, accumulated from the top down. The
+ * fraction is scale-free — every cell has the same volume, so dV cancels — and
+ * that is exactly what makes one setting mean the same thing on hydrogen as on
+ * iodine, and on a lone pair as on a bond.
+ *
+ * The level returned is a grid value, and it is the tightest one that reaches
+ * the request: measured back off the field the share lands within 0.1 % of what
+ * was asked (tested in mo-surface.test.ts). Interpolating between bins instead
+ * missed by 1.6 % near an orbital's core, where the share moves fastest.
+ */
+export function levelForFraction(grid: MoFieldData, fraction: number): number {
+  const { values, peak } = grid;
+  if (peak <= 0) return 0;
+  const bins = 4096;
+  const weight = new Float64Array(bins + 1);
+  let total = 0;
+  for (let i = 0; i < values.length; i++) {
+    const magnitude = Math.abs(values[i]);
+    if (magnitude <= 0) continue;
+    const w = magnitude * magnitude;
+    total += w;
+    weight[Math.min(bins, Math.ceil((magnitude / peak) * bins))] += w;
+  }
+  if (total <= 0) return 0;
+  const want = Math.max(0, Math.min(1, fraction)) * total;
+  let running = 0;
+  for (let bin = bins; bin >= 1; bin--) {
+    running += weight[bin];
+    if (running >= want) {
+      const lower = ((bin - 1) / bins) * peak;
+      const upper = (bin / bins) * peak;
+      // The share enclosed is a step function of the level — it moves one grid
+      // point's weight at a time — and near an orbital's core that step is
+      // large: at 0.03 % low the answer came out 1.6 % short. So the crossing
+      // value is found exactly, by walking the bin's own amplitudes from the
+      // top down. Only the crossing bin is collected, so this is a second pass
+      // over the field with a handful of entries.
+      const inBin: number[] = [];
+      for (let i = 0; i < values.length; i++) {
+        const magnitude = Math.abs(values[i]);
+        if (magnitude > lower && magnitude <= upper) inBin.push(magnitude);
+      }
+      inBin.sort((a, b) => b - a);
+      let acc = running - weight[bin];
+      for (let i = 0; i < inBin.length; i++) {
+        acc += inBin[i] * inBin[i];
+        if (acc >= want) {
+          // The marcher keeps the points with |ψ| > level, so the level has to
+          // sit just BELOW the value that completes the share — returning that
+          // value itself would drop it, and one point's weight near a core is
+          // the per cent of shortfall this took two tries to chase.
+          return i + 1 < inBin.length ? inBin[i + 1] : lower;
+        }
+      }
+      return lower;
+    }
+  }
+  return 0;
+}
+
+/**
+ * Build the MO isosurface at an absolute level — field and march together, for
+ * callers with no field in hand. The app draws through the two halves
+ * separately so the field survives a level change.
+ */
+export function computeMoSurface(
+  molecule: Molecule,
+  basis: BasisFunction[],
+  coefficients: number[],
+  isovalue = MO_SURFACE_ISOVALUE,
+  spacing = MO_SURFACE_SPACING,
+  margin = MO_SURFACE_MARGIN,
+): MoSurfaceData {
+  const grid = computeMoField(molecule, basis, coefficients, spacing, margin);
+  if (!grid) {
+    return {
+      positions: new Float32Array(0),
+      normals: new Float32Array(0),
+      phases: new Float32Array(0),
+      vertexCount: 0,
+      isovalue: 0,
+    };
+  }
+  return marchMoField(grid, isovalue);
 }

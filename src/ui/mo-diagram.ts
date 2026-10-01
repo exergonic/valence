@@ -23,7 +23,8 @@
  *    has, so it stays legible when the panel is resized or collapsed.
  */
 import type { SceneContext } from '../render';
-import { activeIsovalue } from '../render';
+import { activeIsoValue, setActiveIsoValue } from '../render';
+import { MO_SURFACE_ISOVALUES, MO_SURFACE_PERCENTILES } from '../chem/extended-huckel/mo-surface';
 import type { Molecule } from '../mol-parser';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
 import { CANONICAL_TOLERANCE_EV, DEGENERATE_TOLERANCE_EV } from '../chem/extended-huckel/canonicalize-degenerate';
@@ -125,25 +126,44 @@ export function setupMoPanel(ctx: SceneContext) {
     });
   }
 
+  const isoMode = document.getElementById('ctrl-mo-isomode') as HTMLSelectElement | null;
   const isovalue = document.getElementById('ctrl-mo-isovalue') as HTMLSelectElement | null;
-  // Each view keeps its own level (see activeIsovalue): switching tabs shows
-  // the level that view was last drawn at rather than the other one's. The
-  // option is matched by VALUE, not by string: the control's labels are
-  // 2-decimal ("0.10") while a default written as 0.1 stringifies to "0.1",
-  // which matches nothing and blanks the control.
+  // Each view keeps its own level in each mode, and switching tabs or modes
+  // shows the value that belongs to what is now on stage. The option list is
+  // rebuilt from the constants when the mode changes, so the labels and the
+  // state cannot drift; the selection is then matched by VALUE, not by string,
+  // because a constant written 0.1 stringifies to "0.1" while a label may
+  // read "0.10".
+  const valueList = () =>
+    (ctx.display.isoMode === 'percentile' ? MO_SURFACE_PERCENTILES : MO_SURFACE_ISOVALUES).map(String);
   const syncIsovalue = () => {
+    if (isoMode) isoMode.value = ctx.display.isoMode;
     if (!isovalue) return;
-    const level = activeIsovalue(ctx.display);
+    const list = valueList();
+    if (Array.from(isovalue.options).map((o) => o.value).join(',') !== list.join(',')) {
+      isovalue.innerHTML = list.map((v) => `<option value="${v}">${v}</option>`).join('');
+    }
+    const level = activeIsoValue(ctx.display);
     const option = Array.from(isovalue.options).find((o) => parseFloat(o.value) === level);
     if (option) isovalue.value = option.value;
   };
+  if (isoMode) {
+    syncIsovalue();
+    isoMode.addEventListener('change', () => {
+      ctx.display.isoMode = isoMode.value === 'absolute' ? 'absolute' : 'percentile';
+      // a percentile and an amplitude are different quantities; this shows the
+      // value this mode already holds for this view rather than carrying one
+      // across, which would mean something else on arrival
+      syncIsovalue();
+      ctx.rerender();
+    });
+  }
   if (isovalue) {
     syncIsovalue();
     isovalue.addEventListener('change', () => {
-      const field = ctx.display.orbitalView === 'localized' ? 'localizedIsovalue' : 'moIsovalue';
-      ctx.display[field] = parseFloat(isovalue.value);
-      // every cached surface was extracted at the old level
-      ctx.moSurfaces.clear();
+      setActiveIsoValue(ctx.display, parseFloat(isovalue.value));
+      // nothing to clear: the field is level-independent, and the mesh cache is
+      // keyed by the level, so the new one simply misses (see rebuildDisplay)
       ctx.rerender();
     });
   }

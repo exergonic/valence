@@ -501,6 +501,16 @@ Open follow-ups, in the order they would pay off:
    0.0006 eV, from 1.07e-04 and 0.001). NOTES.md carries the extracted values,
    the before/after, and the one trap — the parameter file's CRLF line ends.
 
+10. **The surface level: field caching and a percentile control — SHIPPED
+   2026-09-30.** Taken from the other viewers, not from this plan: the field is
+   evaluated once per orbital and cached, the mesh is cached by the level, and
+   the level itself is a share of the orbital's own density by default, with the
+   absolute amplitude kept as a second mode for comparing with Avogadro2 and
+   MOrbVis. The per-AO peak scaling from the outside review is removed with it —
+   it distorted the field to make one control fit every element, and choosing
+   the level is the honest route to the same end. NOTES.md has the timings, the
+   accuracy, and the panel's behaviour.
+
 ## House rules that apply to every phase
 
 - No new dependencies. A hand-rolled Jacobi solver is fine at these

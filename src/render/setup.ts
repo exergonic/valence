@@ -5,7 +5,10 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
-import { LOCALIZED_ISOVALUE, MO_SURFACE_ISOVALUE, type MoSurfaceData } from '../chem/extended-huckel/mo-surface';
+import {
+  LOCALIZED_ISOVALUE, LOCALIZED_PERCENTILE, MO_SURFACE_ISOVALUE, MO_SURFACE_PERCENTILE,
+  type MoFieldData, type MoSurfaceData,
+} from '../chem/extended-huckel/mo-surface';
 import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
 import type { LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import { updateLabels } from './labels';
@@ -56,28 +59,46 @@ export interface DisplaySettings {
   smoothMo: boolean;
   /** Opacity of the MO picture (both views) — 0.15..0.9. */
   moOpacity: number;
-  /** Isosurface level for the MO surface (see MO_SURFACE_ISOVALUES). */
+  /** Which quantity the level control sets: the fraction of the orbital's own
+   *  weight the surface encloses (the default — the only setting that means
+   *  the same thing on every orbital and element), or an absolute amplitude in
+   *  true Slater units, which is how another program's picture is reproduced. */
+  isoMode: 'percentile' | 'absolute';
+  /** Absolute level for the molecular view (bohr^-3/2). */
   moIsovalue: number;
-  /** Isosurface level for the localized picture, which wants its own — see
-   *  `activeIsovalue` and the measurements in NOTES.md. */
+  /** Absolute level for the localized view. */
   localizedIsovalue: number;
+  /** Percentile level for the molecular view, 0..1. */
+  moPercentile: number;
+  /** Percentile level for the localized view. */
+  localizedPercentile: number;
 }
 
 /**
- * The isosurface level for the view currently on stage.
- *
- * The two views want different levels, and not symmetrically. A localized
- * orbital drawn at the MO default is about 1.5× its bond length (water's O–H
- * lobes reach 1.50 Å against a 0.96 Å bond), so the localized default sits
- * higher. But not as high as a single bond would like: the failure modes are
- * asymmetric. Set too low, a picture is merely fat and shows everything. Set
- * too high, whole atoms drop out — benzene's delocalized ring orbital covers
- * six carbons at 0.10 and three at 0.20 — and a picture that has silently lost
- * half its molecule is worse than a fat one. So the higher value is for the
- * bond, the safer one is the default. NOTES.md has the measurements.
+ * The level the control shows for the view on stage. Both modes keep their own
+ * value per view; switching modes does not carry a number across, because a
+ * percentile and an amplitude are different quantities and a carried number
+ * would mean something else on arrival.
  */
-export function activeIsovalue(display: DisplaySettings): number {
-  return display.orbitalView === 'localized' ? display.localizedIsovalue : display.moIsovalue;
+export function activeIsoValue(display: DisplaySettings): number {
+  const localized = display.orbitalView === 'localized';
+  if (display.isoMode === 'percentile') {
+    return localized ? display.localizedPercentile : display.moPercentile;
+  }
+  return localized ? display.localizedIsovalue : display.moIsovalue;
+}
+
+/** Write a new level for the view on stage, into the active mode's field. */
+export function setActiveIsoValue(display: DisplaySettings, value: number): void {
+  const localized = display.orbitalView === 'localized';
+  if (display.isoMode === 'percentile') {
+    if (localized) display.localizedPercentile = value;
+    else display.moPercentile = value;
+  } else if (localized) {
+    display.localizedIsovalue = value;
+  } else {
+    display.moIsovalue = value;
+  }
 }
 
 export interface SceneContext {
@@ -112,6 +133,10 @@ export interface SceneContext {
    *  picked again while comparing orbitals — so they are kept until the
    *  isovalue or the molecule changes. */
   moSurfaces: Map<string, MoSurfaceData>;
+  /** Evaluated fields, keyed by the orbital — the half of the surface that
+   *  does not depend on the level, so a level change re-marches a field that
+   *  is already in hand (see computeMoField). */
+  moFields: Map<string, MoFieldData>;
   /** Cached extended-Hückel result for the current molecule (computed once in
    *  buildScene, like the dipole); null when an element is outside the
    *  parameter table. */
@@ -256,14 +281,18 @@ export function initScene(container: HTMLElement): SceneContext {
       espOpacity: 0.5,
       smoothMo: true,
       moOpacity: 0.85,
+      isoMode: 'percentile',
       moIsovalue: MO_SURFACE_ISOVALUE,
       localizedIsovalue: LOCALIZED_ISOVALUE,
+      moPercentile: MO_SURFACE_PERCENTILE,
+      localizedPercentile: LOCALIZED_PERCENTILE,
     },
     atomOrbitals: null,
     dipole: null,
     charges: null,
     espSurface: null,
     moSurfaces: new Map(),
+    moFields: new Map(),
     ehResult: null,
     localizedOrbitals: null,
     rerender: () => {},

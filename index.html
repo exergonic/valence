@@ -288,16 +288,15 @@
             </label>
             <div class="ctrl-section">
               <label class="ctrl-slider">
-                <span>MO Isovalue</span>
-                <select id="ctrl-mo-isovalue" class="label-mode-select" title="How much of the orbital to draw, as a fraction of a full atomic orbital's own peak. The same setting fits a hydrogen and an iodine: a normalized Slater orbital on a large atom peaks lower, and a fixed amplitude would delete it. Lower is a fatter surface; higher keeps only the core of each lobe. Each view keeps its own level: 0.04 for molecular orbitals and 0.10 for localized ones, and 0.06 to see the overlap between two orbitals.">
-                  <option value="0.02">0.02</option>
-                  <option value="0.03">0.03</option>
-                  <option value="0.04" selected>0.04</option>
-                  <option value="0.06">0.06</option>
-                  <option value="0.10">0.10</option>
-                  <option value="0.20">0.20</option>
-                  <option value="0.30">0.30</option>
+                <span>Surface level</span>
+                <select id="ctrl-mo-isomode" class="label-mode-select" title="How the surface level is chosen. Percentile: the share of the orbital's own density the surface encloses, so one setting means the same thing on every orbital and every element — 0.8 is the main body, 0.995 brings in the weak tails, including a heavy halogen's lobe. Absolute: the amplitude to draw at, in the units Avogadro2 and MOrbVis use, for reproducing or comparing another program's picture.">
+                  <option value="percentile" selected>percentile</option>
+                  <option value="absolute">absolute</option>
                 </select>
+              </label>
+              <label class="ctrl-slider">
+                <span>Value</span>
+                <select id="ctrl-mo-isovalue" class="label-mode-select" title="The level, in the unit the control above selects: a percentile of the orbital's density, or an absolute amplitude in bohr^-3/2. Each view keeps its own value in each mode. 0.06 was the old absolute level that showed the overlap between two orbitals; in percentile terms that is around 0.99."></select>
               </label>
             </div>
             <div class="export-row">
