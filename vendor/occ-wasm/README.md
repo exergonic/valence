@@ -9,7 +9,7 @@ pipeline.
 - **Licence:** LGPL-3.0-or-later. OCC is dual-licensed
   `(GPL-3.0-or-later OR LGPL-3.0-or-later)`; Valence takes the **LGPL** branch.
   OCC is © Peter Spackman and contributors; the complete corresponding source is
-  the upstream repository at the commit above, plus the three modifications
+  the upstream repository at the commit above, plus the modifications
   documented below (LGPL-3 §4 requires that a recipient be able to relink the
   library — rebuild it with these commands and drop the outputs back into this
   directory).
@@ -119,12 +119,45 @@ unity off, which is upstream's default.
 
 | file | raw | gzip |
 |---|---|---|
-| `occjs.wasm` | 14,541 KiB | 4,839 KiB |
-| `occjs.data` | 1,070 KiB | 254 KiB |
-| `occjs.js` | 146 KiB | 36 KiB |
+| `occjs.wasm` | 2,413 KiB | 811 KiB |
+| `occjs.data` | 326 KiB | 70 KiB |
+| `occjs.js` | 139 KiB | 35 KiB |
 
-About **3.2 MiB brotli** in total (estimated from the gzip ratio; the wasm is the
+About **0.6 MiB brotli** in total (estimated from the gzip ratio; the wasm is the
 whole of it), lazily loaded, single-threaded, on a static host.
+
+## Trim round 2: 14.5 MB → 2.5 MB of wasm
+
+A link-map attribution (`-Wl,-Map`) of the round-1 binary showed the COSMO-RS
+*solvent* registration anchoring ~12 MB the app never uses: the solvent binding
+names the driver-level `cosmors_solvation_free_energy`, whose object references
+HF/SCF/DFT/Wavefunction — the driver runs a quantum calculation for surface
+charges. That one registration holds libxc (8.3 MB), the integral engines (1.2
+MB), libcint (1.0 MB), ecpint, gau2grid and the SCF stack. The app's only
+geometry path is gas-phase xTB, and `XtbCalculator::set_solvent` is an upstream
+stub that returns false, so nothing reachable is lost; uncomment the line to
+restore COSMO-RS (rebuild required).
+
+With the map as the guide, the same round also removed:
+
+- the dead binding sources from the build — the twelve unregistered
+  `*_bindings.cpp` still compiled and linked (~0.5 MB: dft 216 KiB, qm 164 KiB
+  and the rest); only `core` and `xtb` remain,
+- `-s MALLOC=mimalloc` (130 KiB; the default allocator costs nothing
+  single-threaded, which is all this engine ever is),
+- `share/dftd3` (656 KiB, read only by the D3 loader — GFN2 uses D4) and
+  `share/sgdata.json` (92 KiB, crystal space-group data), moved aside with
+  `share/basis`,
+- the `fromXyzFile`/`fromXyzString` Molecule bindings (the app builds molecules
+  from atoms, never from files or strings; this also unanchors io/scnlib).
+
+Worth, measured: wasm 14,541 → 2,413 KiB raw (4,839 → 811 KiB gzipped), data
+1,070 → 326 KiB (254 → 70 KiB gzipped). The trimmed engine returns
+bit-identical numbers on the oracle geometries (water opt −5.070544187563366 Eh
+in 8 iterations, PCl5 −25.386587076603544 Eh with axial 2.15589505 ×2 — all 16
+digits identical to the untrimmed build), and `tests/gfn2.test.ts` passes
+unchanged. `share/solvent` (100 KiB of COSMO/SMD data) stays for a future
+solvation path.
 
 ## Verification
 
@@ -147,7 +180,9 @@ bond lengths.
 
 The bindings are raw embind, and the units are **not** uniform:
 
-- `Molecule.fromXyzString()` and `new Molecule(IVec, Mat3N)` take **Ångström**.
+- Molecules are built with `new Molecule(IVec, Mat3N)` in **Ångström** (the
+  `fromXyzString`/`fromXyzFile` bindings were removed in trim round 2 — the
+  app never called them).
 - `XtbCalculator.updateStructure()` and `.positions()` use **bohr**.
 - `.energyAndGradient(numerical, step)` returns a plain `{ energy, gradient }`
   object; the gradient is **Eh/bohr**, indexed `Mat3N.get(coordinate, atom)`.
