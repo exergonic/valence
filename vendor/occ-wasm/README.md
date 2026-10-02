@@ -16,10 +16,15 @@ pipeline.
 
 ## Producing it
 
-Requires the Emscripten SDK, CMake ≥ 3.16 and Ninja. Pinned-commit checkouts: a
-pristine reference at `C:/Users/mccan/Code/third-party/occ`, and the build
-tree at `~/Code/occ` on Lenovo. Verify patches with `git diff` against
-upstream before building.
+Requires the Emscripten SDK **6.0.10** (exact — same emcc + flags + sources
+yields bit-identical wasm across machines; verify with `md5sum`), CMake ≥
+3.16 and Ninja. Pinned-commit checkouts: a pristine reference at
+`C:/Users/mccan/Code/third-party/occ` (never build in it). Agents rebuild on
+this machine in `C:/Users/mccan/Code/occ-win` — a fresh clone at the pinned
+commit with the patches below applied (port with `git diff`/`git apply` from
+a patched tree and require the stat to match). The lenovo checkout
+(`~/Code/occ`) is a cold spare; do not build there. Verify patches with `git
+diff` against upstream before building.
 
 **1. Clone and check out the pinned commit.**
 
@@ -102,6 +107,16 @@ patches above:
 `constexpr` symbols (`MAX_REF`, `reference_data`, `CnResult`, …) collide. Leave
 unity off, which is upstream's default.
 
+**Building on Windows (BEAST_MACHINE).** emsdk lives at `C:/Users/mccan/emsdk`;
+activate per-shell (`source C:/Users/mccan/emsdk/emsdk_env.sh` works in
+git-bash — never `--permanent`). Invoke `emcc`/`emcmake` through that env,
+never bare `gcc`: Strawberry Perl's toolchain shadows it and would compile
+natively. Quote `LINK_FLAGS` strings with CMake-escaped doubles (`\"`) —
+cmd.exe passes single quotes literally and configure dies. Build with `-j6`
+(16 GB RAM); a full build takes ~15–20 min. `C:/Strawberry` also ships a
+fallback gcc/g++/gfortran, only needed if a step ever requires a native
+compiler (none does today).
+
 ## Contents
 
 `occjs.wasm` (the engine), `occjs.js` (the emscripten glue) and `occjs.data`
@@ -141,7 +156,9 @@ and by the app's own oracle-pinned test (`tests/gfn2.test.ts`):
 
 Agreement is under 10⁻³ kcal/mol on energies and within 0.0002 Å on optimised
 bond lengths. Successive trims return bit-identical numbers (16 digits on the
-water and PCl5 optimisations), and the full test suite passes.
+water and PCl5 optimisations), and the full test suite passes. A rebuild from
+identical inputs is expected bit-identical too — confirm a fresh build with
+`md5sum` against the vendored bytes before swapping it in.
 
 ## API notes for callers
 
