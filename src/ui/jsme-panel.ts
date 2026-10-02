@@ -321,7 +321,7 @@ export function mountJsmePanel(ctx: SceneContext) {
     }
   };
 
-  // GFN2-xTB refinement, on demand. The engine is ~22 MB of wasm and loads
+  // GFN2-xTB refinement, on demand. The engine is ~3 MB of wasm and loads
   // lazily inside its worker on first use — a user who never asks for it never
   // pays for it. This is the tier for structures MMFF94 cannot describe; the
   // Info log says exactly that (GFN2_NOTE).
@@ -333,7 +333,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       gfn2Btn.textContent = 'Refining...';
       gfn2Btn.disabled = true;
       hideRenderError();
-      showLoading('Refining with GFN2-xTB (first use downloads ~22 MB)...');
+      showLoading('Refining with GFN2-xTB (first use downloads ~3 MB)...');
       try {
         const refined = await refineWithGfn2(molecule);
         if (!refined) {

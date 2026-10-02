@@ -3,12 +3,12 @@
 /**
  * GFN2-xTB geometry optimisation, off the main thread.
  *
- * This is the highest tier of the geometry pipeline: a real semiempirical
- * calculation (extended tight binding) rather than a force field. It is worth
- * its ~22 MB of wasm for exactly the cases the force field cannot do —
- * hypervalent centres (PCl5, SF6), elements MMFF94 has no parameters for, and
- * unusual charge states. For a well-parameterised organic (water, ethanol)
- * MMFF94 is at least as good, so this is a fallback, not a replacement.
+ * The default tier of the geometry pipeline: a real semiempirical
+ * calculation (extended tight binding) rather than a force field. It runs
+ * first because it is structurally right where MMFF94 is not (hypervalent
+ * centres, untabled elements) — for a well-parameterised organic MMFF94 is
+ * often the better number, and it stays as the fallback when this engine
+ * cannot run. Costs ~3 MB of wasm, loaded lazily.
  *
  * Everything below the API boundary is OCC's, and OCC is not consistent about
  * units or conventions. The traps, all verified against the Fortran xTB

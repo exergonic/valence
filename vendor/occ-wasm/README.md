@@ -14,25 +14,12 @@ pipeline.
   library — rebuild it with these commands and drop the outputs back into this
   directory).
 
-## What was built
+## Producing it
 
-`occjs.wasm`, `occjs.js` (the emscripten glue) and `occjs.data` (the preloaded
-`share/` tree, mounted at `/`). Only the `occjs` target is built — the `occ` CLI
-is a separate artifact linked with `PROXY_TO_PTHREAD` and oneTBB, and a threaded
-build needs `SharedArrayBuffer`, which needs COOP/COEP headers, which GitHub
-Pages cannot serve. The engine is driven single-threaded (`setNumThreads(1)`),
-which is why this deploys as a static site at all.
-
-## Rebuild
-
-Requires the Emscripten SDK, CMake ≥ 3.16 and Ninja.
-
-Two checkouts of the pinned commit exist: a pristine reference at
-`C:/Users/mccan/Code/third-party/occ`, and the build tree at `~/Code/occ` on
-Lenovo, because emsdk, CMake and Ninja live there. Patch the pristine copy and
-`scp` the files across — `edit` handles only local paths, so a remote file
-otherwise has to be rewritten wholesale with `write`. Verify every patch with
-`git diff` against upstream before building.
+Requires the Emscripten SDK, CMake ≥ 3.16 and Ninja. Pinned-commit checkouts: a
+pristine reference at `C:/Users/mccan/Code/third-party/occ`, and the build
+tree at `~/Code/occ` on Lenovo. Verify patches with `git diff` against
+upstream before building.
 
 **1. Clone and check out the pinned commit.**
 
@@ -41,15 +28,18 @@ git clone https://github.com/peterspackman/occ.git && cd occ
 git checkout 826d76966a14b880d6e47e367c72db1be3f26395
 ```
 
-**2. Patch `src/occjs.cpp`** — drop the unused binding registrations. A
-registered binding is *reachable code*, so the linker cannot discard what it
-pulls in:
+**2. Prune the bindings in `src/occjs.cpp`.** Register only what the app calls:
+a registered binding is *reachable code*, so the linker cannot discard what it
+pulls in. The solvent registration alone anchors ~12 MB — its driver runs
+HF/SCF/DFT for surface charges, pulling libxc, the integral engines and
+libcint — so it stays off (the app's only geometry path is gas-phase xTB, and
+upstream `XtbCalculator::set_solvent` is a stub that returns false).
 
 ```cpp
 EMSCRIPTEN_BINDINGS(occ) {
     register_core_bindings();      // Molecule, Mat3N, IVec, logging, threading
     register_xtb_bindings();       // GFN2-xTB — the geometry engine
-    register_solvent_bindings();   // COSMO-RS solvents
+    // register_solvent_bindings(); // COSMO-RS solvents
     // register_qm_bindings();      // register_correlation_bindings();
     // register_dft_bindings();     // register_opt_bindings();
     // register_isosurface_bindings();  // register_cube_bindings();
@@ -61,33 +51,30 @@ EMSCRIPTEN_BINDINGS(occ) {
 }
 ```
 
-Worth **21,390 → 14,629 KiB** of wasm (6,762 → 4,868 KiB gzipped): the DFT
-(libxc, 9 MB of archive), Hartree–Fock/SCF (`libocc_qm`, 17 MB), coupled
-cluster, crystallography and elasticity machinery all become unreachable.
-Uncommenting a line restores that capability.
+Only the `core` and `xtb` binding sources are compiled (the rest still link
+~0.5 MB of dead glue); the `fromXyzFile`/`fromXyzString` Molecule bindings are
+removed (the app builds molecules from atoms); the allocator is emscripten's
+default (no `MALLOC=mimalloc`, which costs size for no single-threaded gain).
 
-**3. Patch `src/js/xtb_bindings.cpp`** — drop nine bindings that name types from
-the stubbed modules: `fromDimer`, `fromCrystal`, `toCrystal`, `toWavefunction`,
-`isPeriodic`, `lattice`, `setKpoints`, `kpoints`, `updateStructureWithLattice`,
-plus the `dimer.h`, `crystal.h` and `wavefunction.h` includes. This app is
-molecular and only calls `fromMolecule`.
+Thread support is removed at the link. TBB is linked by archive path
+(`$<TARGET_FILE:TBB::tbb>`, headers stay available) instead of `TBB::tbb`,
+`Threads::Threads` is dropped from `occ_core`, `_subprocess` and
+`occ_isosurface`, and `spdlog`'s `Threads::Threads` interface is reduced to
+`fmt::fmt` — any `-pthread` on the link forces shared wasm memory, which needs
+COOP/COEP headers no static host serves, so without this the module cannot
+even instantiate in production browsers. The engine is single-threaded
+throughout (the GFN2 path never calls into TBB), so nothing is lost.
 
-Worth **14,629 → 14,541 KiB** (4,868 → 4,839 KiB gzipped) — only 88 KiB. Almost
-all of `libocc_qm` and `libocc_crystal` was *already* unreachable after patch 2;
-what remained was the thin glue of those entry points themselves. Worth keeping
-because it removes dead bindings, not because it saves meaningful bytes.
+**3. Prune `src/js/xtb_bindings.cpp`.** Drop the nine bindings that name types
+from the stubbed modules: `fromDimer`, `fromCrystal`, `toCrystal`,
+`toWavefunction`, `isPeriodic`, `lattice`, `setKpoints`, `kpoints`,
+`updateStructureWithLattice`, plus the `dimer.h`, `crystal.h` and
+`wavefunction.h` includes. This app is molecular and only calls `fromMolecule`.
 
-**4. Strip the unused basis sets.** 7.4 MB of the 8.5 MB `share/` tree is HF/DFT
-basis sets, which GFN2 never reads:
-
-```bash
-mv share/basis /tmp/occ-share-basis-unused
-```
-
-Takes `occjs.data` from 8,660,442 to 1,096,265 bytes. It matters for disk,
-memory and startup decode rather than for the wire: those basis sets are
-repetitive tables that already compressed ~6:1, so the transfer saving is about
-1 MB gzipped, not 7.
+**4. Move aside the unread `share/` data** (the `--preload-file share@/` link
+packs the whole tree, so absent files simply don't ship): `share/basis`
+(HF/DFT basis sets, 7.4 MB), `share/dftd3` (read only by the D3 loader — GFN2
+uses D4) and `share/sgdata.json` (crystal space-group data).
 
 **5. Configure and build.**
 
@@ -115,56 +102,35 @@ patches above:
 `constexpr` symbols (`MAX_REF`, `reference_data`, `CnResult`, …) collide. Leave
 unity off, which is upstream's default.
 
-## What ships
+## Contents
+
+`occjs.wasm` (the engine), `occjs.js` (the emscripten glue) and `occjs.data`
+(the preloaded `share/` tree, mounted at `/`). Only the `occjs` target is
+built. The engine runs single-threaded (`setNumThreads(1)`); a threaded build
+needs `SharedArrayBuffer`, which needs COOP/COEP headers, which GitHub Pages
+cannot serve — single-threaded is what makes this deployable as a static site
+at all.
+
+Registered bindings: `core` (Molecule, Mat3N, IVec, logging, threading) and
+`xtb` (the GFN2 engine). Everything else upstream registers — QM, DFT,
+solvent/COSMO-RS, crystals and the rest — stays commented out; uncomment a
+line to restore that capability (rebuild required). The preloaded data is the
+GFN2 parameters (`share/xtb`), the D4 tables (`share/dftd4`), COSMO/SMD data
+(`share/solvent`, kept for a future solvation path) and small tables.
 
 | file | raw | gzip |
 |---|---|---|
-| `occjs.wasm` | 2,413 KiB | 811 KiB |
+| `occjs.wasm` | 2,203 KiB | 747 KiB |
 | `occjs.data` | 326 KiB | 70 KiB |
-| `occjs.js` | 139 KiB | 35 KiB |
+| `occjs.js` | 122 KiB | 31 KiB |
 
-About **0.6 MiB brotli** in total (estimated from the gzip ratio; the wasm is the
-whole of it), lazily loaded, single-threaded, on a static host.
-
-## Trim round 2: 14.5 MB → 2.5 MB of wasm
-
-A link-map attribution (`-Wl,-Map`) of the round-1 binary showed the COSMO-RS
-*solvent* registration anchoring ~12 MB the app never uses: the solvent binding
-names the driver-level `cosmors_solvation_free_energy`, whose object references
-HF/SCF/DFT/Wavefunction — the driver runs a quantum calculation for surface
-charges. That one registration holds libxc (8.3 MB), the integral engines (1.2
-MB), libcint (1.0 MB), ecpint, gau2grid and the SCF stack. The app's only
-geometry path is gas-phase xTB, and `XtbCalculator::set_solvent` is an upstream
-stub that returns false, so nothing reachable is lost; uncomment the line to
-restore COSMO-RS (rebuild required).
-
-With the map as the guide, the same round also removed:
-
-- the dead binding sources from the build — the twelve unregistered
-  `*_bindings.cpp` still compiled and linked (~0.5 MB: dft 216 KiB, qm 164 KiB
-  and the rest); only `core` and `xtb` remain,
-- `-s MALLOC=mimalloc` (130 KiB; the default allocator costs nothing
-  single-threaded, which is all this engine ever is),
-- `share/dftd3` (656 KiB, read only by the D3 loader — GFN2 uses D4) and
-  `share/sgdata.json` (92 KiB, crystal space-group data), moved aside with
-  `share/basis`,
-- the `fromXyzFile`/`fromXyzString` Molecule bindings (the app builds molecules
-  from atoms, never from files or strings; this also unanchors io/scnlib).
-
-Worth, measured: wasm 14,541 → 2,413 KiB raw (4,839 → 811 KiB gzipped), data
-1,070 → 326 KiB (254 → 70 KiB gzipped). The trimmed engine returns
-bit-identical numbers on the oracle geometries (water opt −5.070544187563366 Eh
-in 8 iterations, PCl5 −25.386587076603544 Eh with axial 2.15589505 ×2 — all 16
-digits identical to the untrimmed build), and `tests/gfn2.test.ts` passes
-unchanged. `share/solvent` (100 KiB of COSMO/SMD data) stays for a future
-solvation path.
+About **0.5 MiB brotli** in total (estimated from the gzip ratio), lazily loaded,
+single-threaded, on a static host.
 
 ## Verification
 
 Checked against the Fortran xTB oracle (`xtb --gfn 2`) on identical geometries,
-and by the app's own oracle-pinned test (`tests/gfn2.test.ts`, 330 tests pass)
-after each trim — the energies below are identical before and after both
-patches:
+and by the app's own oracle-pinned test (`tests/gfn2.test.ts`):
 
 | quantity | this build | oracle |
 |---|---|---|
@@ -174,23 +140,25 @@ patches:
 | PCl5 P–Cl equatorial | 2.0269 Å | 2.0271 Å |
 
 Agreement is under 10⁻³ kcal/mol on energies and within 0.0002 Å on optimised
-bond lengths.
+bond lengths. Successive trims return bit-identical numbers (16 digits on the
+water and PCl5 optimisations), and the full test suite passes.
 
 ## API notes for callers
 
 The bindings are raw embind, and the units are **not** uniform:
 
 - Molecules are built with `new Molecule(IVec, Mat3N)` in **Ångström** (the
-  `fromXyzString`/`fromXyzFile` bindings were removed in trim round 2 — the
-  app never called them).
+  `fromXyzString`/`fromXyzFile` bindings are removed — the app never called
+  them).
 - `XtbCalculator.updateStructure()` and `.positions()` use **bohr**.
 - `.energyAndGradient(numerical, step)` returns a plain `{ energy, gradient }`
   object; the gradient is **Eh/bohr**, indexed `Mat3N.get(coordinate, atom)`.
 - `XtbCalculator` has no accessible constructor — instances come from the static
   factory `XtbCalculator.fromMolecule(mol)`, which returns a raw pointer that the
   caller owns (`calc.delete()`). Upstream also binds `.fromDimer()` and
-  `.fromCrystal()`; patch 3 removes them.
-- `setNumThreads(1)` is load-bearing, not an optimisation: the wasm is built with
-  pthreads, and a threaded build needs `SharedArrayBuffer`.
+  `.fromCrystal()`; the xtb pruning above removes them.
+- Threading is compiled out: the link carries no `-pthread`, so the module
+  instantiates without COOP/COEP headers. `setNumThreads(1)` is still called,
+  but TBB stays linked yet idle — the engine never spawns a thread.
 
 `src/geometry/gfn2-refine.worker.ts` encodes all of this; read it first.

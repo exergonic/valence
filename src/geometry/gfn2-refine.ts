@@ -3,10 +3,10 @@
  *
  * The top tier of the geometry pipeline, for the cases the force field cannot
  * answer: hypervalent centres, elements MMFF94 has no parameters for, unusual
- * charge states. It is not a replacement for MMFF94 — see the worker for why.
+ * charge states. MMFF94 stays as the fallback when this engine cannot run.
  *
- * Lazy by design: neither the Worker nor the ~22 MB wasm exists until a caller
- * asks for GFN2. An app that never touches this tier never pays for it.
+ * Lazy by design: neither the Worker nor the ~3 MB of wasm and data exists
+ * until a caller asks for GFN2. An app that never touches this tier never pays for it.
  *
  * No synchronous fallback, unlike local-geometry.ts: the wasm cannot be
  * instantiated on the main thread without freezing the page for the length of
