@@ -2,8 +2,10 @@
  * GFN2-xTB geometry optimisation behind a Web Worker — the app's local
  * geometry engine (see local-geometry.ts for what happens when it cannot run).
  *
- * Lazy by design: neither the Worker nor the ~3 MB of wasm and data exists
- * until a caller asks for GFN2.
+ * Loaded at startup, in the background (`preloadGfn2`): the ~3 MB of wasm and
+ * data (~1.2 MB compressed) streams in while the user is still drawing, so the
+ * first optimisation starts at once. A run that arrives before the load is
+ * done simply waits on it.
  *
  * No synchronous fallback: the wasm cannot be instantiated on the main thread
  * without freezing the page for the length of the load, so a browser without
@@ -147,9 +149,26 @@ export function gfn2ChargesAt(molecule: Molecule): Promise<number[] | null> {
   return resolvers.promise;
 }
 
+/**
+ * Start the worker and instantiate the engine now, ahead of any run. Fire and
+ * forget: a load that fails here is retried by the run that needs it, which
+ * then reports the failure where the user is looking.
+ */
+export function preloadGfn2(): void {
+  const w = ensureWorker();
+  if (!w) return;
+  const resolvers = Promise.withResolvers<boolean>();
+  resolvers.promise.catch(() => {});
+  const id = nextId++;
+  pending.set(id, { resolvers });
+  w.postMessage({ id, task: 'load' });
+}
+
 /** Stop every GFN2 run in flight. The engine is synchronous inside its worker,
- *  so the only way to stop it is to terminate the worker; the wasm is loaded
- *  again by the next run. */
+ *  so the only way to stop it is to terminate the worker — and a fresh one is
+ *  warmed at once, so the next run does not pay for the cancel. */
 export function cancelGfn2(): void {
-  if (pending.size > 0) dropWorker(() => new Gfn2Cancelled());
+  if (pending.size === 0) return;
+  dropWorker(() => new Gfn2Cancelled());
+  preloadGfn2();
 }

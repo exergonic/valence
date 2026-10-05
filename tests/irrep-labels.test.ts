@@ -151,6 +151,20 @@ describe('irrep labels', () => {
     expect(labels[17]).toBe('b2g');
   });
 
+  // The example's stored coordinates are D6h only to 0.1 mÅ, which splits
+  // every E pair by ~0.1 meV — no longer "exactly" degenerate, so each half
+  // was named alone and the HOMO read a2g/a1g. Unsnapped on purpose: this is
+  // the geometry a user sees with "Snap to point group" off.
+  it('names a slightly split E pair as one set — the unsnapped benzene example', () => {
+    const benzene = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Benzene'))!.mol);
+    const result = solveExtendedHuckel(benzene)!;
+    const split = Math.abs(result.energies[14] - result.energies[13]);
+    expect(split).toBeGreaterThan(1e-5); // the case under test: not exact
+    const labels = labelIrreps(benzene, result.basis, result.coefficients, result.energies, result.overlap);
+    expect(labels.slice(13, 15)).toEqual(['e1g', 'e1g']);
+    expect(labels.slice(15, 17)).toEqual(['e2u', 'e2u']);
+  });
+
   it('names D2h on Mulliken’s axes — ethene’s π is b3u, its π* b2g', async () => {
     // x perpendicular to the plane, z along C=C. Before, D2h was named like an
     // axial group: a1g, a2u, b1g... symbols D2h does not have, and never a b3.

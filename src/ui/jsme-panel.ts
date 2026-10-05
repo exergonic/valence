@@ -100,7 +100,7 @@ function hideRenderError() {
  * which reads as a distorted molecule and splits degenerate orbitals. The
  * snap is reported, never silent, and can be turned off.
  */
-function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: string[] } {
+export function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: string[] } {
   const enabled = (document.getElementById('ctrl-symmetrize') as HTMLInputElement | null)?.checked ?? true;
   if (!enabled) return { molecule, info: [] };
   const snapped = symmetrizeMolecule(molecule);
@@ -184,6 +184,25 @@ function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number
   buildScene(ctx);
 }
 
+/**
+ * Verbose model caveats go to the Info log at the bottom of the right panel,
+ * not the molecule header (one line, white-space nowrap — a long paragraph
+ * there is unreadable). The log exists only while a molecule has notes to
+ * show, and every new molecule replaces them.
+ */
+export function showInfoLog(notes: string[]) {
+  const infoEl = document.getElementById('panel-info')!;
+  const itemsEl = document.getElementById('panel-info-items')!;
+  itemsEl.replaceChildren();
+  for (const note of notes) {
+    const item = document.createElement('div');
+    item.className = 'panel-info-item';
+    item.textContent = note;
+    itemsEl.appendChild(item);
+  }
+  infoEl.classList.toggle('hidden', notes.length === 0);
+}
+
 function updateMoleculeInfo(info: PubChemInfo & { info?: string[] }) {
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
@@ -214,21 +233,7 @@ function updateMoleculeInfo(info: PubChemInfo & { info?: string[] }) {
   warningsEl.classList.toggle('hidden', !(info.warnings && info.warnings.length > 0));
   warningsEl.textContent = info.warnings?.join('\n') ?? '';
 
-  // Verbose model caveats go to the Info log at the bottom of the right
-  // panel, not the molecule header (one line, white-space nowrap — a long
-  // paragraph there is unreadable). The log exists only while a molecule
-  // has notes to show.
-  const infoEl = document.getElementById('panel-info')!;
-  const itemsEl = document.getElementById('panel-info-items')!;
-  const notes = info.info ?? [];
-  itemsEl.replaceChildren();
-  for (const note of notes) {
-    const item = document.createElement('div');
-    item.className = 'panel-info-item';
-    item.textContent = note;
-    itemsEl.appendChild(item);
-  }
-  infoEl.classList.toggle('hidden', notes.length === 0);
+  showInfoLog(info.info ?? []);
 
   // Collapsible PubChem record — only populated on successful PubChem lookups.
   const dataDetails = document.getElementById('mol-data')!;
@@ -322,10 +327,10 @@ export function mountJsmePanel(ctx: SceneContext) {
           info: notes.info,
         });
       } else {
-        // GFN2 is the only local engine: the first run downloads ~3 MB, and a
-        // larger molecule takes tens of seconds, so the overlay counts as it
-        // goes and Cancel shows the unoptimised start instead.
-        showLoading('Loading GFN2-xTB (first use downloads ~3 MB)…', true);
+        // GFN2 is the only local engine (preloaded at startup), and a larger
+        // molecule takes tens of seconds, so the overlay counts as it goes and
+        // Cancel shows the unoptimised start instead.
+        showLoading('Starting GFN2-xTB…', true);
         const local = await computeLocalGeometry(molecule, trackGfn2Progress());
         const t4 = performance.now();
         if (!local) {
@@ -384,7 +389,7 @@ export function mountJsmePanel(ctx: SceneContext) {
 
   // GFN2-xTB refinement of the structure on screen, on demand — chiefly for a
   // fetched PubChem/CIR conformer, which is a force-field geometry. The engine
-  // is ~3 MB of wasm, loaded lazily inside its worker on first use. A cancelled
+  // is ~3 MB of wasm, preloaded inside its worker at startup. A cancelled
   // or failed run leaves the structure as it was.
   const gfn2Btn = document.getElementById('ctrl-gfn2-refine') as HTMLButtonElement | null;
   if (gfn2Btn) {
@@ -394,7 +399,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       gfn2Btn.textContent = 'Refining...';
       gfn2Btn.disabled = true;
       hideRenderError();
-      showLoading('Loading GFN2-xTB (first use downloads ~3 MB)…', true);
+      showLoading('Starting GFN2-xTB…', true);
       try {
         const refined = await refineWithGfn2(molecule, trackGfn2Progress());
         if (!refined) {

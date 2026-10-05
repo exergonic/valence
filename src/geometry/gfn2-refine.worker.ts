@@ -7,7 +7,7 @@
  * (extended tight binding) rather than a force field, structurally right where
  * a force field is not (hypervalent centres, untabled elements). When it cannot
  * deliver a minimum the pipeline shows the unrefined start and says so — there
- * is no second engine behind it. Costs ~3 MB of wasm, loaded lazily.
+ * is no second engine behind it. Costs ~3 MB of wasm, loaded at startup.
  *
  * Everything below the API boundary is OCC's, and OCC is not consistent about
  * units or conventions. The traps, all verified against the Fortran xTB
@@ -716,12 +716,16 @@ export async function chargesAt(
   }
 }
 
-self.onmessage = async (e: MessageEvent<{ id: number; molecule: Molecule; task?: 'optimise' | 'charges' }>) => {
+self.onmessage = async (e: MessageEvent<{ id: number; molecule?: Molecule; task?: 'optimise' | 'charges' | 'load' }>) => {
   const { id, molecule, task } = e.data;
   try {
-    const result = task === 'charges'
-      ? await chargesAt(molecule)
-      : await optimizeWithGfn2(molecule, undefined, (progress) => self.postMessage({ id, progress }));
+    // 'load' instantiates the engine and nothing else — the page asks for it
+    // at startup, so the first optimisation does not wait on the download
+    const result = task === 'load'
+      ? (await loadGfn2(), true)
+      : task === 'charges'
+        ? await chargesAt(molecule!)
+        : await optimizeWithGfn2(molecule!, undefined, (progress) => self.postMessage({ id, progress }));
     self.postMessage({ id, result });
   } catch (error) {
     // Never fail silently: the caller surfaces this, and a console line keeps

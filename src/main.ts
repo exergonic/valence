@@ -1,6 +1,6 @@
 import type { SceneContext } from './render';
 import { initScene, buildScene, ATOM_LAYER } from './render';
-import { mountJsmePanel, toggleJsmeCollapsed, setJsmeCollapsed } from './ui/jsme-panel';
+import { mountJsmePanel, toggleJsmeCollapsed, setJsmeCollapsed, snapToSymmetry, showInfoLog } from './ui/jsme-panel';
 import { setupControls } from './ui/controls';
 import { setupTooltip } from './ui/tooltip';
 import { setupContextMenu } from './ui/context-menu';
@@ -11,6 +11,7 @@ import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, apply
 import { parseMolBlock } from './mol-parser';
 import { EXAMPLES } from './ui/examples';
 import { isVseprElement } from './chem/vsepr/assign-orbitals';
+import { preloadGfn2 } from './geometry/gfn2-refine';
 
 function setupSplitter() {
   const splitter = document.getElementById('splitter')!;
@@ -42,13 +43,19 @@ function setupSplitter() {
   });
 }
 
-function loadMolecule(ctx: SceneContext, molBlock: string, multiplicity = 1) {
-  const molecule = parseMolBlock(molBlock);
-  if (molecule.atoms.length === 0) return;
+function loadMolecule(ctx: SceneContext, molBlock: string, multiplicity = 1): string[] {
+  const parsed = parseMolBlock(molBlock);
+  if (parsed.atoms.length === 0) return [];
+  // An example is snapped like any rendered structure: its stored coordinates
+  // are a little off their point group (benzene's by 0.1 mÅ), which is enough
+  // to split a degenerate pair by 0.1 meV — and a split pair is two levels the
+  // solver will not rotate into the textbook partners or label as one E set.
+  const snapped = snapToSymmetry(parsed);
   // the MOL block cannot carry a multiplicity, so a caller that knows one sets
   // it here (see Example.multiplicity)
-  ctx.currentMolecule = multiplicity > 1 ? { ...molecule, multiplicity } : molecule;
+  ctx.currentMolecule = multiplicity > 1 ? { ...snapped.molecule, multiplicity } : snapped.molecule;
   buildScene(ctx);
+  return snapped.info;
 }
 
 function setupExamples(ctx: SceneContext) {
@@ -68,7 +75,7 @@ function setupExamples(ctx: SceneContext) {
     const ex = EXAMPLES[idx];
     if (!ex) return;
 
-    loadMolecule(ctx, ex.mol, ex.multiplicity ?? 1);
+    showInfoLog(loadMolecule(ctx, ex.mol, ex.multiplicity ?? 1));
 
     // The valence model has nothing to say about a metal centre, so a complex
     // drawn from it has no orbital lobes to show — and the app's default hides
@@ -112,7 +119,7 @@ function setupExamples(ctx: SceneContext) {
   });
 }
 
-function setupKeyboardShortcuts(ctx: SceneContext) {
+function setupKeyboardShortcuts() {
   document.addEventListener('keydown', (e) => {
     // Don't capture when typing in an input
     if (e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement || e.target instanceof HTMLTextAreaElement) return;
@@ -136,8 +143,12 @@ function setupKeyboardShortcuts(ctx: SceneContext) {
     } else if (e.key >= '1' && e.key <= '9') {
       // Jump to example by number
       const idx = parseInt(e.key) - 1;
-      if (idx < EXAMPLES.length) {
-        loadMolecule(ctx, EXAMPLES[idx].mol);
+      // through the dropdown, so a shortcut loads an example exactly as a pick
+      // does — header, multiplicity, snap and all
+      const dropdown = document.getElementById('examples-dropdown') as HTMLSelectElement | null;
+      if (dropdown && idx < EXAMPLES.length) {
+        dropdown.value = String(idx);
+        dropdown.dispatchEvent(new Event('change'));
       }
     }
   });
@@ -234,10 +245,16 @@ async function main() {
   setupContextMenu(scene, document.getElementById('canvas-container')!);
   const moPanel = setupMoPanel(scene);
   setupModelViews(scene, moPanel);
-  setupKeyboardShortcuts(scene);
+  setupKeyboardShortcuts();
   setupMeasureMode(scene);
   setupViewStateUI(scene, annotations);
   setupAnnotationsUI(annotations);
+
+  // The GFN2-xTB engine streams in while the user draws, so the first
+  // optimisation does not wait on a download. After the page's own load, so
+  // it does not compete with the sketcher's assets.
+  if (document.readyState === 'complete') preloadGfn2();
+  else window.addEventListener('load', () => preloadGfn2(), { once: true });
 
   // Restore a shared view from the URL hash, if present (#view=<base64url>)
   const state = parseShareLink(window.location.hash);

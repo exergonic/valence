@@ -39,7 +39,7 @@ import type { Molecule } from '../../mol-parser';
 import { D_FUNCTIONS, type BasisFunction } from './assign-basis';
 import { alignToPrincipalAxes } from './align-principal-axes';
 import { detectPointGroup, mirrorNormal, type SymmetryOperation } from '../../geometry/symmetrize';
-import { CANONICAL_TOLERANCE_EV } from './canonicalize-degenerate';
+import { CANONICAL_TOLERANCE_EV, DEGENERATE_TOLERANCE_EV } from './canonicalize-degenerate';
 
 type Vec3 = [number, number, number];
 
@@ -484,25 +484,24 @@ function linearLabel(
   return letter + parity;
 }
 
-/**
- * The irrep symbol of every MO, or null where it cannot be determined. All
- * members of a degenerate set share their label.
- */
-/** MOs grouped into degenerate sets by energy — the same grouping the
- *  canonicalization uses, and the only level at which a character is
- *  basis-independent. */
-function degenerateSets(energies: number[]): number[][] {
+/** MOs grouped into sets by energy — a set of degenerate partners is the only
+ *  level at which a character is basis-independent. */
+function degenerateSets(energies: number[], tolerance: number): number[][] {
   const sets: number[][] = [];
   let i = 0;
   while (i < energies.length) {
     let j = i + 1;
-    while (j < energies.length && Math.abs(energies[j] - energies[i]) < CANONICAL_TOLERANCE_EV) j++;
+    while (j < energies.length && Math.abs(energies[j] - energies[i]) < tolerance) j++;
     sets.push(Array.from({ length: j - i }, (_, k) => i + k));
     i = j;
   }
   return sets;
 }
 
+/**
+ * The irrep symbol of every MO, or null where it cannot be determined. All
+ * members of a degenerate set share their label.
+ */
 export function labelIrreps(
   molecule: Molecule,
   basis: BasisFunction[],
@@ -521,7 +520,7 @@ export function labelIrreps(
   const group = detectPointGroup({ atoms: frame.atoms, bonds: [] });
 
   if (group.symbol === 'D∞h' || group.symbol === 'C∞v') {
-    for (const set of degenerateSets(energies)) {
+    for (const set of degenerateSets(energies, CANONICAL_TOLERANCE_EV)) {
       // the set's character, divided by its dimension: a degenerate partner's
       // own diagonal character depends on which mixture we happen to hold
       const symbol = linearLabel(molecule, basis, set.map((mo) => coefficients[mo]), overlap, group.symbol === 'D∞h');
@@ -534,13 +533,13 @@ export function labelIrreps(
   const census = censusOf(group.operations, group.symbol);
 
   const matrices = group.operations.map((op) => representationMatrix(basis, op));
-  for (const set of degenerateSets(energies)) {
-    // the set's character under each operation, summed over its members
-    const characters = group.operations.map((_, index) => {
-      let sum = 0;
-      for (const mo of set) sum += orbitalCharacter(coefficients[mo], overlap, matrices[index]);
-      return sum;
-    });
+  // the set's character under each operation, summed over its members
+  const charactersOf = (set: number[]) => group.operations.map((_, index) => {
+    let sum = 0;
+    for (const mo of set) sum += orbitalCharacter(coefficients[mo], overlap, matrices[index]);
+    return sum;
+  });
+  const name = (set: number[], characters: number[]) => {
     const characterOf = (op: SymmetryOperation | null) => {
       if (!op) return 0;
       const index = group.operations.indexOf(op);
@@ -548,6 +547,26 @@ export function labelIrreps(
     };
     const symbol = nameSet(census, set.length, characterOf);
     for (const mo of set) labels[mo] = symbol;
+  };
+
+  // A set is grouped as the level diagram groups it (within a few meV), not
+  // only when exactly degenerate: a geometry a hair off its point group (an
+  // unsnapped structure, 0.1 mÅ) splits an E pair by ~0.1 meV, and each half
+  // alone has no irrep to be named by. Whether the set IS one irrep is then
+  // the textbook test — its characters satisfy Σ|χ(R)|² = h only if it is
+  // irreducible. An accidental near-degeneracy of two different irreps sums
+  // to 2h or more, and falls back to the exact sets inside it.
+  for (const set of degenerateSets(energies, DEGENERATE_TOLERANCE_EV)) {
+    const characters = charactersOf(set);
+    const norm = characters.reduce((sum, chi) => sum + chi * chi, 0) / group.operations.length;
+    if (set.length === 1 || Math.abs(norm - 1) < 0.25) {
+      name(set, characters);
+      continue;
+    }
+    const first = set[0];
+    const exactSets = degenerateSets(set.map((mo) => energies[mo]), CANONICAL_TOLERANCE_EV)
+      .map((indices) => indices.map((k) => first + k));
+    for (const exact of exactSets) name(exact, charactersOf(exact));
   }
   return labels;
 }
