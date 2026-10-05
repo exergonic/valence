@@ -545,7 +545,8 @@ export async function optimizeWithGfn2(
    * fast, and right for most molecules. But OCC's analytic GFN2 gradient is
    * wrong for polar species — a known upstream limitation (OCC's README: the
    * multipole-on gradient misses the AO-multipole integral derivatives, a
-   * ~1 mHa gap; the bindings expose no charge-only switch). Measured against
+   * ~1 mHa gap; no binding reaches the charge-only variant — reported as
+   * peterspackman/occ#58, so revisit this check when it is fixed). Measured against
    * the Fortran xTB oracle: methanol 2.2e-4, the cyclopropenyl anion 4.7e-4
    * Eh/bohr, while xTB's own analytic gradient matches OCC's finite
    * differences to 1e-6. Berny believes it: on the anion it reported convergence 4.7 kcal/mol above
