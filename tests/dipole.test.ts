@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
-import { computeDipole } from '../src/chem/charge-model/dipole';
+import { computeDipole, dipoleFromCharges } from '../src/chem/charge-model/dipole';
 import { resolveCharges } from '../src/chem/charge-model/bci-charges';
 
 const waterMol = (): Molecule => {
@@ -290,5 +290,25 @@ describe('dipole — ions the type space cannot represent', () => {
     const acetateResolved = resolveCharges(acetateMol());
     expect(acetateResolved).not.toBeNull();
     expect(acetateResolved!.residualCharge).toBe(false);
+  });
+});
+
+// The dipole is drawn from whichever charges are on screen (GFN2-xTB's by
+// default), through one function: the MMFF94 path must be that same function
+// fed the BCI charges, or the two models would differ in more than charges.
+describe('dipoleFromCharges', () => {
+  it('is the MMFF94 dipole when fed the MMFF94 charges', () => {
+    const water = waterMol();
+    const resolved = resolveCharges(water)!;
+    const fromCharges = dipoleFromCharges(water, resolved.charges, resolved.residualCharge)!;
+    const mmff94 = computeDipole(water)!;
+    expect(fromCharges.debye).toBeCloseTo(mmff94.debye, 12);
+    fromCharges.vector.forEach((v, i) => expect(v).toBeCloseTo(mmff94.vector[i], 12));
+  });
+
+  it('refuses charges that do not describe the molecule', () => {
+    const water = waterMol();
+    expect(dipoleFromCharges(water, [-0.8, 0.4])).toBeNull();
+    expect(dipoleFromCharges(water, [-0.8, 0.4, Number.NaN])).toBeNull();
   });
 });

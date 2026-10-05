@@ -12,8 +12,6 @@ import { ringPuckerWarnings } from '../geometry/ring-pucker';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import { symmetrizeMolecule } from '../geometry/symmetrize';
 import type { PubChemInfo } from '../geometry/resolve3d';
-import { computeDipole, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE } from '../chem/charge-model/dipole';
-import type { DipoleResult } from '../chem/charge-model/dipole';
 
 declare global {
   interface Window {
@@ -94,14 +92,6 @@ function hideRenderError() {
   document.getElementById('render-error')!.classList.add('hidden');
 }
 
-// The dipole runs on MMFF94 BCI partial charges; on generic parameters
-// (hypervalent centers, ...) those charges are approximate, and an ion the
-// type space cannot represent (the carbanion C⁻) gets its drawn charge
-// placed by hand. Either way the readout would silently overstate itself.
-// The caveat prose is far too long for the one-line molecule header, so it
-// goes to the panel's Info log (bottom of the right panel) and the header
-// keeps only the short structural warnings — the stereo notes from the
-// pipeline.
 /**
  * Snap the resolved geometry to the point group it nearly has — the last step
  * of the pipeline, after the source (PubChem, CIR, or our own MMFF94) has had
@@ -131,19 +121,15 @@ function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: string[
  * report ("geometry approximate") and the 3-ring pucker check
  * (ring-pucker.ts: MMFF94's reference-angle artifact, reported, never
  * repaired) apply to it. A local structure is GFN2's or the unoptimised start,
- * and neither is MMFF94's. The charge model runs on MMFF94 either way, which
- * is what the dipole caveats are for.
+ * and neither is MMFF94's. The dipole's caveats depend on which charge model
+ * is on screen, so the dipole readout carries them (render/rebuild.ts).
  */
 function composeNotes(
   warnings: string[],
   molecule: Molecule,
-  dipole: DipoleResult | null,
   source: 'fetched' | 'local',
 ): { warnings: string[]; info: string[] } {
-  const gaps = parameterGapWarnings(molecule);
-  const info = source === 'fetched' ? [...gaps, ...ringPuckerWarnings(molecule)] : [];
-  if (dipole && gaps.length > 0) info.push(DIPOLE_APPROXIMATE);
-  if (dipole?.residualCharge) info.push(DIPOLE_RESIDUAL_CHARGE);
+  const info = source === 'fetched' ? [...parameterGapWarnings(molecule), ...ringPuckerWarnings(molecule)] : [];
   return { warnings, info };
 }
 
@@ -198,7 +184,7 @@ function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number
   buildScene(ctx);
 }
 
-function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null; info?: string[] }) {
+function updateMoleculeInfo(info: PubChemInfo & { info?: string[] }) {
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
   const nameEl = document.getElementById('mol-name')!;
@@ -243,28 +229,6 @@ function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null; 
     itemsEl.appendChild(item);
   }
   infoEl.classList.toggle('hidden', notes.length === 0);
-
-  // Charge-model dipole readout. A null dipole means the molecule has no
-  // honest MMFF94 charges (an element outside the type space); say so
-  // rather than leaving the readout blank next to an absent arrow. The
-  // visible text stays short — the hover explains the model and the
-  // arrow convention.
-  const dipoleEl = document.getElementById('mol-dipole')!;
-  if (info.dipole) {
-    dipoleEl.classList.remove('unsupported');
-    dipoleEl.textContent = `Dipole: ${info.dipole.debye.toFixed(2)} D`;
-    dipoleEl.title =
-      'Computed from MMFF94 BCI partial charges (a charge model, not a quantum-mechanical dipole). ' +
-      'The arrow points from the positive end (δ+) toward the negative end (δ−) — the chemistry ' +
-      'convention; the physics convention draws it the other way.';
-  } else if (info.dipole === null) {
-    dipoleEl.classList.add('unsupported');
-    dipoleEl.textContent = 'Dipole: n/a';
-    dipoleEl.title = '';
-  } else {
-    dipoleEl.textContent = '';
-    dipoleEl.title = '';
-  }
 
   // Collapsible PubChem record — only populated on successful PubChem lookups.
   const dataDetails = document.getElementById('mol-data')!;
@@ -348,14 +312,12 @@ export function mountJsmePanel(ctx: SceneContext) {
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-        const dipole = computeDipole(molecule);
-        const notes = composeNotes(result.info.warnings ?? [], molecule, dipole, 'fetched');
+        const notes = composeNotes(result.info.warnings ?? [], molecule, 'fetched');
         notes.info.push(...snapped.info);
         updateMoleculeInfo({
           ...result.info,
           formula,
           weight: `${weight}`,
-          dipole,
           warnings: notes.warnings,
           info: notes.info,
         });
@@ -380,8 +342,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-        const dipole = computeDipole(molecule);
-        const notes = composeNotes(local.warnings, molecule, dipole, 'local');
+        const notes = composeNotes(local.warnings, molecule, 'local');
         if (local.engine === 'gfn2' && local.gfn2) {
           if (!local.gfn2.converged) notes.warnings.unshift('GFN2-xTB structure, not fully converged.');
           notes.info.push(GFN2_NOTE, ...gfn2RunNotes(local.gfn2));
@@ -399,10 +360,8 @@ export function mountJsmePanel(ctx: SceneContext) {
           source: local.engine === 'gfn2' ? 'gfn2' : 'local',
           formula,
           weight: `${weight}`,
-          dipole,
           // The stereo-enforcement failures ride out of the worker with the
-          // molecule; the parameter-gap report and the dipole caveats are
-          // composed here (the header keeps the structural warnings, the
+          // molecule; the parameter-gap report is composed here (the header keeps the structural warnings, the
           // verbose caveats go to the panel's Info log).
           warnings: notes.warnings,
           info: notes.info,
@@ -446,16 +405,11 @@ export function mountJsmePanel(ctx: SceneContext) {
         const next = snapped.molecule;
         showMolecule(ctx, next, refined.charges);
         const { formula, weight } = computeFormula(next.atoms.map(a => a.element));
-        const dipole = computeDipole(next);
         // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
         // the geometry no longer comes from MMFF94, so calling it "approximate"
-        // would be stale. The charge model still runs on those parameters, so
-        // the dipole caveats do still apply.
-        const info: string[] = [];
-        if (dipole && parameterGapWarnings(next).length > 0) info.push(DIPOLE_APPROXIMATE);
-        if (dipole?.residualCharge) info.push(DIPOLE_RESIDUAL_CHARGE);
-        info.push(GFN2_NOTE, ...gfn2RunNotes(refined), ...snapped.info);
-        updateMoleculeInfo({ source: 'gfn2', formula, weight: `${weight}`, dipole, warnings: refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'], info });
+        // would be stale.
+        const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...snapped.info];
+        updateMoleculeInfo({ source: 'gfn2', formula, weight: `${weight}`, warnings: refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'], info });
       } catch (error) {
         showRenderError(error instanceof Gfn2Cancelled
           ? 'GFN2-xTB refinement cancelled — the geometry is unchanged.'

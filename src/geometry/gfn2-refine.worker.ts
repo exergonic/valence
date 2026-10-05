@@ -685,10 +685,43 @@ function release(calc: { delete?: () => void }): void {
   }
 }
 
-self.onmessage = async (e: MessageEvent<{ id: number; molecule: Molecule }>) => {
-  const { id, molecule } = e.data;
+/**
+ * GFN2-xTB per-atom charges (Mulliken SCC, electrons) at a structure as given —
+ * one single point, no optimisation and no implicit hydrogens, so the array
+ * indexes the displayed atoms one to one. This is how a structure the engine
+ * did not produce (a PubChem conformer, an example) gets the app's default
+ * charge model. Null when the engine cannot treat the molecule.
+ */
+export async function chargesAt(
+  molecule: Molecule,
+  locateFile?: (path: string) => string,
+): Promise<number[] | null> {
+  const count = molecule.atoms.length;
+  if (count === 0) return null;
+  const M = await (locateFile ? loadGfn2(locateFile) : loadGfn2());
+  const angstrom = molecule.atoms.flatMap((a) => [a.x, a.y, a.z]);
+  const calc = M.XtbCalculator.fromMolecule(
+    new M.Molecule(M.IVec.fromArray(molecule.atoms.map((a) => elementToZ(a.element))), toMat3N(M, angstrom, count)),
+  );
   try {
-    const result = await optimizeWithGfn2(molecule, undefined, (progress) => self.postMessage({ id, progress }));
+    calc.charge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
+    calc.numUnpairedElectrons = Math.max(0, (molecule.multiplicity ?? 1) - 1);
+    const energy = calc.singlePointEnergy();
+    if (!Number.isFinite(energy) || calc.lastResult()?.converged === false) return null;
+    const q = calc.charges();
+    if (q.size() !== count) return null;
+    return Array.from({ length: count }, (_, i) => q.get(i));
+  } finally {
+    release(calc);
+  }
+}
+
+self.onmessage = async (e: MessageEvent<{ id: number; molecule: Molecule; task?: 'optimise' | 'charges' }>) => {
+  const { id, molecule, task } = e.data;
+  try {
+    const result = task === 'charges'
+      ? await chargesAt(molecule)
+      : await optimizeWithGfn2(molecule, undefined, (progress) => self.postMessage({ id, progress }));
     self.postMessage({ id, result });
   } catch (error) {
     // Never fail silently: the caller surfaces this, and a console line keeps

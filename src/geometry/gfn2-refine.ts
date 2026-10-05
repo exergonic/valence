@@ -61,7 +61,8 @@ export class Gfn2Unavailable extends Error {
 let worker: Worker | null = null;
 let nextId = 1;
 interface PendingRun {
-  resolvers: PromiseWithResolvers<Gfn2Result | null>;
+  // an optimisation resolves a Gfn2Result, a charges request a number[]
+  resolvers: PromiseWithResolvers<any>;
   onProgress?: (progress: Gfn2Progress) => void;
 }
 const pending = new Map<number, PendingRun>();
@@ -85,7 +86,7 @@ function ensureWorker(): Worker | null {
     worker.onmessage = (e: MessageEvent) => {
       const { id, result, error, progress } = e.data as {
         id: number;
-        result?: Gfn2Result | null;
+        result?: unknown;
         error?: string;
         progress?: Gfn2Progress;
       };
@@ -125,6 +126,24 @@ export function refineWithGfn2(
   // descent at a spurious stationary point (drawn water arrives exactly
   // linear and comes back exactly linear) — a deterministic kick first.
   w.postMessage({ id, molecule: breakSymmetry(molecule) });
+  return resolvers.promise;
+}
+
+/**
+ * GFN2-xTB Mulliken charges at a structure exactly as displayed — one single
+ * point, no optimisation, no hydrogens added — so a structure the engine did
+ * not produce (a PubChem conformer, an example) can show the same charge model
+ * as one it did. Null when the engine cannot treat the molecule; rejects with
+ * Gfn2Unavailable without a Worker. Shares the worker, and so the wasm, with
+ * the optimisations.
+ */
+export function gfn2ChargesAt(molecule: Molecule): Promise<number[] | null> {
+  const w = ensureWorker();
+  if (!w) return Promise.reject(new Gfn2Unavailable());
+  const resolvers = Promise.withResolvers<number[] | null>();
+  const id = nextId++;
+  pending.set(id, { resolvers });
+  w.postMessage({ id, molecule, task: 'charges' });
   return resolvers.promise;
 }
 

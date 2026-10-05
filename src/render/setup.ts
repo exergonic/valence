@@ -17,13 +17,16 @@ import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complementary' | 'cool' | 'warm' | 'highcontrast' | 'custom';
 
 /**
- * Which partial-charge model the charge labels and the ESP surface draw.
+ * Which partial charges the display draws — the charge labels, the ESP surface
+ * and the dipole arrow, all three from one array so they describe one charge
+ * distribution.
  *
- * MMFF94 BCI charges always exist (unless an element is outside the MMFF94
- * type space); GFN2-xTB's own Mulliken SCC charges exist only for a structure
- * the GFN2 tier produced, and the control that offers the choice stays
- * disabled without one (see syncChargeModelControl). The dipole arrow is not
- * part of this: it stays on MMFF94.
+ * GFN2-xTB's Mulliken SCC charges are the default: the engine's own for a
+ * structure it optimised, or one single point at the displayed geometry for a
+ * structure it did not (a PubChem conformer, an example), computed when a
+ * charge display first asks for them. MMFF94 BCI charges are there when the
+ * user picks them — fitting for PubChem's MMFF94 geometries — and as the
+ * fallback when the engine cannot treat the molecule.
  */
 export type ChargeModel = 'mmff94' | 'gfn2';
 
@@ -141,7 +144,8 @@ export interface SceneContext {
   display: DisplaySettings;
   currentMolecule?: Molecule;
   atomOrbitals: AtomOrbitals[] | null;
-  /** Per-molecule charge-model dipole (computed in buildScene, like atomOrbitals). */
+  /** The dipole of the charges on display (computed in rebuildDisplay from
+   *  the same array as the labels and the ESP). */
   dipole: DipoleResult | null;
   /** Resolved per-atom partial charges for the current molecule — the same
    *  values the dipole arrow uses (BCI + residual placement). Feeds the
@@ -153,13 +157,17 @@ export interface SceneContext {
    *  offer. Paired with its molecule: buildScene drops the bundle when it does
    *  not describe the molecule on screen, so a stale array can never be read. */
   gfn2Charges: Gfn2Charges | null;
+  /** The GFN2 single point asked for the molecule on screen, so it is asked
+   *  once: pending while it runs, failed (with why) when the engine could not
+   *  give charges — the display then falls back to MMFF94 and says so. */
+  gfn2ChargeRequest: { molecule: Molecule; status: 'pending' | 'failed'; reason?: string } | null;
   /** Cached fused vdW ESP surface for the current molecule (computed lazily
    *  on the first ESP render; null until then or for an untypeable molecule). */
   espSurface: EspSurfaceData | null;
-  /** The charge model `espSurface` was built from — the surface is a function
-   *  of the charges as much as of the geometry, so a model switch re-extracts
-   *  rather than reusing the other model's potential field. */
-  espSurfaceModel: ChargeModel | null;
+  /** The charges `espSurface` was built from — the surface is a function of
+   *  the charges as much as of the geometry, so a different array (a model
+   *  switch, or GFN2 charges arriving) re-extracts it. */
+  espSurfaceCharges: number[] | null;
   /** Extracted isosurfaces, keyed `mo:<index>` / `localized:<index>`. Each
    *  costs ~50 ms to extract, and the same orbital can be picked, dropped and
    *  picked again while comparing orbitals — so they are kept until the
@@ -310,7 +318,7 @@ export function initScene(container: HTMLElement): SceneContext {
       localizedSelection: [],
       showOrbitals: true,
       showEsp: false,
-      chargeModel: 'mmff94',
+      chargeModel: 'gfn2',
       espOpacity: 0.5,
       smoothMo: true,
       moOpacity: 0.85,
@@ -324,8 +332,9 @@ export function initScene(container: HTMLElement): SceneContext {
     dipole: null,
     charges: null,
     gfn2Charges: null,
+    gfn2ChargeRequest: null,
     espSurface: null,
-    espSurfaceModel: null,
+    espSurfaceCharges: null,
     moSurfaces: new Map(),
     moFields: new Map(),
     ehResult: null,

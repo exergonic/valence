@@ -21,6 +21,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Molecule } from '../src/mol-parser';
 import { parseMolBlock } from '../src/mol-parser';
 import { HESSIAN_SADDLE_THRESHOLD } from '../src/geometry/gfn2-refine';
+import { EXAMPLES } from '../src/ui/examples';
 
 beforeAll(() => {
   // The worker module registers `self.onmessage` at import time.
@@ -124,6 +125,29 @@ describe('GFN2-xTB', () => {
     const result = await refine(water);
     expect(result!.lowestHessianMode).not.toBeNull();
     expect(result!.lowestHessianMode!).toBeGreaterThan(HESSIAN_SADDLE_THRESHOLD);
+  }, 180_000);
+
+  // The default charge model is GFN2's for every structure on screen, so a
+  // structure the engine did not produce (a PubChem conformer, an example)
+  // gets a single point at its own geometry. At the optimiser's geometry that
+  // single point must be the optimiser's charges — one model, not two.
+  it("gives the optimiser's own charges as a single point at its geometry", async () => {
+    const { chargesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const result = await refine(water);
+    const charges = await chargesAt(result!.molecule, vendorFile);
+    expect(charges).not.toBeNull();
+    charges!.forEach((q, i) => expect(q).toBeCloseTo(result!.charges![i], 4));
+  }, 180_000);
+
+  // An ion's drawn charge reaches the engine: the charges sum to it.
+  it("carries an ion's net charge into the single point — [Ni(CN)₄]²⁻", async () => {
+    const { chargesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const example = EXAMPLES.find((e) => e.name.startsWith('Tetracyanonickelate'));
+    const nicn4 = parseMolBlock(example!.mol);
+    const charges = await chargesAt(nicn4, vendorFile);
+    expect(charges).not.toBeNull();
+    expect(charges!.length).toBe(nicn4.atoms.length);
+    expect(charges!.reduce((sum, q) => sum + q, 0)).toBeCloseTo(-2, 6);
   }, 180_000);
 
   // The 3-ring planarity repair that used to run after this tier was removed

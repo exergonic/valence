@@ -63,6 +63,7 @@ export interface MoPanel {
   setCollapsed(collapsed: boolean): void;
   setView(view: 'delocalized' | 'localized'): void;
   clearSelections(): void;
+  selectHomo(): void;
 }
 
 export function setupMoPanel(ctx: SceneContext): MoPanel {
@@ -479,6 +480,38 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     clearSelections: () => {
       ctx.display.moIndex = null;
       ctx.display.localizedSelection = [];
+      draw();
+      ctx.rerender();
+    },
+    /** Draw the highest occupied orbital of the current view — the frontier
+     *  orbital a chemist starts at. In the localized list that is the top row
+     *  of the Occupied section (highest ⟨φ|H|φ⟩); on the ladder, a degenerate
+     *  HOMO is a set, and its top row — the lowest-numbered partner — is
+     *  drawn. Nothing for an open shell, which has no settled HOMO. */
+    selectHomo: () => {
+      ctx.display.moIndex = null;
+      ctx.display.localizedSelection = [];
+      if (ctx.display.orbitalView === 'localized') {
+        // the occupied section comes first in the array, ascending in ⟨φ|H|φ⟩,
+        // so its last member is the top row of the Occupied list
+        const orbitals = ctx.localizedOrbitals ?? [];
+        let homo = -1;
+        for (let i = 0; i < orbitals.length; i++) if (orbitals[i].occupied) homo = i;
+        if (homo >= 0) ctx.display.localizedSelection = [homo];
+      } else if (ctx.ehResult) {
+        const energies = ctx.ehResult.energies;
+        const occupations = closedShellOccupations(
+          ctx.ehResult.electronCount, energies.length, energies, ctx.currentMolecule?.multiplicity ?? 1,
+        );
+        const homo = occupations ? occupations.filter((o) => o > 0).length - 1 : -1;
+        // the first member of the HOMO's group, grouped as the ladder groups
+        // its rows: a level joins a group within tolerance of its first member
+        let first = 0;
+        for (let i = 1; i <= homo; i++) {
+          if (Math.abs(energies[first] - energies[i]) >= DEGENERATE_TOLERANCE) first = i;
+        }
+        if (homo >= 0) ctx.display.moIndex = first;
+      }
       draw();
       ctx.rerender();
     },

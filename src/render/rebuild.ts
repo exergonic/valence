@@ -15,7 +15,12 @@ import { renderMoIsosurface } from './mo-isosurface';
 import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/vsepr/assign-orbitals';
-import { computeDipole } from '../chem/charge-model/dipole';
+import {
+  dipoleFromCharges, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE, type DipoleResult,
+} from '../chem/charge-model/dipole';
+import { parameterGapWarnings } from '../geometry/parameter-warnings';
+import { gfn2ChargesAt } from '../geometry/gfn2-refine';
+import type { ChargeModel } from './setup';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
 import { localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../chem/localized-orbitals/order-localized';
@@ -44,25 +49,119 @@ function clearGroup(g: THREE.Group) {
   }
 }
 
+/** True when the engine was asked for this molecule's charges and could not
+ *  give them (an element outside GFN2's table, no Worker, a failed SCC). */
+function gfn2ChargesFailed(ctx: SceneContext): boolean {
+  const request = ctx.gfn2ChargeRequest;
+  return request !== null && request.molecule === ctx.currentMolecule && request.status === 'failed';
+}
+
 /**
- * Keep the charge-model control honest. GFN2 charges exist only for a
- * structure the GFN2 tier produced, so the option is disabled without one —
- * and a selection that outlives its charges falls back to MMFF94 rather than
- * leaving the labels and the ESP blank.
+ * The charge model on screen for this molecule: the one the control selects,
+ * or the other when the selected one has no charges for it — GFN2 when the
+ * engine failed, MMFF94 when the molecule is outside its type space. The
+ * selection itself is left alone (it is the user's intent, and the next
+ * molecule may honour it).
+ */
+function effectiveChargeModel(ctx: SceneContext): ChargeModel {
+  if (ctx.display.chargeModel === 'gfn2' && gfn2ChargesFailed(ctx) && ctx.charges) return 'mmff94';
+  if (ctx.display.chargeModel === 'mmff94' && !ctx.charges && ctx.currentMolecule && !gfn2ChargesFailed(ctx)) {
+    return 'gfn2';
+  }
+  return ctx.display.chargeModel;
+}
+
+/**
+ * Keep the charge-model control honest: it shows the model on screen, and
+ * disables the one with no charges for this molecule. GFN2-xTB is on offer for
+ * every molecule — the engine's own charges, or a single point at the
+ * displayed geometry.
  */
 export function syncChargeModelControl(ctx: SceneContext) {
   const select = document.getElementById('ctrl-charge-model') as HTMLSelectElement | null;
   if (!select) return;
-  const available = ctx.gfn2Charges !== null;
+  const gfn2Failed = gfn2ChargesFailed(ctx);
+  const mmff94Missing = ctx.currentMolecule !== null && !ctx.charges;
   const gfn2Option = select.querySelector<HTMLOptionElement>('option[value="gfn2"]');
-  if (gfn2Option) gfn2Option.disabled = !available;
-  select.title = available
-    ? 'Which partial charges the charge labels and the ESP surface show. The dipole arrow stays on MMFF94.'
-    : 'GFN2-xTB charges need a structure from the GFN2 tier — press "Refine with GFN2-xTB". '
-      + 'Until then the labels and the ESP surface show MMFF94 charges.';
-  if (!available && ctx.display.chargeModel === 'gfn2') {
-    ctx.display.chargeModel = 'mmff94';
-    select.value = 'mmff94';
+  const mmff94Option = select.querySelector<HTMLOptionElement>('option[value="mmff94"]');
+  if (gfn2Option) gfn2Option.disabled = gfn2Failed;
+  if (mmff94Option) mmff94Option.disabled = mmff94Missing;
+  select.title = gfn2Failed
+    ? `GFN2-xTB could not give charges for this molecule (${ctx.gfn2ChargeRequest?.reason ?? 'the engine failed'}).`
+    : mmff94Missing
+      ? 'This molecule is outside the MMFF94 type space, so it has no MMFF94 charges.'
+      : 'Which partial charges the charge labels, the ESP surface and the dipole arrow show — one set for all three.';
+  select.value = effectiveChargeModel(ctx);
+}
+
+/**
+ * Ask the engine for GFN2 charges at the molecule on screen, once per
+ * molecule, in the background: the display draws as soon as they arrive. A
+ * structure the GFN2 optimiser produced already carries them.
+ */
+function requestGfn2Charges(ctx: SceneContext): void {
+  const molecule = ctx.currentMolecule;
+  if (!molecule || ctx.gfn2Charges?.molecule === molecule) return;
+  if (ctx.gfn2ChargeRequest?.molecule === molecule) return;
+  ctx.gfn2ChargeRequest = { molecule, status: 'pending' };
+  const settle = (charges: number[] | null, reason?: string) => {
+    if (ctx.currentMolecule !== molecule) return; // the molecule changed meanwhile
+    if (charges && charges.length === molecule.atoms.length) {
+      ctx.gfn2Charges = { molecule, charges };
+      ctx.gfn2ChargeRequest = null;
+    } else {
+      ctx.gfn2ChargeRequest = { molecule, status: 'failed', reason: reason ?? 'no charges returned' };
+    }
+    ctx.rerender();
+  };
+  gfn2ChargesAt(molecule).then(
+    (charges) => settle(charges),
+    (error) => settle(null, (error as Error)?.message),
+  );
+}
+
+/**
+ * The partial charges on display, and which model they are — ONE array for
+ * the charge labels, the ESP surface and the dipole, so the three describe one
+ * charge distribution. GFN2-xTB by default: null while its single point is
+ * still running (the picture fills in when it lands), MMFF94 in its place when
+ * the engine cannot treat the molecule. MMFF94 when the user picks it.
+ */
+function displayedCharges(ctx: SceneContext): { charges: number[] | null; model: ChargeModel; residual: boolean } {
+  if (effectiveChargeModel(ctx) === 'mmff94') {
+    return { charges: ctx.charges?.charges ?? null, model: 'mmff94', residual: ctx.charges?.residualCharge ?? false };
+  }
+  if (ctx.gfn2Charges && ctx.gfn2Charges.molecule === ctx.currentMolecule) {
+    return { charges: ctx.gfn2Charges.charges, model: 'gfn2', residual: false };
+  }
+  if (!gfn2ChargesFailed(ctx)) requestGfn2Charges(ctx);
+  return { charges: null, model: 'gfn2', residual: false };
+}
+
+/** The header's dipole readout — which model it came from is in the hover. */
+function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model: ChargeModel, pending: boolean) {
+  const element = document.getElementById('mol-dipole');
+  if (!element) return;
+  element.classList.toggle('unsupported', !dipole && !pending);
+  const convention = 'The arrow points from the positive end (δ+) toward the negative end (δ−) — the chemistry '
+    + 'convention; the physics convention draws it the other way.';
+  if (dipole) {
+    element.textContent = `Dipole: ${dipole.debye.toFixed(2)} D`;
+    element.title = model === 'gfn2'
+      ? 'The dipole of the GFN2-xTB Mulliken point charges — the charges the labels and the ESP show; '
+        + 'not the full GFN2 dipole, which adds atomic dipoles. ' + convention
+      : 'The dipole of the MMFF94 BCI partial charges (a charge model, not a quantum-mechanical dipole). '
+        // The MMFF94 caveats belong to this model only, so they ride on its
+        // readout rather than in the Info log, which outlives a model switch.
+        + (ctx.currentMolecule && parameterGapWarnings(ctx.currentMolecule).length > 0 ? DIPOLE_APPROXIMATE + '. ' : '')
+        + (dipole.residualCharge ? DIPOLE_RESIDUAL_CHARGE + ' ' : '')
+        + convention;
+  } else if (pending) {
+    element.textContent = 'Dipole: …';
+    element.title = 'Computing GFN2-xTB charges (the first molecule loads the engine).';
+  } else {
+    element.textContent = ctx.currentMolecule ? 'Dipole: n/a' : '';
+    element.title = '';
   }
 }
 
@@ -113,13 +212,11 @@ export function rebuildDisplay(ctx: SceneContext) {
   // background: pale tints on the dark presets, darkened hues on white/gray).
   const labelMode = ctx.display.labelMode;
   const labelPalette = labelPaletteFor(ctx.display.bgColor);
-  // The partial charges on display: the model the control selects, MMFF94 when
-  // the selection has no GFN2 charges for this structure. The control is
-  // disabled without them, so the fallback is a safety net, not the norm — but
-  // it is what keeps the two branches below from disagreeing about the model.
-  const gfn2Charges = ctx.gfn2Charges?.charges ?? null;
-  const charges =
-    ctx.display.chargeModel === 'gfn2' && gfn2Charges ? gfn2Charges : (ctx.charges?.charges ?? null);
+  // The partial charges on display — one array for the labels, the ESP and
+  // the dipole (see displayedCharges).
+  const shown = displayedCharges(ctx);
+  const charges = shown.charges;
+  syncChargeModelControl(ctx);
   if (labelMode === 'atom') {
     // Element symbol labels (C, N, O...)
     renderLabels(ctx.labelGroup, ctx.currentMolecule);
@@ -138,9 +235,7 @@ export function rebuildDisplay(ctx: SceneContext) {
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
   } else if (labelMode === 'charge' && charges) {
-    // Partial charges — from the model the charge-model control selects:
-    // MMFF94 BCI (with any residual placement), or the GFN2-xTB engine's own
-    // Mulliken SCC charges when the structure came out of the GFN2 tier.
+    // Partial charges — the displayed set (GFN2-xTB Mulliken by default).
     renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, charges);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
@@ -165,9 +260,11 @@ export function rebuildDisplay(ctx: SceneContext) {
   // untypeable (computeDipole returned null) or the model gives ~0 D.
   // Visibility belongs to the #ctrl-show-dipole checkbox, so a rebuild
   // never flips the user's choice back on (or off).
+  ctx.dipole = charges ? dipoleFromCharges(ctx.currentMolecule, charges, shown.residual) : null;
   if (ctx.dipole) {
     renderDipole(ctx.dipoleGroup, ctx.dipole);
   }
+  showDipoleReadout(ctx, ctx.dipole, shown.model, charges === null && shown.model === 'gfn2');
 
   // Charge-model ESP surface — a translucent overlay of the FUSED (united)
 // vdW molecular surface, colored by the potential probed at the fused
@@ -179,9 +276,9 @@ export function rebuildDisplay(ctx: SceneContext) {
     // The surface is a function of the charges as much as of the geometry, so
     // the cache is keyed by both: a charge-model switch re-extracts (tens of
     // ms), an opacity change reuses what is in hand.
-    if (!ctx.espSurface || ctx.espSurfaceModel !== ctx.display.chargeModel) {
+    if (!ctx.espSurface || ctx.espSurfaceCharges !== charges) {
       ctx.espSurface = computeEspSurface(ctx.currentMolecule, charges);
-      ctx.espSurfaceModel = ctx.display.chargeModel;
+      ctx.espSurfaceCharges = charges;
     }
     renderEsp(ctx.espGroup, ctx.espSurface, ctx.display.espOpacity);
     ctx.espGroup.visible = true;
@@ -285,14 +382,14 @@ export function buildScene(ctx: SceneContext) {
   // Cache the per-molecule orbital assignment here so renderHybridOrbitals can
   // read it instead of recomputing on every display-setting change.
   ctx.atomOrbitals = ctx.currentMolecule ? assignOrbitals(ctx.currentMolecule) : null;
-  // Same for the charge-model dipole (BCI charges are geometry-independent:
-  // computed once per molecule — see chem/charge-model/dipole.ts). The resolved per-atom
-  // charges join it — the charge label mode reads them.
-  ctx.dipole = ctx.currentMolecule ? computeDipole(ctx.currentMolecule) : null;
+  // The MMFF94 BCI charges (geometry-independent, so once per molecule), for
+  // when the user picks that model; the displayed set — GFN2-xTB's by default
+  // — and its dipole are chosen in rebuildDisplay.
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
+  if (ctx.gfn2ChargeRequest && ctx.gfn2ChargeRequest.molecule !== ctx.currentMolecule) ctx.gfn2ChargeRequest = null;
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
-  ctx.espSurfaceModel = null;
+  ctx.espSurfaceCharges = null;
   ctx.moSurfaces.clear();
   ctx.moFields.clear();
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is

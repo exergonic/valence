@@ -1,11 +1,13 @@
 /**
- * Dipole moment from the MMFF94 BCI partial-charge model.
+ * The dipole moment of a set of point charges.
  *
- * This is a CHARGE-MODEL dipole, not a quantum-mechanical one: the charges
- * come from the charge model (chem/charge-model/bci-charges.ts) — Halgren's
- * bond-charge increments, computed locally on the displayed molecule so
- * every geometry path (PubChem, CACTVS, local) gets the same values and the
- * charges always match the bond graph actually shown.
+ * This is a CHARGE-MODEL dipole, not a quantum-mechanical one: it is the
+ * dipole of the per-atom charges the display shows — GFN2-xTB's Mulliken
+ * charges by default, or the MMFF94 BCI charges (chem/charge-model/
+ * bci-charges.ts) when the user picks them. A full GFN2 dipole would add the
+ * atomic dipoles the method also carries; the point charges are what the
+ * labels and the ESP surface show, and one distribution for all three is the
+ * point. `computeDipole` is the MMFF94 path; `dipoleFromCharges` takes any.
  *
  * Physics: p = Σᵢ qᵢ(rᵢ − r_com). The sum is origin-independent for a
  * neutral molecule but not for an ion, so the origin sits at the center of
@@ -72,11 +74,25 @@ function computeDipoleOrThrow(molecule: Molecule): DipoleResult | null {
   // the same numbers the charge labels will show.
   const resolved = resolveCharges(molecule);
   if (!resolved) return null;
-  const charges = resolved.charges;
+  return dipoleFromCharges(molecule, resolved.charges, resolved.residualCharge);
+}
+
+/**
+ * The point-charge dipole of any set of per-atom charges, indexed like
+ * `molecule.atoms` — the MMFF94 BCI charges above, or GFN2-xTB's Mulliken
+ * charges, whichever the display shows, so the arrow, the labels and the ESP
+ * describe one charge distribution. Null when a charge is not finite or the
+ * array does not match the atoms.
+ */
+export function dipoleFromCharges(
+  molecule: Molecule,
+  charges: number[],
+  residualCharge = false,
+): DipoleResult | null {
+  if (charges.length !== molecule.atoms.length) return null;
   for (const q of charges) {
     if (!Number.isFinite(q)) return null;
   }
-  const residualCharge = resolved.residualCharge;
 
   // Center of mass from standard atomic weights. An element the table does
   // not know contributes 0 — it is skipped (see assign-mass.ts for the

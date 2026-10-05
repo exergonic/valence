@@ -71,9 +71,9 @@ export function setupControls(ctx: SceneContext) {
     rerender();
   });
 
-  // Charge model — which partial charges the charge labels and the ESP surface
-  // draw. The selection is intent only: syncChargeModelControl re-reads it per
-  // molecule, because GFN2 charges exist only for a GFN2-refined structure.
+  // Charge model — which partial charges the charge labels, the ESP surface
+  // and the dipole draw. The selection is intent only: syncChargeModelControl
+  // re-reads it per molecule, because either model can lack charges for one.
   const chargeModelSelect = panel.querySelector<HTMLSelectElement>('#ctrl-charge-model')!;
   chargeModelSelect.value = ctx.display.chargeModel;
   chargeModelSelect.addEventListener('change', () => {
