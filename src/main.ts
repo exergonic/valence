@@ -1,3 +1,12 @@
+// The themes' typefaces, bundled rather than fetched, so the app works offline
+// in a classroom; a browser downloads only the faces the active theme uses.
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
+import '@fontsource/ibm-plex-sans/400.css';
+import '@fontsource/ibm-plex-sans/500.css';
+import '@fontsource/ibm-plex-sans/600.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import '@fontsource/ibm-plex-mono/500.css';
 import type { SceneContext } from './render';
 import { initScene, buildScene, ATOM_LAYER } from './render';
 import { mountJsmePanel, toggleJsmeCollapsed, setJsmeCollapsed, snapToSymmetry, showInfoLog } from './ui/jsme-panel';
@@ -12,6 +21,7 @@ import { parseMolBlock } from './mol-parser';
 import { EXAMPLES } from './ui/examples';
 import { isVseprElement } from './chem/vsepr/assign-orbitals';
 import { preloadGfn2 } from './geometry/gfn2-refine';
+import { setupTheme } from './ui/theme';
 
 function setupSplitter() {
   const splitter = document.getElementById('splitter')!;
@@ -235,6 +245,8 @@ async function main() {
   const annotations = setupAnnotations(document.getElementById('canvas-container')!);
   mountJsmePanel(scene);
   setupControls(scene);
+  // after the controls: a theme sets the scene background through their Background input
+  setupTheme(scene);
   setupSplitter();
   setupExamples(scene);
   setupTooltip(
