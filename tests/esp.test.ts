@@ -17,6 +17,7 @@ import type { Molecule } from '../src/mol-parser';
 import { parseMolBlock } from '../src/mol-parser';
 import { embedAndRefine } from '../src/geometry/mmff-refine';
 import { resolveCharges } from '../src/chem/charge-model/bci-charges';
+import { getVdwRadius } from '../src/chem/radii';
 
 // Water in the app's own fixture geometry (from the examples), with the BCI
 // oracle charges: O −0.86, H +0.43.
@@ -148,25 +149,41 @@ describe('computeEspSurface — the fused molecular surface', () => {
   });
 
   it('the surface is watertight — every mesh edge belongs to two triangles', () => {
-    const surf = computeEspSurface(singleH(), [1]);
-    const q = Math.round;
-    const key = (i: number, j: number): string => {
-      const p = (k: number) => {
-        const a = surf.positions[k * 3], b = surf.positions[k * 3 + 1], c = surf.positions[k * 3 + 2];
-        return `${q(a * 1e5)},${q(b * 1e5)},${q(c * 1e5)}`;
+    // Iodine as well as hydrogen: its 1.98 Å radius is past what a fixed 2 Å
+    // pad covers once the grid's last point falls short of it, and the box cut
+    // the sphere open — an iodine-bearing ESP surface had holes in it.
+    for (const element of ['H', 'I']) {
+      const surf = computeEspSurface({ atoms: [{ element, x: 0, y: 0, z: 0 }], bonds: [] }, [1]);
+      const q = Math.round;
+      const key = (i: number, j: number): string => {
+        const p = (k: number) => {
+          const a = surf.positions[k * 3], b = surf.positions[k * 3 + 1], c = surf.positions[k * 3 + 2];
+          return `${q(a * 1e5)},${q(b * 1e5)},${q(c * 1e5)}`;
+        };
+        const a = p(i), b = p(j);
+        return a < b ? `${a}|${b}` : `${b}|${a}`;
       };
-      const a = p(i), b = p(j);
-      return a < b ? `${a}|${b}` : `${b}|${a}`;
-    };
-    const edges = new Map<string, number>();
-    for (let t = 0; t < surf.vertexCount; t += 3) {
-      for (const [u, v] of [[0, 1], [1, 2], [2, 0]] as const) {
-        const k = key(t + u, t + v);
-        edges.set(k, (edges.get(k) ?? 0) + 1);
+      const edges = new Map<string, number>();
+      for (let t = 0; t < surf.vertexCount; t += 3) {
+        for (const [u, v] of [[0, 1], [1, 2], [2, 0]] as const) {
+          const k = key(t + u, t + v);
+          edges.set(k, (edges.get(k) ?? 0) + 1);
+        }
+      }
+      expect(edges.size).toBeGreaterThan(200);
+      for (const count of edges.values()) expect(count).toBe(2);
+      // and the sphere is whole: it reaches its full radius on every side
+      for (let axis = 0; axis < 3; axis++) {
+        let low = Infinity;
+        let high = -Infinity;
+        for (let i = 0; i < surf.vertexCount; i++) {
+          low = Math.min(low, surf.positions[i * 3 + axis]);
+          high = Math.max(high, surf.positions[i * 3 + axis]);
+        }
+        expect(high).toBeGreaterThan(getVdwRadius(element) - 0.05);
+        expect(low).toBeLessThan(-getVdwRadius(element) + 0.05);
       }
     }
-    expect(edges.size).toBeGreaterThan(200);
-    for (const count of edges.values()) expect(count).toBe(2);
   });
 
   it('two fused spheres give a larger, single surface', () => {

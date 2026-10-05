@@ -12,10 +12,10 @@
  * neighbor).
  *
  * Potential: the electric potential of the molecule's point charges at a
- * surface vertex, V(r) = Σ qᵢ/|r − rᵢ|, with a floor on |r − rᵢ| so a
- * vertex that happens to sit on top of a nucleus cannot blow up. Units:
- * e/Å. This is the charge model (the resolved BCI charges the dipole and
- * the labels use), never quantum-mechanical.
+ * surface vertex, V(r) = Σ qᵢ/|r − rᵢ|. Units: e/Å (× 332.06 for kcal/mol
+ * per unit charge); only the colour reads it, so the unit never shows. This
+ * is the charge model (the resolved BCI charges the dipole and the labels
+ * use), never quantum-mechanical.
  *
  * Color: the textbook diverging map — negative red, neutral green, positive
  * blue — mapped onto a symmetric scale. The scale is percentile-clipped on
@@ -25,12 +25,14 @@
 import type { Molecule } from '../../mol-parser';
 import { getVdwRadius } from '../radii';
 
-/** Floor on |r − rᵢ| (Å) — a surface vertex at a nucleus's own position
- *  reads the charge's field at this distance, not at zero. */
+/** Floor on |r − rᵢ| (Å), so `espPotentialAt` is finite everywhere. It never
+ *  acts on the surface itself: every point of the vdW union is at least one
+ *  vdW radius (≥ 1.2 Å) from every nucleus. */
 export const ESP_CUTOFF = 0.35;
 /** Isosurface grid spacing (Å) — the resolution of the fused surface. */
 export const ESP_GRID_SPACING = 0.25;
-/** Padding around the molecule's bounding box (Å) so the surface is closed. */
+/** The least padding around the molecule's bounding box (Å). The actual pad
+ *  also covers the largest vdW radius present — see computeEspSurface. */
 export const ESP_GRID_MARGIN = 2.0;
 
 /** The electric potential of the point charges at one point in space. */
@@ -138,15 +140,24 @@ export function computeEspSurface(
   const atoms = molecule.atoms;
   let minX = Infinity, minY = Infinity, minZ = Infinity;
   let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  let largestRadius = 0;
   for (const a of atoms) {
     if (a.x < minX) minX = a.x; if (a.x > maxX) maxX = a.x;
     if (a.y < minY) minY = a.y; if (a.y > maxY) maxY = a.y;
     if (a.z < minZ) minZ = a.z; if (a.z > maxZ) maxZ = a.z;
+    largestRadius = Math.max(largestRadius, getVdwRadius(a.element));
   }
-  const ox = minX - margin, oy = minY - margin, oz = minZ - margin;
-  const nx = Math.max(2, Math.ceil((maxX - minX + 2 * margin) / spacing));
-  const ny = Math.max(2, Math.ceil((maxY - minY + 2 * margin) / spacing));
-  const nz = Math.max(2, Math.ceil((maxZ - minZ + 2 * margin) / spacing));
+  // The box has to reach past every sphere, or the outermost atom's cap is cut
+  // off and the surface is open there. A fixed 2 Å pad did that to iodine
+  // (vdW 1.98 Å), and worse, the grid's last point could fall a whole step
+  // short of the pad: I₂'s surface had 199 grid-face points inside it. So the
+  // pad is at least the largest radius plus a step, and the count has the +1
+  // that puts the last point at or beyond the far edge.
+  const reach = Math.max(margin, largestRadius + spacing);
+  const ox = minX - reach, oy = minY - reach, oz = minZ - reach;
+  const nx = Math.ceil((maxX - minX + 2 * reach) / spacing) + 1;
+  const ny = Math.ceil((maxY - minY + 2 * reach) / spacing) + 1;
+  const nz = Math.ceil((maxZ - minZ + 2 * reach) / spacing) + 1;
 
   // Field on the grid: f(gx, gy, gz) at grid index gx + gy*nx + gz*nx*ny.
   const grid = new Float32Array(nx * ny * nz);
