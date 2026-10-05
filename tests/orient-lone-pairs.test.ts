@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { getLonePairDirections } from '../src/chem/vsepr/orient-lone-pairs';
+import { OCTAHEDRAL_VECTORS, TRIG_BIPYRAMIDAL_VECTORS } from '../src/chem/vsepr/ideal-vsepr-vectors';
 import { vecDot, vecNormalize } from '../src/utils/vec3';
 
 const deg = (d: number) => (d * Math.PI) / 180;
@@ -91,6 +92,23 @@ describe('getLonePairDirections — two σ bonds (unchanged VSEPR behavior)', ()
     expect(ang(lps[0], lps[1])).toBeCloseTo(114.0, 1);
   });
 
+  it('a wide AX₂E₂ angle opens the lone pairs instead of pinching them shut', () => {
+    // Disiloxane's Si–O–Si is about 144°. Holding each lone pair at 109.47°
+    // to each bond has no solution past 141° (the lobes were NaN) and had
+    // already squeezed the pair to 59° apart at 135°. Past the tetrahedral
+    // angle the pair opens with the bonds: lone pair–lone pair = bond angle.
+    for (const bondAngle of [120, 135, 144, 160]) {
+      const half = deg(bondAngle / 2);
+      const u1: [number, number, number] = [Math.cos(half), Math.sin(half), 0];
+      const u2: [number, number, number] = [Math.cos(half), -Math.sin(half), 0];
+      const lps = getLonePairDirections([u1, u2], 4);
+      expect(lps).toHaveLength(2);
+      for (const v of lps) for (const c of v) expect(Number.isFinite(c)).toBe(true);
+      expect(ang(lps[0], lps[1])).toBeCloseTo(bondAngle, 6);
+      expect(ang(lps[0], u1)).toBeCloseTo(ang(lps[0], u2), 9); // still equivalent
+    }
+  });
+
   it('pyridine-like (120°, one lone pair): in-plane, opposite the bisector', () => {
     const u1: [number, number, number] = [Math.cos(deg(60)), Math.sin(deg(60)), 0];
     const u2: [number, number, number] = [Math.cos(deg(60)), -Math.sin(deg(60)), 0];
@@ -100,6 +118,52 @@ describe('getLonePairDirections — two σ bonds (unchanged VSEPR behavior)', ()
     expect(lps[0][0]).toBeCloseTo(-1, 9);
     expect(lps[0][1]).toBeCloseTo(0, 9);
     expect(lps[0][2]).toBeCloseTo(0, 9);
+  });
+});
+
+describe('getLonePairDirections — five and six domains', () => {
+  // Bonds from the ideal polyhedra; the lone pairs belong on the vertices left
+  // over — equatorial in the trigonal bipyramid, trans in the octahedron.
+  const [axialUp, axialDown, eq1, eq2, eq3] = TRIG_BIPYRAMIDAL_VECTORS;
+  const nearest = (found: [number, number, number][], want: [number, number, number]) =>
+    Math.min(...found.map((v) => ang(v, want)));
+
+  it('SF₄ (AX₄E): the lone pair takes the empty equatorial site', () => {
+    const lps = getLonePairDirections([eq3, axialUp, eq1, axialDown], 5);
+    expect(lps).toHaveLength(1);
+    expect(ang(lps[0], eq2)).toBeLessThan(1e-6);
+  });
+
+  it('ClF₃ (AX₃E₂): both lone pairs equatorial, whatever order the bonds come in', () => {
+    for (const bonds of [[axialUp, axialDown, eq1], [eq1, axialUp, axialDown]]) {
+      const lps = getLonePairDirections(bonds, 5);
+      expect(lps).toHaveLength(2);
+      expect(nearest(lps, eq2)).toBeLessThan(1e-6);
+      expect(nearest(lps, eq3)).toBeLessThan(1e-6);
+    }
+  });
+
+  it('I₃⁻ (AX₂E₃): three lone pairs in the equatorial plane, 120° apart', () => {
+    const lps = getLonePairDirections([axialUp, axialDown], 5);
+    expect(lps).toHaveLength(3);
+    for (const v of lps) expect(ang(v, axialUp)).toBeCloseTo(90, 9);
+    expect(ang(lps[0], lps[1])).toBeCloseTo(120, 9);
+    expect(ang(lps[1], lps[2])).toBeCloseTo(120, 9);
+  });
+
+  it('BrF₅ (AX₅E) and ICl₄⁻ (AX₄E₂): trans, whatever order the bonds come in', () => {
+    const [px, mx, py, my, pz, mz] = OCTAHEDRAL_VECTORS;
+    for (const bonds of [[px, mx, py, my, pz], [pz, px, py, mx, my]]) {
+      const lps = getLonePairDirections(bonds, 6);
+      expect(lps).toHaveLength(1);
+      expect(ang(lps[0], mz)).toBeLessThan(1e-6);
+    }
+    for (const bonds of [[px, mx, py, my], [px, py, mx, my]]) {
+      const lps = getLonePairDirections(bonds, 6);
+      expect(lps).toHaveLength(2);
+      expect(nearest(lps, pz)).toBeLessThan(1e-6);
+      expect(nearest(lps, mz)).toBeLessThan(1e-6);
+    }
   });
 });
 

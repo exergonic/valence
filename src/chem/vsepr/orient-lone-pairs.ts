@@ -1,5 +1,5 @@
 import {
-  vecSub, vecNormalize, vecDot, crossProduct, findPerpendicular, rotateRodrigues, rotateToward,
+  vecSub, vecNormalize, vecDot, crossProduct, findPerpendicular, projectPerpendicular, rotateRodrigues, rotateToward,
 } from '../../utils/vec3';
 
 // Direction(s) for the σ lone-pair lobes of an atom, given its σ-bond
@@ -14,17 +14,25 @@ export function getLonePairDirections(
   const missing = total - sigmaDirs.length;
   if (missing <= 0) return [];
 
+  // Five and six electron domains have rules of their own: the lone pairs of
+  // a trigonal bipyramid are equatorial, and those of an octahedron trans to
+  // one another. The four-domain rules below placed SF₄'s lone pair 30° off
+  // its equatorial slot, ClF₃'s on one arbitrary perpendicular and I₃⁻'s as a
+  // tetrahedron around one bond.
+  if (total === 5) return trigonalBipyramidalLonePairs(sigmaDirs.map(vecNormalize), missing);
+  if (total === 6) return octahedralLonePairs(sigmaDirs.map(vecNormalize), missing);
+
   // One empty hybrid orbital: lone pair opposite the σ-bond centroid
   // (e.g. NH₃, H₂O: sp³ with one or two lone pairs filling one slot;
   //  also AX₃E or AX₂E₂ trigonal pyramidal / bent geometries).
   if (missing === 1) {
-    // Three or more σ bonds: use the axis equidistant from all of them —
-    // the generalized C₃ axis of the trigonal pyramid.  The centroid
+    // Three σ bonds: use the axis equidistant from all of them — the
+    // generalized C₃ axis of the trigonal pyramid.  The centroid
     // shortcut below is exact for symmetric pyramids (NH₃, Me₃N) but is
     // dragged toward clustered bonds in strained rings: aziridine's ring
     // C–N–C angle is 62°, which shoved the lone pair to ~101° from the
     // N–H bond instead of the correct ~120° from all three bonds.
-    if (sigmaDirs.length >= 3) {
+    if (sigmaDirs.length === 3) {
       const u1 = vecNormalize(sigmaDirs[0]);
       const u2 = vecNormalize(sigmaDirs[1]);
       const u3 = vecNormalize(sigmaDirs[2]);
@@ -55,30 +63,31 @@ export function getLonePairDirections(
     const cosPhi = vecDot(a, b);
 
     if (Math.abs(cosPhi + 1) < 1e-6) {
-      const perp = findPerpendicular(a);
+      const perp = vecNormalize(findPerpendicular(a));
       return [perp, [-perp[0], -perp[1], -perp[2]]];
     }
 
-    // Coefficients for placing 2 lone pairs when 2 σ bonds define a
-    // plane.  Derived from VSEPR: lone pairs occupy equatorial-like
-    // positions above and below the σ-bond plane, symmetric about it.
-    // alpha = -1 / (3(1+cosϕ)), gamma = sqrt(1 − 2/(9(1+cosϕ)))
-    const sumAB: [number, number, number] = [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+    // The two lone pairs sit symmetrically above and below the σ-bond plane,
+    // in the plane through the bisector: l = −cosψ·û ± sinψ·n̂, with û the
+    // bond bisector and n̂ the plane normal. ψ is the larger of two angles:
+    //  - the one that puts each lone pair at the tetrahedral 109.47° to each
+    //    bond, cosψ = 1/(3cos(φ/2)) — water's picture;
+    //  - half the bond angle, φ/2 — the lone pairs opening as the bonds do.
+    // They agree at φ = 109.47°, so the switch is seamless. The first alone
+    // pinched the pairs together as the bonds opened (59° apart at a 135°
+    // bond angle) and had no solution past 141° — disiloxane's 144° Si–O–Si
+    // drew NaN lobes. With the second, a linear AX₂E₂ meets the branch above.
+    const bisector = vecNormalize([a[0] + b[0], a[1] + b[1], a[2] + b[2]]);
     const normal = vecNormalize(crossProduct(a, b));
-    const alpha = -1 / (3 * (1 + cosPhi));
-    const gamma = Math.sqrt(1 - 2 / (9 * (1 + cosPhi)));
-
-    const lp1: [number, number, number] = [
-      alpha * sumAB[0] + gamma * normal[0],
-      alpha * sumAB[1] + gamma * normal[1],
-      alpha * sumAB[2] + gamma * normal[2],
+    const halfBondAngle = Math.acos(Math.max(-1, Math.min(1, cosPhi))) / 2;
+    const tetrahedral = Math.acos(Math.min(1, 1 / (3 * Math.cos(halfBondAngle))));
+    const psi = Math.max(tetrahedral, halfBondAngle);
+    const along = -Math.cos(psi);
+    const across = Math.sin(psi);
+    return [
+      vecNormalize([along * bisector[0] + across * normal[0], along * bisector[1] + across * normal[1], along * bisector[2] + across * normal[2]]),
+      vecNormalize([along * bisector[0] - across * normal[0], along * bisector[1] - across * normal[1], along * bisector[2] - across * normal[2]]),
     ];
-    const lp2: [number, number, number] = [
-      alpha * sumAB[0] - gamma * normal[0],
-      alpha * sumAB[1] - gamma * normal[1],
-      alpha * sumAB[2] - gamma * normal[2],
-    ];
-    return [vecNormalize(lp1), vecNormalize(lp2)];
   }
 
   // Two empty hybrids, one σ bond, and a known π-plane normal:
@@ -122,9 +131,9 @@ export function getLonePairDirections(
     return [vecNormalize(lp1), vecNormalize(lp2)];
   }
 
-  // Three empty hybrids, one σ bond: tetrahedral arrangement of
-  // the three lone pairs around the remaining σ direction
-  // (e.g. XeF₂ or similar hypervalent AX₂E₃ geometry).
+  // Three empty hybrids, one σ bond: tetrahedral arrangement of the three
+  // lone pairs around it (a terminal halogen, HF). The hypervalent AX₂E₃
+  // (I₃⁻, XeF₂) is five domains and is placed above.
   if (missing === 3 && sigmaDirs.length >= 1) {
     const a = vecNormalize(sigmaDirs[0]);
     const invSqrt3 = 1 / Math.sqrt(3);
@@ -138,5 +147,91 @@ export function getLonePairDirections(
     return rotated.slice(1).map((v) => vecNormalize(v));
   }
 
+  return [];
+}
+
+const COS_120 = -0.5;
+const SIN_120 = Math.sqrt(3) / 2;
+
+/**
+ * Lone pairs of a five-domain centre. In a trigonal bipyramid the equatorial
+ * sites are the roomy ones (three neighbours at 90° instead of an axial
+ * site's four), so lone pairs take them: SF₄'s one, ClF₃'s two, I₃⁻'s three.
+ * `bonds` are unit vectors.
+ */
+function trigonalBipyramidalLonePairs(
+  bonds: [number, number, number][],
+  missing: number,
+): [number, number, number][] {
+  // AX₄E (seesaw): the axial pair cancels, so the centroid of the four bonds
+  // lies along the equatorial bisector and the lone pair sits opposite it
+  if (missing === 1) {
+    const sum: [number, number, number] = [0, 0, 0];
+    for (const d of bonds) { sum[0] -= d[0]; sum[1] -= d[1]; sum[2] -= d[2]; }
+    const lp = vecNormalize(sum);
+    return lp[0] === 0 && lp[1] === 0 && lp[2] === 0 ? [] : [lp];
+  }
+  // AX₃E₂ (T-shape): the two bonds nearest to opposite are axial; the lone
+  // pairs share the equatorial plane with the third bond, 120° either side
+  if (missing === 2 && bonds.length === 3) {
+    let axial: [number, number] = [0, 1];
+    let mostOpposite = Infinity;
+    for (let i = 0; i < 3; i++) {
+      for (let j = i + 1; j < 3; j++) {
+        const d = vecDot(bonds[i], bonds[j]);
+        if (d < mostOpposite) { mostOpposite = d; axial = [i, j]; }
+      }
+    }
+    const axis = vecNormalize(vecSub(bonds[axial[0]], bonds[axial[1]]));
+    const equatorial = bonds[3 - axial[0] - axial[1]];
+    const inPlane = vecNormalize(projectPerpendicular(equatorial, axis));
+    if (inPlane[0] === 0 && inPlane[1] === 0 && inPlane[2] === 0) return [];
+    return [
+      vecNormalize(rotateRodrigues(inPlane, axis, COS_120, SIN_120)),
+      vecNormalize(rotateRodrigues(inPlane, axis, COS_120, -SIN_120)),
+    ];
+  }
+  // AX₂E₃ (linear): all three lone pairs equatorial, 120° apart around the
+  // bond axis — which way round is arbitrary, as it is for the molecule
+  if (missing === 3 && bonds.length === 2) {
+    const axis = vecNormalize(vecSub(bonds[0], bonds[1]));
+    const first = vecNormalize(findPerpendicular(axis));
+    return [
+      first,
+      vecNormalize(rotateRodrigues(first, axis, COS_120, SIN_120)),
+      vecNormalize(rotateRodrigues(first, axis, COS_120, -SIN_120)),
+    ];
+  }
+  return [];
+}
+
+/**
+ * Lone pairs of a six-domain centre: trans to the bond they replace in BrF₅
+ * (AX₅E, square pyramid), trans to each other in XeF₄ (AX₄E₂, square plane).
+ * `bonds` are unit vectors.
+ */
+function octahedralLonePairs(
+  bonds: [number, number, number][],
+  missing: number,
+): [number, number, number][] {
+  // AX₅E: the four basal bonds cancel and leave the apical one; opposite it
+  if (missing === 1) {
+    const sum: [number, number, number] = [0, 0, 0];
+    for (const d of bonds) { sum[0] -= d[0]; sum[1] -= d[1]; sum[2] -= d[2]; }
+    const lp = vecNormalize(sum);
+    return lp[0] === 0 && lp[1] === 0 && lp[2] === 0 ? [] : [lp];
+  }
+  // AX₄E₂: both lone pairs on the normal of the bonds' plane, from any two
+  // bonds that are not trans to each other
+  if (missing === 2 && bonds.length === 4) {
+    for (let i = 0; i < 4; i++) {
+      for (let j = i + 1; j < 4; j++) {
+        const normal = vecNormalize(crossProduct(bonds[i], bonds[j]));
+        if (normal[0] !== 0 || normal[1] !== 0 || normal[2] !== 0) {
+          return [normal, [-normal[0], -normal[1], -normal[2]]];
+        }
+      }
+    }
+  }
   return [];
 }

@@ -43,8 +43,8 @@ export function isVseprElement(element: string): boolean {
 
 // Takes a molecule with 3D coordinates and assigns the orbitals of every
 // heavy atom.  Returns the same number of entries as molecule.atoms
-// (hydrogen included, but hydrogens always read sp³ with 0 lone pairs and
-// no π system).
+// (hydrogen included: one σ bond and no lone pair is steric number 1, which
+// reads 's' — no hybridization and no π system).
 export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
   const atomCount = molecule.atoms.length;
 
