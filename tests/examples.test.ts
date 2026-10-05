@@ -5,6 +5,7 @@ import { EXAMPLES } from '../src/ui/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
 import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
 import { getLonePairDirections } from '../src/chem/vsepr/orient-lone-pairs';
+import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 
 interface AtomExpectation {
   element: string;
@@ -182,6 +183,29 @@ describe('Example orbital classifications', () => {
       }
     });
   }
+});
+
+describe('every example is a complete structure', () => {
+  // "Refine with GFN2-xTB" sends the displayed structure to the worker, which
+  // fills implicit hydrogens first. An example is drawn with all its atoms, so
+  // that fill must add nothing — when Ni(CN)₄²⁻ carried its C≡N bonds as
+  // single bonds (ORCA output has no bond orders), the filler put an H on
+  // every cyanide C and two on every N.
+  it('needs no implicit hydrogens', () => {
+    for (const example of EXAMPLES) {
+      const molecule = parseMolBlock(example.mol);
+      const filled = fillMissingHydrogens(molecule);
+      expect(`${example.name}: +${filled.atoms.length - molecule.atoms.length} H`).toBe(`${example.name}: +0 H`);
+    }
+  });
+
+  it('draws cyanide as C≡N — both atoms sp in Ni(CN)₄²⁻', () => {
+    const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Tetracyanonickelate'))!.mol);
+    const assigned = assignOrbitals(molecule);
+    molecule.atoms.forEach((atom, i) => {
+      if (atom.element === 'C' || atom.element === 'N') expect(`${atom.element}${i + 1} ${assigned[i].hybridization}`).toBe(`${atom.element}${i + 1} sp`);
+    });
+  });
 });
 
 describe('PCl₅ example geometry (the ideal trigonal bipyramid)', () => {

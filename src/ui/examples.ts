@@ -395,7 +395,10 @@ M  END`;
 // Tetracyanonickelate(II): the SQUARE PLANAR d8 complex, from the ORCA
 // optimisation in ~/Code/orca_calcs/nickel-complexes/NiCN6 (charge -2,
 // MULTIPLICITY 1 — a singlet, the diamagnetic partner of the tetrahedral
-// triplet above; the pair is the ligand-field lesson).
+// triplet above; the pair is the ligand-field lesson). The C≡N bonds are
+// written as triple: ORCA's output carries no bond orders, and as single
+// bonds the hydrogen filler read each cyanide as short of bonds and put an H
+// on every C and two on every N when the structure was refined.
 const NICN4 = HEADER + `  9  8  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000   -0.0000 Ni  0  0  0  0  0  0  0  0  0  0  0  0
     1.9002   -0.0000   -0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
@@ -410,10 +413,10 @@ const NICN4 = HEADER + `  9  8  0  0  0  0  0  0  0  0999 V2000
   1  4  1  0  0  0  0
   1  6  1  0  0  0  0
   1  8  1  0  0  0  0
-  2  3  1  0  0  0  0
-  4  5  1  0  0  0  0
-  6  7  1  0  0  0  0
-  8  9  1  0  0  0  0
+  2  3  3  0  0  0  0
+  4  5  3  0  0  0  0
+  6  7  3  0  0  0  0
+  8  9  3  0  0  0  0
 M  CHG  5   1   2   2  -1   4  -1   6  -1   8  -1
 M  END`;
 
