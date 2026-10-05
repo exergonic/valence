@@ -17,6 +17,13 @@ describe('assignHybridization (topology-first)', () => {
     expect(result.hybridization).toBe('sp3');
   });
 
+  it('reads a helium atom as one lone pair in a pure s orbital', () => {
+    // He is 1s²: two valence electrons, one pair, steric number 1. Counting
+    // it as 0 once fell through to the default of 4 and drew an sp centre.
+    const result = assignHybridization('He', 0);
+    expect(result.hybridization).toBe('s');
+  });
+
   it('should return sp3d for phosphorus pentachloride (5 σ bonds)', () => {
     // PCl₅: P valence 5, 5 σ, 0 π → 0 lone pairs → 5 domains → sp³d.
     const result = assignHybridization('P', 5);

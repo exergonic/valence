@@ -544,6 +544,36 @@ describe('the extended-Hückel refusals', () => {
     expect(closedShellOccupations(result.electronCount, result.basis.length, result.energies, 1)).toBeNull();
   });
 
+  it('solves a heavy-metal dimer instead of refusing it on a numerical overlap', () => {
+    // Re 6s and 6p have nearly the same exponent (2.398, 2.372); the overlap
+    // between them across a Re–Re bond once came out near 3·10⁶, the overlap
+    // matrix lost positive-definiteness, and the solver refused. Every
+    // overlap between normalized functions must lie in [−1, 1].
+    const rhenium: Molecule = {
+      atoms: [
+        { element: 'Re', x: 0, y: 0, z: 0, charge: 0 },
+        { element: 'Re', x: 0, y: 0, z: 2.24, charge: 0 },
+      ],
+      bonds: [],
+    };
+    const result = solveExtendedHuckel(rhenium);
+    expect(result).not.toBeNull();
+    for (const row of result!.overlap) for (const s of row) expect(Math.abs(s)).toBeLessThanOrEqual(1 + 1e-12);
+  });
+
+  it('counts helium’s two electrons — HeH⁺ is a two-electron bond', () => {
+    const heliumHydride: Molecule = {
+      atoms: [
+        { element: 'He', x: 0, y: 0, z: 0, charge: 1 },
+        { element: 'H', x: 0, y: 0, z: 0.77, charge: 0 },
+      ],
+      bonds: [],
+    };
+    const result = solveExtendedHuckel(heliumHydride)!;
+    expect(result.electronCount).toBe(2);
+    expect(closedShellOccupations(result.electronCount, result.energies.length, result.energies)).toEqual([2, 0]);
+  });
+
   it('closed-shell filling refuses an odd electron count instead of half-filling', () => {
     expect(closedShellOccupations(8, 6)).toEqual([2, 2, 2, 2, 0, 0]);
     expect(closedShellOccupations(7, 6)).toBeNull(); // a radical

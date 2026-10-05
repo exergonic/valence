@@ -35,48 +35,36 @@ export function abFunctions(zeta1: number, zeta2: number, R: number, maxIndex: n
   A[1] = e1 / rho1;
   for (let n = 2; n <= maxIndex; n++) A[n] = ((n - 1) * A[n - 1] + e1) / rho1;
 
-  if (rho2 === 0) {
-    // B_n(0) = (1 − (−1)^n)/n
-    for (let n = 1; n <= maxIndex; n++) B[n] = n % 2 === 1 ? 2 / n : 0;
-    return { A, B };
-  }
-
-  // sinh and cosh of a possibly tiny ρ2: the exponential difference loses
-  // all its digits below ~1e-2, so sum the series there instead.
-  const sinh = Math.abs(rho2) < 0.1 ? seriesSinh(rho2) : 0.5 * (Math.exp(rho2) - Math.exp(-rho2));
-  const cosh = Math.abs(rho2) < 0.1 ? seriesCosh(rho2) : 0.5 * (Math.exp(rho2) + Math.exp(-rho2));
-  const twoSinh = 2 * sinh;
-  const twoCosh = 2 * cosh;
-
-  B[1] = twoSinh / rho2;
-  for (let n = 2; n <= maxIndex; n++) {
-    B[n] = n % 2 === 1
-      ? (twoSinh + (n - 1) * B[n - 1]) / rho2
-      : -(twoCosh - (n - 1) * B[n - 1]) / rho2;
+  // B is summed from its power series, never from the upward recurrence
+  //   B_n = (±2 sinh/cosh ρ + (n−1) B_(n−1)) / ρ
+  // which divides by ρ2 = (ζ₁−ζ₂)R/2 at every step: an error grows like
+  // (n−1)!/ρ^(n−1), and two heavy atoms with nearly equal s and p exponents
+  // (Au 6s 2.602 / 6p 2.584, Re, Hg, Zr) gave overlaps of 10⁶–10⁸. Expanding
+  // e^(−ρx) under the integral gives
+  //   B_n(ρ) = Σ_k (−ρ)^k/k! · (1 − (−1)^(n+k))/(n+k)
+  // Only n+k odd survives, so an odd n keeps the even powers of ρ and an even
+  // n the odd ones: every term of one B_n has the same sign, nothing cancels,
+  // and the sum keeps full precision for any ρ2. ρ2 = 0 is its k = 0 term.
+  let term = 1; // (−ρ2)^k / k!
+  for (let k = 0; k < 2000; k++) {
+    let largestAdded = 0;
+    for (let n = 1; n <= maxIndex; n++) {
+      if ((n + k) % 2 === 0) continue; // the integral of an odd power vanishes
+      const added = (term * 2) / (n + k);
+      B[n] += added;
+      largestAdded = Math.max(largestAdded, Math.abs(added));
+    }
+    // past the peak of ρ^k/k!, stop once a term no longer changes any B_n
+    if (k > Math.abs(rho2) && largestAdded <= 1e-17 * largestMagnitude(B)) break;
+    term *= -rho2 / (k + 1);
   }
   return { A, B };
 }
 
-function seriesSinh(x: number): number {
-  let sum = 0;
-  let term = x;
-  for (let k = 1; k <= 40; k++) {
-    sum += term;
-    term *= (x * x) / ((2 * k) * (2 * k + 1));
-    if (Math.abs(term) < 1e-30) break;
-  }
-  return sum;
-}
-
-function seriesCosh(x: number): number {
-  let sum = 0;
-  let term = 1;
-  for (let k = 0; k <= 40; k++) {
-    sum += term;
-    term *= (x * x) / ((2 * k + 1) * (2 * k + 2));
-    if (Math.abs(term) < 1e-30) break;
-  }
-  return sum;
+function largestMagnitude(values: number[]): number {
+  let largest = 0;
+  for (const v of values) largest = Math.max(largest, Math.abs(v));
+  return largest;
 }
 
 const BINOMIAL: number[][] = (() => {
@@ -305,8 +293,9 @@ function singleOverlap(a: BasisFunction, b: BasisFunction, zetaA: number, zetaB:
  *   B the azimuth of its xy projection about z,
  *
  * and the two projection tables are exactly the source's: `p` (9 entries) for
- * a p orbital and `d` (25 = three channels × five functions, plus the two
- * d–d cross blocks) for the five real d functions in `D_FUNCTIONS` order.
+ * a p orbital and `d` (25 = σ and the two π channels × five functions, plus
+ * the two δ channels that only a d–d pair reaches) for the five real d
+ * functions in `D_FUNCTIONS` order.
  * A d function has no axis of its own — its shape is fixed on the frame's
  * axes — so `u` below is the bond vector and nothing else.
  *
@@ -351,13 +340,13 @@ function dOverlap(
     cosA * sinA * s2B,
     cosB * c2A,
     sinB * c2A,
-    // δ channel
+    // the second π channel (the π plane perpendicular to the first)
     -sinA * s2B,
     0,
     sinA * c2B,
     -p[4],
     p[3],
-    // the d–d blocks (only reachable when both sides are d)
+    // the two δ channels (only reachable when both sides are d)
     0.5 * (1 + cosA * cosA) * c2B,
     0.5 * SQRT3 * sinA * sinA,
     cosB * sinB * (1 + cosA * cosA),

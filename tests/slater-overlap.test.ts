@@ -287,6 +287,26 @@ describe('the two-centre overlaps by quadrature', () => {
     }
   });
 
+  it('stays exact for heavy shells whose exponents nearly agree', { timeout: 60000 }, () => {
+    // The B auxiliary integral depends on ρ = (ζ₁−ζ₂)R/2. An upward recurrence
+    // for it divides by ρ at every step, and for a 5s/6s against a 5p/6p of
+    // almost the same ζ (the second- and third-row metals' own s and p) the
+    // error grew to 10⁶–10⁸: Au₂ and Re₂ came out with overlaps far above 1. The
+    // exponents below are the parameter table's.
+    const shell = (n: number, zeta: number, shape: Shape): Spec => ({ n, zeta, shape });
+    const cases: Array<[Spec, Spec, number]> = [
+      [shell(5, 1.817, { l: 's' }), shell(5, 1.776, { l: 'p', axis: Z_AXIS }), 6.0],   // Zr 5s / 5p σ
+      [shell(6, 2.602, { l: 's' }), shell(6, 2.584, { l: 'p', axis: Z_AXIS }), 5.4],   // Au 6s / 6p σ
+      [shell(6, 2.341, { l: 'p', axis: X_AXIS }), shell(6, 2.309, { l: 'p', axis: X_AXIS }), 5.2], // W 6p π
+      [shell(6, 2.372, { l: 'p', axis: Z_AXIS }), shell(5, 2.277, { l: 'd', d: 'z2' }), 4.2], // Re 6p / 5d's loose ζ
+    ];
+    for (const [a, b, R] of cases) {
+      const expected = overlapByQuadrature(a, b, R);
+      const actual = overlapFromCode(a, b, R);
+      expect(Math.abs(actual - expected)).toBeLessThan(1e-4);
+    }
+  });
+
   it('gets the same-atom orthogonality right (a d is not a p)', () => {
     // On one centre the five d functions are orthonormal and orthogonal to s
     // and p — the property an angular transcription is most likely to break.

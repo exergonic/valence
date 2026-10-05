@@ -82,10 +82,10 @@ function transpose(A: number[][]): number[][] {
 }
 
 /**
- * Jacobi eigenvalue iteration for a real symmetric matrix. Sweeps rotate
- * away the largest off-diagonal element until the matrix is diagonal to
- * `tolerance`; for the small matrices here it converges in a handful of
- * sweeps. Returns eigenvalues ascending with eigenvectors as columns.
+ * Cyclic Jacobi eigenvalue iteration for a real symmetric matrix. Each sweep
+ * rotates away every off-diagonal element in turn, until the sum of their
+ * squares falls below `tolerance`; for the small matrices here it converges
+ * in a handful of sweeps. Returns eigenvalues ascending with eigenvectors as columns.
  */
 export function jacobiSymmetric(A: number[][], tolerance = 1e-12): EigenResult {
   const n = A.length;
