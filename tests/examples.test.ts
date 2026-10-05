@@ -706,7 +706,8 @@ describe('Methyl anion — the charge-aware lone pair (2026-09-23)', () => {
   // lone pair already sat (N reaches sp³ without a charge term).
   //
   // Geometry: the exported MMFF94-refined coordinates of the drawn
-  // anion (embedAndRefine output; the probe reproduced them bit-for-bit).
+  // anion (the MMFF94 refiner's output, before it was retired; the probe
+  // reproduced them bit-for-bit).
   const XYZ: [string, number, number, number][] = [
     ['C', 0.0029, 0.0066, -0.2844],
     ['H', 1.0255, 0.0070, 0.1016],

@@ -165,29 +165,45 @@ M  END
   // LINEAR_VECTORS ±x), and linear water is a saddle the descent cannot
   // leave — the bend gradient is exactly zero by symmetry (measured:
   // start 180.0°, end 180.0°, converged, E -5.02063 Eh against the bent
-  // minimum). The pipeline breaks the symmetry first (breakSymmetry, the
-  // same kick the MMFF94 bridge uses — this test composes exactly what
-  // the manager posts to the worker), so a linear start must come back
-  // bent and below the saddle energy.
+  // minimum). The pipeline breaks the symmetry first (breakSymmetry — this
+  // test composes exactly what the manager posts to the worker), so a linear
+  // start must come back bent and below the saddle energy.
   it('bends a linear-start water instead of keeping it linear', async () => {
-    const linear: Molecule = {
-      atoms: [atom('O', 0, 0, 0), atom('H', 0.97, 0, 0), atom('H', -0.97, 0, 0)],
-      bonds: [bond(0, 1), bond(0, 2)],
-    };
-    const { breakSymmetry } = await import('../src/geometry/mmff-refine');
-    const result = await refine(breakSymmetry(linear));
+    const { breakSymmetry } = await import('../src/geometry/embed');
+    const result = await refine(breakSymmetry(linearWater));
     expect(result).not.toBeNull();
     expect(result!.converged).toBe(true);
-    const [o, h1, h2] = result!.molecule.atoms;
-    const u = [h1.x - o.x, h1.y - o.y, h1.z - o.z];
-    const v = [h2.x - o.x, h2.y - o.y, h2.z - o.z];
-    const angle =
-      (Math.acos(
-        (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) /
-          (Math.hypot(...u) * Math.hypot(...v)),
-      ) * 180) / Math.PI;
-    expect(angle).toBeGreaterThan(95);
-    expect(angle).toBeLessThan(115);
+    expect(waterAngle(result!.molecule)).toBeGreaterThan(95);
+    expect(waterAngle(result!.molecule)).toBeLessThan(115);
+    expect(result!.energyHartree).toBeLessThan(-5.02063);
+  }, 180_000);
+
+  // Without the kick the optimiser does converge — onto the D∞h saddle, the
+  // bend gradient being exactly zero by symmetry. The Hessian sees the
+  // imaginary bend, the run pushes the structure down it and re-optimises,
+  // and what comes back is the bent minimum, with the escape counted and a
+  // verdict that is no longer a saddle.
+  it('escapes a saddle it converged onto — linear water, no kick', async () => {
+    const result = await refine(linearWater);
+    expect(result).not.toBeNull();
+    expect(result!.converged).toBe(true);
+    expect(result!.saddleEscapes).toBeGreaterThanOrEqual(1);
+    expect(result!.lowestHessianMode!).toBeGreaterThan(HESSIAN_SADDLE_THRESHOLD);
+    expect(waterAngle(result!.molecule)).toBeGreaterThan(95);
+    expect(waterAngle(result!.molecule)).toBeLessThan(115);
     expect(result!.energyHartree).toBeLessThan(-5.02063);
   }, 180_000);
 });
+
+const linearWater: Molecule = {
+  atoms: [atom('O', 0, 0, 0), atom('H', 0.97, 0, 0), atom('H', -0.97, 0, 0)],
+  bonds: [bond(0, 1), bond(0, 2)],
+};
+
+function waterAngle(molecule: Molecule): number {
+  const [o, h1, h2] = molecule.atoms;
+  const u = [h1.x - o.x, h1.y - o.y, h1.z - o.z];
+  const v = [h2.x - o.x, h2.y - o.y, h2.z - o.z];
+  const cos = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (Math.hypot(...u) * Math.hypot(...v));
+  return (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
+}

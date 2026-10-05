@@ -1,6 +1,6 @@
 import { parameter_gap_report } from 'mmff94-ts';
 import type { Molecule } from '../mol-parser';
-import { toMMFFMol } from './mmff-refine';
+import { toMMFFMol } from './mmff94-molecule';
 
 // User-facing warnings when a locally refined molecule runs on
 // generic MMFF94 parameters. The signal comes from the library's

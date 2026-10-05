@@ -5,13 +5,16 @@
 // The reference here is PubChem's own 3D conformer of the *same* stereoisomer
 // (2D SDF with the wedge, 3D SDF of the same CID), not a hand-drawn ideal: our
 // pipeline must land on the configuration PubChem publishes for that drawing.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 import { place3D } from '../src/geometry/place3d';
-import { embedAndRefine } from '../src/geometry/mmff-refine';
+import { localGeometry } from './helpers/local-geometry';
+
+// The pipeline tests below run the real GFN2 optimisation (24 and 36 atoms).
+vi.setConfig({ testTimeout: 120_000 });
 import { chiralitySign, applyWedgeStereo } from '../src/geometry/stereo-wedge';
 import { vecSub, vecDot, vecNormalize } from '../src/utils/vec3';
 
@@ -182,35 +185,33 @@ function stereoViolations(molecule: Molecule, pos: Vec3[]): string[] {
   return failures;
 }
 
-/** Signed distance of each ring carbon's oxygen from the mean plane of the six
- *  ring carbons — all the same sign means all-cis. */
+/** Which face of the ring each carbon's oxygen is on, judged LOCALLY: the side
+ *  of that carbon's own C₋₁–C–C₊₁ plane, the normal taken in one sense of
+ *  travel around the ring. All the same sign means all-cis. (The height above
+ *  the ring's MEAN plane only reads cis in an ideal chair: in a twisted ring an
+ *  equatorial cis substituent can sit below it — measured on GFN2's hexol,
+ *  +1.44 −0.40 +1.50 … for an all-cis ring with every wedge honoured.) */
 function ohFaces(molecule: Molecule, pos: Vec3[]): number[] {
   const ring = [0, 1, 2, 3, 4, 5];
-  const centroid: Vec3 = [0, 0, 0];
-  for (const i of ring) for (let k = 0; k < 3; k++) centroid[k] += pos[i][k] / 6;
-  let normal: Vec3 = [0, 0, 0];
-  for (let k = 0; k < 6; k++) {
-    const a = vecSub(pos[ring[k]], centroid);
-    const b = vecSub(pos[ring[(k + 1) % 6]], centroid);
-    normal = [
-      normal[0] + (a[1] - b[1]) * (a[2] + b[2]),
-      normal[1] + (a[2] - b[2]) * (a[0] + b[0]),
-      normal[2] + (a[0] - b[0]) * (a[1] + b[1]),
-    ];
-  }
-  const nHat = vecNormalize(normal);
-  return ring.map((c) => {
+  return ring.map((c, k) => {
+    const next = vecSub(pos[ring[(k + 1) % 6]], pos[c]);
+    const prev = vecSub(pos[ring[(k + 5) % 6]], pos[c]);
+    const normal = vecNormalize([
+      next[1] * prev[2] - next[2] * prev[1],
+      next[2] * prev[0] - next[0] * prev[2],
+      next[0] * prev[1] - next[1] * prev[0],
+    ]);
     const oxygen = molecule.bonds
       .map((b) => (b.atom1Index === c ? b.atom2Index : b.atom2Index === c ? b.atom1Index : -1))
       .find((i) => i >= 0 && molecule.atoms[i].element === 'O');
-    return oxygen === undefined ? Number.NaN : vecDot(vecSub(pos[oxygen], centroid), nHat);
+    return oxygen === undefined ? Number.NaN : vecDot(vecSub(pos[oxygen], pos[c]), normal);
   });
 }
 
 describe('a drawn ring (the all-cis hexol)', () => {
   it('places every hydroxyl on the face its wedge asks for', async () => {
     const sketch = parseMolBlock(ALL_CIS_HEXOL_MOL);
-    const result = await embedAndRefine(fillMissingHydrogens(sketch));
+    const result = await localGeometry(fillMissingHydrogens(sketch));
     expect(result, 'the local pipeline produced a geometry').toBeTruthy();
     const pos = positions(result!.molecule);
     expect(stereoViolations(sketch, pos)).toEqual([]);
@@ -223,7 +224,7 @@ describe('a drawn ring (the all-cis hexol)', () => {
 
   it('keeps the ring closed while inverting a center', async () => {
     const sketch = parseMolBlock(ALL_CIS_HEXOL_MOL);
-    const result = await embedAndRefine(fillMissingHydrogens(sketch));
+    const result = await localGeometry(fillMissingHydrogens(sketch));
     const refined = result!.molecule;
     const pos = positions(refined);
     // The branch-swap version left C-C bonds of 5.06 Å here.
@@ -244,7 +245,7 @@ describe('a drawn ring (the all-cis hexol)', () => {
       atoms: sketch.atoms,
       bonds: sketch.bonds.map((b) => (b.stereo && b.atom1Index % 2 === 1 ? { ...b, stereo: 6 as const } : b)),
     };
-    const result = await embedAndRefine(fillMissingHydrogens(alternating));
+    const result = await localGeometry(fillMissingHydrogens(alternating));
     expect(result, 'the local pipeline produced a geometry').toBeTruthy();
     const pos = positions(result!.molecule);
     expect(stereoViolations(alternating, pos)).toEqual([]);
@@ -264,7 +265,7 @@ describe('a drawn ring (the all-cis hexol)', () => {
     // something is already sitting there, and C1's ring hydrogen and its methyl
     // came back 6° apart — 0.46 Å — sharing one axial slot.
     const sketch = parseMolBlock(ALL_CIS_HEXAMETHYL_MOL);
-    const result = await embedAndRefine(fillMissingHydrogens(sketch));
+    const result = await localGeometry(fillMissingHydrogens(sketch));
     expect(result, 'the local pipeline produced a geometry').toBeTruthy();
     const refined = result!.molecule;
     const pos = positions(refined);

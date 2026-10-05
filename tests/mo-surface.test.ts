@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
-import { embedAndRefine } from '../src/geometry/mmff-refine';
+import { exampleGeometry } from './helpers/local-geometry';
 import { symmetrizeMolecule } from '../src/geometry/symmetrize';
 import { solveExtendedHuckel } from '../src/chem/extended-huckel/solve';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
@@ -37,7 +37,7 @@ const s1 = (zeta: number): BasisFunction => ({
 const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
 
 describe('the MO isosurface', () => {
-  it('evaluates a normalized 1s Slater orbital to its known value', () => {
+  it('evaluates a normalized 1s Slater orbital to its known value', async () => {
     // (ζ³/π)^½ e^(−ζr) with ζ = 1 bohr⁻¹, at r = 0.3 Å = 0.5669 bohr
     const expected = Math.sqrt(1 / Math.PI) * Math.exp(-0.3 * BOHR_PER_ANGSTROM);
     evaluateMo(0.3, 0, 0, atom(), [s1(1)], [1], probe);
@@ -49,7 +49,7 @@ describe('the MO isosurface', () => {
     expect(probe.value).toBeCloseTo(Math.sqrt(3 / (4 * Math.PI)) * radial, 10);
   });
 
-  it('uses r^(n−1) for a heavy atom, not the 2p radial factor', () => {
+  it('uses r^(n−1) for a heavy atom, not the 2p radial factor', async () => {
     // Chlorine is 3p, bromine 4p, iodine 5p. The evaluator used to write
     // r^(n−1) as "1 or r", so an iodine 5p peaked at 0.23 Å instead of
     // (n−1)/ζ = 0.91 Å and the |ψ| = 0.10 sheet sat inside the atom sphere.
@@ -93,7 +93,7 @@ describe('the MO isosurface', () => {
     expect(maxRadius).toBeGreaterThan(1.2);
   });
 
-  it('draws a compact 2p and a diffuse 5p at the same percentile', () => {
+  it('draws a compact 2p and a diffuse 5p at the same percentile', async () => {
     // The absolute contour at 0.20 sat inside a fluorine 2p and above the whole
     // iodine 5p, so the iodine never appeared. Dividing each shell by its own
     // peak fixed that by distorting the field — nodes moved, and the heavy end
@@ -131,7 +131,7 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('a percentile encloses the share of the orbital it claims', () => {
+  it('a percentile encloses the share of the orbital it claims', async () => {
     // The property the whole mode rests on, measured straight back off the
     // field: the level returned for a fraction encloses that fraction. If this
     // drifts, every picture drawn in the mode is a different cut than the
@@ -157,7 +157,7 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('marches a field twice at two levels without re-evaluating it', () => {
+  it('marches a field twice at two levels without re-evaluating it', async () => {
     // The split's contract: one field, many levels. A field that quietly
     // depended on the level would pass every other test here and still make
     // the cache useless.
@@ -172,7 +172,7 @@ describe('the MO isosurface', () => {
     expect(grid.values.length).toBe(grid.dimensions[0] * grid.dimensions[1] * grid.dimensions[2]);
   });
 
-  it('draws both ends of an S–F bond at the localized default', () => {
+  it('draws both ends of an S–F bond at the localized default', async () => {
     // At an absolute 0.10 the sulfur end of an SF₆ σ bond peaks near 0.04
     // and the surface is entirely on fluorine. The bond is the case the
     // peak scaling exists for.
@@ -200,7 +200,7 @@ describe('the MO isosurface', () => {
     expect(near.get('F') ?? 0).toBeGreaterThan(30);
   });
 
-  it('draws the orbital the solver normalized — ∫ψ² over the grid is 1', () => {
+  it('draws the orbital the solver normalized — ∫ψ² over the grid is 1', async () => {
     // The coefficients are normalized in the S of slater-overlap.ts; the
     // surface evaluates its own amplitude. If the two ever describe different
     // functions (a normalization, an angular factor, a d convention), the drawn
@@ -224,7 +224,7 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('evaluates a normalized 3d Slater orbital, and its gradient, exactly', () => {
+  it('evaluates a normalized 3d Slater orbital, and its gradient, exactly', async () => {
     // The d functions are the ones the 3d basis brings in: a normalized real d
     // harmonic against the same radial part. The value pins the normalization
     // (√(15/16π) for x²−y², √(5/16π) for z², √(15/4π) for the cross terms) and
@@ -269,7 +269,7 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('evaluates a CONTRACTED d — the two-zeta sum the d block brings', () => {
+  it('evaluates a CONTRACTED d — the two-zeta sum the d block brings', async () => {
     // Iron's 3d as the table ships it. A contracted orbital is a sum of two
     // STOs, so the amplitude is a sum too — and the sum is where a factor of
     // the coefficient or a dropped term would hide, since a single-zeta test
@@ -309,7 +309,7 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('differentiates an n>2 Slater orbital, not the 2p derivative', () => {
+  it('differentiates an n>2 Slater orbital, not the 2p derivative', async () => {
     const basis: BasisFunction = {
       atomIndex: 0, angular: 'p', axis: [0, 0, 1], n: 5, zeta: 2.322, hii: -12.7, label: 'I 5pz',
     };
@@ -332,7 +332,7 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('reports the analytic gradient, not a finite difference of it', () => {
+  it('reports the analytic gradient, not a finite difference of it', async () => {
     const molecule = { atoms: atom(), bonds: [] };
     const basis = [s1(1.3), { atomIndex: 0, angular: 'p' as const, axis: [1, 0, 0] as [number, number, number], n: 2, zeta: 1.3, hii: -13.6, label: 'H 2px' }];
     const coefficients = [0.7, -0.4];
@@ -356,11 +356,8 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('builds a closed surface for every phase of benzene\'s π HOMO', () => {
-    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Benzene'))!.mol)!;
-    const raw = embedAndRefine(sketch).molecule;
-    const snapped = symmetrizeMolecule(raw);
-    const molecule = { atoms: snapped.atoms, bonds: raw.bonds };
+  it('builds a closed surface for every phase of benzene\'s π HOMO', async () => {
+    const molecule = await exampleGeometry('Benzene');
     const result = solveExtendedHuckel(molecule)!;
     const surface = computeMoSurface(molecule, result.basis, result.coefficients[14]);
 
@@ -397,10 +394,8 @@ describe('the MO isosurface', () => {
     expect(fraction).toBeLessThan(0.65);
   });
 
-  it('stays inside the grid, so the surface is never clipped open', () => {
-    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Benzene'))!.mol)!;
-    const raw = embedAndRefine(sketch).molecule;
-    const molecule = { atoms: symmetrizeMolecule(raw).atoms, bonds: raw.bonds };
+  it('stays inside the grid, so the surface is never clipped open', async () => {
+    const molecule = await exampleGeometry('Benzene');
     const result = solveExtendedHuckel(molecule)!;
     const frame = alignToPrincipalAxes(molecule);
     const surface = computeMoSurface(molecule, result.basis, result.coefficients[14]);
@@ -419,13 +414,11 @@ describe('the MO isosurface', () => {
     expect(frame.axes.length).toBe(3);
   });
 
-  it('refines the grid for a small molecule instead of using the coarse cap', () => {
+  it('refines the grid for a small molecule instead of using the coarse cap', async () => {
     // A fixed 0.25 Å grid gives ~0.14 Å facets, which on a 1 Å lone pair is
     // what "jagged" meant. The step adapts to an evaluation budget, so a
     // three-atom molecule gets a much finer grid than the cap.
-    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Water'))!.mol)!;
-    const raw = embedAndRefine(sketch).molecule;
-    const molecule = { atoms: symmetrizeMolecule(raw).atoms, bonds: raw.bonds };
+    const molecule = await exampleGeometry('Water');
     const result = solveExtendedHuckel(molecule)!;
     const surface = computeMoSurface(molecule, result.basis, result.coefficients[3]);
 
@@ -446,16 +439,14 @@ describe('the MO isosurface', () => {
     expect(edgeSum / edgeCount).toBeLessThan(0.1);
   });
 
-  it('winds every triangle to agree with its own normals, on both sheets', () => {
+  it('winds every triangle to agree with its own normals, on both sheets', async () => {
     // The outward direction of the |ψ| = c surface is sign(ψ)·∇ψ. A triangle
     // wound against its vertex normals is back-facing, and a FrontSide pass
     // culls it — which punches the whole negative sheet out of the picture.
     // Reported on water's MO 2 as "the surface is clipping"; the first
     // version compared against ∇ψ alone and every negative-sheet triangle
     // (5,574 of 5,574) came out backwards.
-    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Water'))!.mol)!;
-    const raw = embedAndRefine(sketch).molecule;
-    const molecule = { atoms: symmetrizeMolecule(raw).atoms, bonds: raw.bonds };
+    const molecule = await exampleGeometry('Water');
     const result = solveExtendedHuckel(molecule)!;
 
     for (const index of [1, 3]) {
@@ -478,7 +469,7 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('winds the surface outward, judged against a shape whose outside is known', () => {
+  it('winds the surface outward, judged against a shape whose outside is known', async () => {
     // A single 1s orbital's |ψ| = c surface is a sphere centred on the nucleus,
     // so "outward" here needs no reference to the field's own gradient. That is
     // the whole point: the winding and the vertex normals are both derived from
@@ -526,7 +517,7 @@ describe('the MO isosurface', () => {
     }
   });
 
-  it('returns nothing for a coefficient set that is all zero', () => {
+  it('returns nothing for a coefficient set that is all zero', async () => {
     const molecule = { atoms: atom(), bonds: [] };
     const surface = computeMoSurface(molecule, [s1(1)], [0]);
     expect(surface.vertexCount).toBe(0);

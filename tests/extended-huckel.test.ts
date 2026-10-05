@@ -33,7 +33,7 @@ import {
   DEGENERATE_TOLERANCE_EV,
 } from '../src/chem/extended-huckel/canonicalize-degenerate';
 import { symmetrizeMolecule } from '../src/geometry/symmetrize';
-import { embedAndRefine } from '../src/geometry/mmff-refine';
+import { embed3D } from '../src/geometry/embed';
 import { MO_SIGNIFICANT } from '../src/render/mo-lobes';
 import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
@@ -582,7 +582,7 @@ describe('the extended-Hückel refusals', () => {
 
   it('refuses a partly filled degenerate set — O₂’s π* holds two electrons between two orbitals', () => {
     const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Oxygen'))!.mol)!;
-    const raw = embedAndRefine(sketch).molecule;
+    const raw = embed3D(sketch).separated;
     const snapped = symmetrizeMolecule(raw);
     const result = solveExtendedHuckel({ atoms: snapped.atoms, bonds: raw.bonds })!;
     // 12 valence electrons, an even count. Without the energies the degeneracy

@@ -2,105 +2,78 @@
  * The local geometry pipeline — the app's own answer when no remote service
  * supplies a validated structure.
  *
- * **GFN2-xTB is the default engine**: it produces the geometry the user sees.
- * It is a real semiempirical optimisation, which is what MMFF94 cannot be for a
- * hypervalent centre or an element outside its type space. Measured, MMFF94
- * bends PCl5's trigonal bipyramid into 138° angles with the *axial* bonds the
- * shortest; GFN2 recovers the textbook 2.156/2.027 Å split, verified against
- * the Fortran xTB oracle to under 10⁻³ Å (NOTES.md).
+ * **GFN2-xTB is the one engine.** A real semiempirical optimisation (extended
+ * tight binding), structurally right where a force field is not: MMFF94, which
+ * this app used to optimise with, bends PCl5's trigonal bipyramid into 138°
+ * angles with the *axial* bonds the shortest, where GFN2 recovers the textbook
+ * 2.156/2.027 Å split (verified against the Fortran xTB oracle, NOTES.md).
  *
- * The starting geometry is the embedder's skeleton — topologically correct (a
- * real trigonal bipyramid for PCl5) — scaled to plausible bond lengths by
- * `scaleSkeleton`. MMFF94's own output is deliberately *not* the start: for a
- * hypervalent centre it is the distorted structure, and a refiner lands in
- * whichever basin it is dropped near (measured: starting from MMFF94's PCl5,
- * GFN2 settled at 1.98/2.11 Å instead of the verified 2.156/2.027). `place3D`
- * emits unit bonds, which MMFF94 scales itself through its bond terms but a
- * quantum method cannot — hence the explicit scale.
+ * The starting geometry is the embedder's — topologically correct (a real
+ * trigonal bipyramid for PCl5), at covalent bond lengths, aromatic rings flat.
  *
- * MMFF94 is the fallback for when the engine cannot run (no Worker, an element
- * its parameter table lacks) or does not converge; its result is labelled as
- * MMFF94. An unconverged quantum result is never presented as one.
- *
- * Both stages run off the main thread, so the page stays interactive.
+ * **When GFN2 stops short** of full convergence (its time budget, or every
+ * optimiser rung spent), the lowest-energy structure it reached is shown,
+ * labelled as not fully converged. **When GFN2 produces nothing** — no Worker,
+ * an element outside its parameter table, an SCC that fails from the start, a
+ * cancelled run — the app shows the starting structure, labelled as
+ * unoptimised and saying why. Never a second engine's answer passed off as the
+ * first's, and never an unconverged run presented as converged.
  */
 import type { Molecule } from '../mol-parser';
-import { scaleSkeleton } from './place3d';
-import { refineWithGfn2 } from './gfn2-refine';
-import { embed3D, embedAndRefine, finite, honourWedges, type EmbedResult } from './mmff-refine';
+import { Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, type Gfn2Progress, type Gfn2Result } from './gfn2-refine';
+import { embed3D, finite, honourWedges, type EmbedResult } from './embed';
 
-export async function computeLocalGeometry(molecule: Molecule): Promise<EmbedResult | null> {
-  // Never let a failing engine take the app down with it: every failure path
-  // ends at MMFF94, which has its own guard and its own label.
-  const mmff = () => computeWithMmff94(molecule).catch(() => safeRefine(molecule));
-
-  const { separated } = embed3D(molecule);
-  if (!finite(separated)) return mmff();
-
-  const start = scaleSkeleton(separated);
-  const refined = await refineWithGfn2(start).catch(() => null);
-  if (!refined || !refined.converged) return mmff();
-
-  if (!finite(refined.molecule)) return mmff();
-  // The engine's geometry is the authority — no post-hoc planarity repair. The
-  // charges ride along with the geometry they were computed at, so the display
-  // can offer GFN2 charges next to the MMFF94 charge model.
-  return {
-    ...honourWedges(start, refined.molecule),
-    engine: 'gfn2',
-    gfn2Charges: refined.charges ?? undefined,
-    gfn2LowestMode: refined.lowestHessianMode ?? undefined,
-  };
+export interface LocalGeometry extends EmbedResult {
+  /** 'gfn2': a GFN2-xTB optimisation — converged, or the lowest point of a run
+   *  that stopped short (`gfn2.converged` says which). 'unrefined': the
+   *  embedder's starting structure, because GFN2 produced nothing. */
+  engine: 'gfn2' | 'unrefined';
+  /** The run, when engine is 'gfn2' — energy, steps, time, charges, the
+   *  Hessian verdict and any saddle escapes. */
+  gfn2?: Gfn2Result;
+  /** Why the start is shown (engine 'unrefined'), as a sentence for the Info
+   *  log. */
+  unrefinedReason?: string;
 }
 
-let worker: Worker | null = null;
-let nextId = 1;
-const pending = new Map<number, PromiseWithResolvers<EmbedResult | null>>();
+/** How the start gets optimised — the worker in the app. A test passes the
+ *  engine loaded from disk instead, and so runs this very pipeline in Node. */
+export type Gfn2Refiner = (start: Molecule, onProgress?: (progress: Gfn2Progress) => void) => Promise<Gfn2Result | null>;
 
-function ensureWorker(): Worker | null {
-  if (typeof Worker === 'undefined') return null;
-  if (worker) return worker;
+export async function computeLocalGeometry(
+  molecule: Molecule,
+  onProgress?: (progress: Gfn2Progress) => void,
+  refine: Gfn2Refiner = refineWithGfn2,
+): Promise<LocalGeometry | null> {
+  const { placed, separated } = embed3D(molecule);
+  const start = finite(separated) ? separated : placed;
+  // A start that is not even finite has nothing to show: refuse.
+  if (!finite(start)) return null;
+
+  const unrefined = (reason: string): LocalGeometry => ({
+    ...honourWedges(start, start),
+    engine: 'unrefined',
+    unrefinedReason: reason,
+  });
+
+  let refined: Gfn2Result | null;
   try {
-    worker = new Worker(new URL('./local-geometry.worker.ts', import.meta.url), {
-      type: 'module',
-    });
-    worker.onmessage = (e: MessageEvent) => {
-      const { id, result } = e.data as { id: number; result: EmbedResult | null };
-      const entry = pending.get(id);
-      if (entry) {
-        pending.delete(id);
-        entry.resolve(result);
-      }
-    };
-    worker.onerror = () => {
-      // Reject all pending requests — the worker is dying, and a
-      // fresh call will spin up a new one.
-      for (const [, entry] of pending) entry.reject();
-      pending.clear();
-      worker = null;
-    };
-  } catch {
-    worker = null;
+    refined = await refine(start, onProgress);
+  } catch (error) {
+    if (error instanceof Gfn2Cancelled) return unrefined('the GFN2-xTB optimisation was cancelled');
+    if (error instanceof Gfn2Unavailable) return unrefined(error.message);
+    const detail = (error as Error)?.message;
+    return unrefined(`GFN2-xTB could not treat this structure${detail ? ` (${detail})` : ''}`);
   }
-  return worker;
-}
+  if (!refined) return unrefined('GFN2-xTB found no usable geometry from the starting structure');
+  if (!finite(refined.molecule)) return unrefined('GFN2-xTB returned a non-finite structure');
+  // A run that stopped short of full convergence (out of time, or every rung
+  // spent) still returns the lowest-energy structure it reached — never higher
+  // than the start, and after hundreds of GFN2 steps nearly always the better
+  // picture. It is shown, and labelled as not fully converged (gfn2.converged);
+  // for a teaching tool a good-enough structure beats the unoptimised guess.
 
-function computeWithMmff94(molecule: Molecule): Promise<EmbedResult | null> {
-  const w = ensureWorker();
-  if (!w) return Promise.resolve(safeRefine(molecule));
-
-  const resolvers = Promise.withResolvers<EmbedResult | null>();
-  const id = nextId++;
-  pending.set(id, resolvers);
-  w.postMessage({ id, molecule });
-  return resolvers.promise;
-}
-
-/** Synchronous fallback — never throws. */
-function safeRefine(molecule: Molecule): EmbedResult | null {
-  try {
-    return embedAndRefine(molecule);
-  } catch {
-    return null;
-  }
+  // The engine's geometry is the authority — no post-hoc repair; only the
+  // drawn wedges are asserted, because the sketch is the specification.
+  return { ...honourWedges(start, refined.molecule), engine: 'gfn2', gfn2: refined };
 }

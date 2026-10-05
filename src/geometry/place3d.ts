@@ -5,7 +5,26 @@ import { vecDot, crossProduct, vecNormalize, rotateRodrigues } from '../utils/ve
 import { idealVseprVectors } from '../chem/vsepr/ideal-vsepr-vectors';
 import { getCovalentRadius } from '../chem/radii';
 
-const BOND_LENGTH = 1.0;
+/**
+ * The starting length of a bond (Å): the sum of the two atoms' single-bond
+ * covalent radii (Cordero 2008), shortened for a multiple bond — C–C 1.52,
+ * C=C 1.32, C≡C 1.19, against 1.53/1.34/1.20 measured. A start at the right
+ * scale bond by bond is what lets the optimiser spend its steps on the shape:
+ * with one uniform scale factor over a unit skeleton, benzene began at C–C
+ * 2.07 Å and C–H 1.31 Å and took 137 GFN2 steps (10 s) mostly shrinking.
+ */
+const MULTIPLE_BOND_SHORTENING: Record<number, number> = { 2: 0.87, 3: 0.78 };
+
+function bondLengthFor(molecule: Molecule): (i: number, j: number) => number {
+  const order = new Map<string, number>();
+  for (const b of molecule.bonds) {
+    order.set(`${Math.min(b.atom1Index, b.atom2Index)}-${Math.max(b.atom1Index, b.atom2Index)}`, b.order);
+  }
+  return (i, j) => {
+    const single = getCovalentRadius(molecule.atoms[i].element) + getCovalentRadius(molecule.atoms[j].element);
+    return single * (MULTIPLE_BOND_SHORTENING[order.get(`${Math.min(i, j)}-${Math.max(i, j)}`) ?? 1] ?? 1);
+  };
+}
 
 
 
@@ -74,40 +93,24 @@ export function hasRingBonds(molecule: Molecule): boolean {
   return ringBonds(molecule).size > 0;
 }
 
-/**
- * Rescale a unit skeleton (`BOND_LENGTH`) to a chemically plausible size: one
- * uniform factor, the mean covalent-radius sum over the molecule's bonds.
- *
- * A uniform factor keeps the *shape* the embedder got right, which is what a
- * refiner's basin depends on, while giving it a starting scale it can work
- * from. Per-bond lengths would need `place3D` itself to take a length function;
- * a quantum refiner corrects individual lengths from any sane scale, so this is
- * enough — and it leaves MMFF94's unit-skeleton contract untouched.
- */
-export function scaleSkeleton(molecule: Molecule): Molecule {
-  let total = 0;
-  for (const bond of molecule.bonds) {
-    total += getCovalentRadius(molecule.atoms[bond.atom1Index].element)
-      + getCovalentRadius(molecule.atoms[bond.atom2Index].element);
-  }
-  const factor = molecule.bonds.length > 0 ? total / molecule.bonds.length : 1;
-  return {
-    atoms: molecule.atoms.map((a) => ({
-      ...a, x: a.x * factor, y: a.y * factor, z: a.z * factor,
-    })),
-    bonds: molecule.bonds,
-  };
-}
-
-// Fallback 3D embedder: graph-walk placement along ideal hybrid vectors,
-// then staggered-alkane torsion optimization.
+// The 3D embedder: graph-walk placement along ideal hybrid vectors at
+// covalent bond lengths, then staggered-alkane torsion optimization. Its
+// output is the GFN2 optimiser's start, and the structure shown when that
+// optimisation cannot run.
 export function place3D(molecule: Molecule): [number, number, number][] {
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
+  // atoms carrying a π bond: planar in a ring, trigonal or linear anywhere
+  const hasPi = new Array<boolean>(n).fill(false);
   for (const bond of molecule.bonds) {
     adj[bond.atom1Index].push(bond.atom2Index);
     adj[bond.atom2Index].push(bond.atom1Index);
+    if (bond.order >= 2) {
+      hasPi[bond.atom1Index] = true;
+      hasPi[bond.atom2Index] = true;
+    }
   }
+  const bondLength = bondLengthFor(molecule);
 
   const pos: [number, number, number][] = new Array(n);
   const placed = new Set<number>();
@@ -115,12 +118,12 @@ export function place3D(molecule: Molecule): [number, number, number][] {
 
   // Seed ring atoms from the 2D input: the sketcher's ring is a proper
   // polygon (correct closure, correct angles, no overlaps), while the
-  // graph walk would leave the ring a broken zig-zag that the MMFF94
-  // optimizer then spends hundreds of iterations rebuilding. The ring
-  // is lifted with alternating ±z offsets (a rough pucker): a flat
-  // ring is a high-energy symmetric start whose collective puckering
-  // costs the optimizer hundreds of iterations; the alternation gives
-  // it the puckered geometry to start from.
+  // graph walk would leave the ring a broken zig-zag that the
+  // optimizer then spends hundreds of iterations rebuilding. A saturated
+  // ring is lifted with alternating ±z offsets (a rough pucker): a flat
+  // cyclohexane is a high-energy symmetric start whose collective
+  // puckering costs the optimizer hundreds of iterations. A ring atom
+  // with a π bond stays in the plane (see below).
   const rings = ringBonds(molecule);
   const ringAtoms = new Set<number>();
   for (const key of rings) {
@@ -161,9 +164,23 @@ export function place3D(molecule: Molecule): [number, number, number][] {
       }
     }
   }
-  const PUCKER = 0.4; // Å of alternating out-of-plane lift
+  // The sketch's ring is at the sketcher's scale; bring it to the bonds'
+  // covalent lengths, one factor for the whole ring set (a ring has to close).
+  let drawn = 0;
+  let wanted = 0;
+  for (const key of rings) {
+    const [i, j] = key.split('-').map(Number);
+    drawn += Math.hypot(molecule.atoms[i].x - molecule.atoms[j].x, molecule.atoms[i].y - molecule.atoms[j].y);
+    wanted += bondLength(i, j);
+  }
+  const ringScale = drawn > 1e-9 ? wanted / drawn : 1;
+  // Only saturated ring atoms are lifted. An atom with a π bond is trigonal
+  // and its ring is planar: puckering benzene, as this did for every ring,
+  // only gave the optimiser a ring to flatten.
+  const PUCKER = 0.25; // Å, about cyclohexane's chair
   ringList.forEach((i, k) => {
-    pos[i] = [molecule.atoms[i].x, molecule.atoms[i].y, (k % 2 === 0 ? 1 : -1) * PUCKER];
+    const lift = hasPi[i] ? 0 : (k % 2 === 0 ? 1 : -1) * PUCKER;
+    pos[i] = [molecule.atoms[i].x * ringScale, molecule.atoms[i].y * ringScale, lift];
     placed.add(i);
     parent[i] = i;
   });
@@ -220,13 +237,17 @@ export function place3D(molecule: Molecule): [number, number, number][] {
       const le = Math.hypot(...eq);
       if (le > 1e-9) eq = [eq[0] / le, eq[1] / le, eq[2] / le];
 
-      const slots = [n, eq];
-      for (let k = 0; k < hNbs.length && k < 2; k++) {
+      // A trigonal ring atom (three neighbours: an aromatic or vinylic CH)
+      // has only the in-plane slot; axial first put benzene's H's straight up
+      // out of the ring.
+      const slots = adj[i].length === 3 ? [eq] : [n, eq];
+      for (let k = 0; k < hNbs.length && k < slots.length; k++) {
         const h = hNbs[k];
+        const length = bondLength(i, h);
         pos[h] = [
-          pos[i][0] + BOND_LENGTH * slots[k][0],
-          pos[i][1] + BOND_LENGTH * slots[k][1],
-          pos[i][2] + BOND_LENGTH * slots[k][2],
+          pos[i][0] + length * slots[k][0],
+          pos[i][1] + length * slots[k][1],
+          pos[i][2] + length * slots[k][2],
         ];
         placed.add(h);
         parent[h] = i;
@@ -315,10 +336,11 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     for (let k = 0; k < unplaced.length; k++) {
       const vec = available[k % available.length];
       const nb = unplaced[k];
+      const length = bondLength(curr, nb);
       pos[nb] = [
-        pos[curr][0] + BOND_LENGTH * vec[0],
-        pos[curr][1] + BOND_LENGTH * vec[1],
-        pos[curr][2] + BOND_LENGTH * vec[2],
+        pos[curr][0] + length * vec[0],
+        pos[curr][1] + length * vec[1],
+        pos[curr][2] + length * vec[2],
       ];
       placed.add(nb);
       parent[nb] = curr;
@@ -333,7 +355,7 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   // pass: a torsion rotation can carry a wedged atom along with a plain
   // neighbor, which would undo the very configuration just established.
   // Its warnings are deliberately dropped here — the final enforcement happens
-  // in embedAndRefine's re-assert passes, which collect them.
+  // after the optimisation (embed.ts, honourWedges), which collects them.
   applyWedgeStereo(molecule, pos);
 
   // Unplaced atoms (isolated) keep their 2D input coordinates.

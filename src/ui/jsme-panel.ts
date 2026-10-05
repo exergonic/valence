@@ -4,7 +4,9 @@ import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { computeLocalGeometry } from '../geometry/local-geometry';
-import { refineWithGfn2, GFN2_NOTE, HESSIAN_SADDLE_THRESHOLD } from '../geometry/gfn2-refine';
+import {
+  cancelGfn2, Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, GFN2_NOTE, HESSIAN_SADDLE_THRESHOLD, type Gfn2Progress, type Gfn2Result,
+} from '../geometry/gfn2-refine';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { ringPuckerWarnings } from '../geometry/ring-pucker';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
@@ -45,15 +47,41 @@ export function toggleJsmeCollapsed() {
   if (panel) setJsmeCollapsed(!panel.classList.contains('collapsed'));
 }
 
-function showLoading(text: string) {
+/** Show the busy overlay. `cancellable` adds the Cancel button, which stops a
+ *  GFN2 run in flight (the caller decides what a cancelled run shows). */
+function showLoading(text: string, cancellable = false) {
   const overlay = document.getElementById('loading-overlay')!;
-  const loadingText = document.getElementById('loading-text')!;
-  loadingText.textContent = text;
+  document.getElementById('loading-text')!.textContent = text;
+  document.getElementById('loading-detail')!.textContent = '';
+  const cancel = document.getElementById('loading-cancel') as HTMLButtonElement;
+  cancel.classList.toggle('hidden', !cancellable);
+  cancel.onclick = cancellable ? () => cancelGfn2() : null;
   overlay.classList.remove('hidden');
 }
 
 function hideLoading() {
   document.getElementById('loading-overlay')!.classList.add('hidden');
+  document.getElementById('loading-cancel')!.classList.add('hidden');
+}
+
+/**
+ * The overlay's running account of a GFN2 run: what stage it is in, how many
+ * energy evaluations it has made, the lowest energy so far and the time spent.
+ * A larger molecule takes tens of seconds, and a counter that moves is the
+ * difference between "working" and "hung".
+ */
+function trackGfn2Progress(): (progress: Gfn2Progress) => void {
+  const started = performance.now();
+  return (progress) => {
+    const stage = progress.stage === 'optimising' ? 'Optimising with GFN2-xTB…'
+      : progress.stage === 'curvature' ? 'Checking the curvature (numerical Hessian)…'
+      : 'Converged to a saddle point — pushing it downhill and re-optimising…';
+    document.getElementById('loading-text')!.textContent = stage;
+    const seconds = ((performance.now() - started) / 1000).toFixed(0);
+    const energy = progress.energyHartree === null ? '' : ` · E ${progress.energyHartree.toFixed(5)} Eh`;
+    document.getElementById('loading-detail')!.textContent =
+      `${progress.evaluations} energy evaluations${energy} · ${seconds} s`;
+  };
 }
 
 function showRenderError(text: string) {
@@ -96,42 +124,66 @@ function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: string[
   };
 }
 
+/**
+ * The structural warnings and the model caveats for a displayed structure.
+ * `source` is where the GEOMETRY came from. A fetched structure (PubChem, CIR)
+ * is a force-field conformer — PubChem's are MMFF94 — so the parameter-gap
+ * report ("geometry approximate") and the 3-ring pucker check
+ * (ring-pucker.ts: MMFF94's reference-angle artifact, reported, never
+ * repaired) apply to it. A local structure is GFN2's or the unoptimised start,
+ * and neither is MMFF94's. The charge model runs on MMFF94 either way, which
+ * is what the dipole caveats are for.
+ */
 function composeNotes(
   warnings: string[],
   molecule: Molecule,
   dipole: DipoleResult | null,
-  engine?: 'mmff94' | 'gfn2',
+  source: 'fetched' | 'local',
 ): { warnings: string[]; info: string[] } {
-  // The parameter-gap warnings are phrased about the geometry ("refined
-  // geometry approximate"), so they only apply when MMFF94 produced it. The
-  // charge model still runs on those parameters either way, which is what the
-  // dipole caveats below are for.
-  const gaps = engine === 'gfn2' ? [] : parameterGapWarnings(molecule);
-  const info = [...gaps];
-  // A puckered trigonal 3-ring centre is MMFF94's reference-angle artifact
-  // (ring-pucker.ts) — reported, never repaired. The GFN2 tier gets those
-  // centres right on its own, so the check runs only on other sources.
-  if (engine !== 'gfn2') info.push(...ringPuckerWarnings(molecule));
+  const gaps = parameterGapWarnings(molecule);
+  const info = source === 'fetched' ? [...gaps, ...ringPuckerWarnings(molecule)] : [];
   if (dipole && gaps.length > 0) info.push(DIPOLE_APPROXIMATE);
   if (dipole?.residualCharge) info.push(DIPOLE_RESIDUAL_CHARGE);
   return { warnings, info };
 }
 
 /**
- * The Hessian verdict line for a converged GFN2 run. A gradient-based stop
- * cannot tell a minimum from a saddle — both have zero gradient — so the
- * curvature check is what lets the app say which one is on screen. The saddle
- * case is real: the planar cyclopropenyl anion is one, and the optimiser would
- * otherwise report it as converged.
+ * What a converged GFN2 run says about itself: the convergence line, and the
+ * curvature. A gradient-based stop cannot tell a minimum from a saddle — both
+ * have zero gradient — so the Hessian is what lets the app say which one is on
+ * screen, and when the run was pushed off a saddle, it says that too.
  */
-function gfn2HessianNote(lowestMode: number): string {
-  return lowestMode < HESSIAN_SADDLE_THRESHOLD
-    ? 'GFN2-xTB converged to a saddle, not a minimum — the lowest Hessian mode is imaginary '
-      + `(λ = ${lowestMode.toFixed(3)} Eh/bohr²), so the geometry on screen is that stationary point.`
+function gfn2RunNotes(run: Gfn2Result): string[] {
+  const seconds = (run.milliseconds / 1000).toFixed(1);
+  if (!run.converged) {
+    // No curvature verdict either: the Hessian runs only on a converged point.
+    return [
+      `GFN2-xTB stopped after ${run.iterations} steps (${seconds} s) before full convergence. The structure `
+        + `shown is the lowest-energy point it reached (${run.energyHartree.toFixed(6)} Eh): its shape is `
+        + 'reliable, its last few hundredths of an ångström are not.',
+    ];
+  }
+  const notes = [
+    `GFN2-xTB converged in ${run.iterations} steps to ${run.energyHartree.toFixed(6)} Eh (${seconds} s).`,
+  ];
+  const escapes = run.saddleEscapes === 1 ? 'once' : `${run.saddleEscapes} times`;
+  if (run.lowestHessianMode === null) {
+    notes.push('GFN2-xTB Hessian check skipped (above 16 atoms, where it costs more than the optimisation): '
+      + 'the structure is a converged stationary point, not verified to be a minimum.');
+  } else if (run.lowestHessianMode < HESSIAN_SADDLE_THRESHOLD) {
+    notes.push('GFN2-xTB converged to a saddle, not a minimum — the lowest Hessian mode is imaginary '
+      + `(λ = ${run.lowestHessianMode.toFixed(3)} Eh/bohr²)`
+      + (run.saddleEscapes > 0 ? `, and pushing it down that mode (${escapes}) found nothing lower` : '')
+      + ', so the geometry on screen is that stationary point.');
+  } else {
     // The raw Hessian's lowest eigenvalue at a minimum is a rigid-body zero
-    // mode (~0 ± the FD noise floor), so it is not a number worth printing —
-    // only a negative one, far below the floor, is information.
-    : 'GFN2-xTB Hessian: minimum — no imaginary mode.';
+    // mode (~0 ± the FD noise floor), not a number worth printing.
+    notes.push(run.saddleEscapes > 0
+      ? `GFN2-xTB first converged to a saddle point; pushed down its imaginary mode (${escapes}) and `
+        + 're-optimised, it reached a minimum — no imaginary mode.'
+      : 'GFN2-xTB Hessian: minimum — no imaginary mode.');
+  }
+  return notes;
 }
 
 /**
@@ -161,7 +213,7 @@ function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null; 
   sourceEl.textContent = info.source === 'pubchem' ? 'PubChem 3D' :
     info.source === 'cir' ? 'CIR' :
     info.source === 'gfn2' ? 'GFN2-xTB' :
-    'Local MMFF94';
+    'Unoptimised';
   sourceEl.className = info.source;
 
   if (info.cid) {
@@ -297,7 +349,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         const dipole = computeDipole(molecule);
-        const notes = composeNotes(result.info.warnings ?? [], molecule, dipole);
+        const notes = composeNotes(result.info.warnings ?? [], molecule, dipole, 'fetched');
         notes.info.push(...snapped.info);
         updateMoleculeInfo({
           ...result.info,
@@ -308,31 +360,41 @@ export function mountJsmePanel(ctx: SceneContext) {
           info: notes.info,
         });
       } else {
-        showLoading('Refining geometry...');
-        const local = await computeLocalGeometry(molecule);
+        // GFN2 is the only local engine: the first run downloads ~3 MB, and a
+        // larger molecule takes tens of seconds, so the overlay counts as it
+        // goes and Cancel shows the unoptimised start instead.
+        showLoading('Loading GFN2-xTB (first use downloads ~3 MB)…', true);
+        const local = await computeLocalGeometry(molecule, trackGfn2Progress());
         const t4 = performance.now();
         if (!local) {
-          // The local pipeline failed: refuse to render rather than silently
-          // displaying the unrefined 2D sketch as if it were a 3D model.
-          // The 3D view is left unchanged.
+          // Not even a starting structure: refuse to render rather than show
+          // the 2D sketch as if it were a 3D model. The view is left as it was.
           console.warn('[render] computeLocalGeometry returned null; refusing to render');
           showRenderError(
-            'Could not generate 3D geometry for this structure — the local MMFF94 pipeline failed. ' +
-            'The 3D view is unchanged.'
+            'Could not generate a 3D structure for this sketch — the embedder failed. The 3D view is unchanged.'
           );
           return;
         }
         molecule = local.molecule;
-        gfn2Charges = local.gfn2Charges ?? null;
+        gfn2Charges = local.gfn2?.charges ?? null;
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         const dipole = computeDipole(molecule);
-        const notes = composeNotes(local.warnings, molecule, dipole, local.engine);
-        notes.info.push(...snapped.info);
-        if (local.engine === 'gfn2' && local.gfn2LowestMode !== undefined) {
-          notes.info.push(gfn2HessianNote(local.gfn2LowestMode));
+        const notes = composeNotes(local.warnings, molecule, dipole, 'local');
+        if (local.engine === 'gfn2' && local.gfn2) {
+          if (!local.gfn2.converged) notes.warnings.unshift('GFN2-xTB structure, not fully converged.');
+          notes.info.push(GFN2_NOTE, ...gfn2RunNotes(local.gfn2));
+        } else {
+          // Said in the header, not just the log: the structure on screen is a
+          // starting guess, and bond lengths and angles read off it mean little.
+          notes.warnings.unshift(`Unoptimised structure — ${local.unrefinedReason ?? 'GFN2-xTB did not run'}.`);
+          notes.info.push(
+            'The structure shown is the embedder\'s starting guess: ideal VSEPR directions and typical bond '
+            + 'lengths, not an energy minimum. Read its shape, not its numbers.',
+          );
         }
+        notes.info.push(...snapped.info);
         updateMoleculeInfo({
           source: local.engine === 'gfn2' ? 'gfn2' : 'local',
           formula,
@@ -361,10 +423,10 @@ export function mountJsmePanel(ctx: SceneContext) {
     }
   };
 
-  // GFN2-xTB refinement, on demand. The engine is ~3 MB of wasm and loads
-  // lazily inside its worker on first use — a user who never asks for it never
-  // pays for it. This is the tier for structures MMFF94 cannot describe; the
-  // Info log says exactly that (GFN2_NOTE).
+  // GFN2-xTB refinement of the structure on screen, on demand — chiefly for a
+  // fetched PubChem/CIR conformer, which is a force-field geometry. The engine
+  // is ~3 MB of wasm, loaded lazily inside its worker on first use. A cancelled
+  // or failed run leaves the structure as it was.
   const gfn2Btn = document.getElementById('ctrl-gfn2-refine') as HTMLButtonElement | null;
   if (gfn2Btn) {
     gfn2Btn.onclick = async () => {
@@ -373,14 +435,11 @@ export function mountJsmePanel(ctx: SceneContext) {
       gfn2Btn.textContent = 'Refining...';
       gfn2Btn.disabled = true;
       hideRenderError();
-      showLoading('Refining with GFN2-xTB (first use downloads ~3 MB)...');
+      showLoading('Loading GFN2-xTB (first use downloads ~3 MB)…', true);
       try {
-        const refined = await refineWithGfn2(molecule);
+        const refined = await refineWithGfn2(molecule, trackGfn2Progress());
         if (!refined) {
-          showRenderError(
-            'GFN2-xTB could not refine this structure — the geometry is unchanged. It needs a browser '
-            + 'with Workers and elements its parameter table covers.'
-          );
+          showRenderError('GFN2-xTB found no usable geometry from this structure — the geometry is unchanged.');
           return;
         }
         const snapped = snapToSymmetry(refined.molecule);
@@ -395,19 +454,14 @@ export function mountJsmePanel(ctx: SceneContext) {
         const info: string[] = [];
         if (dipole && parameterGapWarnings(next).length > 0) info.push(DIPOLE_APPROXIMATE);
         if (dipole?.residualCharge) info.push(DIPOLE_RESIDUAL_CHARGE);
-        info.push(GFN2_NOTE);
-        info.push(...snapped.info);
-        info.push(
-          refined.converged
-            ? `GFN2-xTB converged in ${refined.iterations} steps to ${refined.energyHartree.toFixed(6)} Eh `
-              + `(${(refined.milliseconds / 1000).toFixed(1)} s).`
-            : `GFN2-xTB stopped after ${refined.iterations} steps at ${refined.energyHartree.toFixed(6)} Eh `
-              + 'without reaching its convergence threshold — treat the geometry as approximate.',
-        );
-        if (refined.lowestHessianMode !== null) info.push(gfn2HessianNote(refined.lowestHessianMode));
-        updateMoleculeInfo({ source: 'gfn2', formula, weight: `${weight}`, dipole, warnings: [], info });
-      } catch {
-        showRenderError('GFN2-xTB refinement failed — the geometry is unchanged.');
+        info.push(GFN2_NOTE, ...gfn2RunNotes(refined), ...snapped.info);
+        updateMoleculeInfo({ source: 'gfn2', formula, weight: `${weight}`, dipole, warnings: refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'], info });
+      } catch (error) {
+        showRenderError(error instanceof Gfn2Cancelled
+          ? 'GFN2-xTB refinement cancelled — the geometry is unchanged.'
+          : error instanceof Gfn2Unavailable
+            ? `GFN2-xTB is unavailable: ${error.message}. The geometry is unchanged.`
+            : 'GFN2-xTB refinement failed — the geometry is unchanged.');
       } finally {
         gfn2Btn.textContent = 'Refine with GFN2-xTB';
         gfn2Btn.disabled = false;

@@ -36,12 +36,12 @@ Built specifically for the classroom, Valence embraces a purely geometric and al
 ## ✨ Core Capabilities
 
 *   **🧠 Hybridization Engine:** Assigns sp / sp² / sp³ / sp³d / sp³d² states by counting electron domains (σ bonds + lone pairs, shifted by the formal charge) from the molecular graph — never from measured angles, which are the *output* of geometry, not its identity. Includes conjugation detection (e.g., phenol O, amide N, H₂SO₄ O) with a geometric promotion gate.
-*   **🌐 Robust 3D Embedding:** Kekulizes JSME's aromatic SMILES (monocyclic rings → explicit bonds, so antiaromatic molecules like cyclobutadiene resolve correctly), then tries PubChem PUG REST for MMFF94-optimized coordinates, then the NIH CACTUS (CIR) resolver — each result validated against the sketch's heavy-atom bond graph. The in-house fallback (implicit hydrogens + graph-walk embedder + MMFF94 refinement via the vendored `mmff94-ts` library, in a Web Worker) produces MMFF94-quality geometry with no native dependencies. Wedge and hash bonds drawn in the sketcher are honored, so a center drawn as (S) embeds as (S).
+*   **🌐 Robust 3D Embedding:** Kekulizes JSME's aromatic SMILES (monocyclic rings → explicit bonds, so antiaromatic molecules like cyclobutadiene resolve correctly), then tries PubChem PUG REST for MMFF94-optimized coordinates, then the NIH CACTUS (CIR) resolver — each result validated against the sketch's heavy-atom bond graph. The in-house fallback (implicit hydrogens + graph-walk embedder at covalent bond lengths + a GFN2-xTB optimisation in a Web Worker, over a vendored WebAssembly build of OCC) gets hypervalent centres and strained rings right where a force field does not, with no native dependencies. Each run shows its progress, can be cancelled, and is checked for curvature: a saddle point is pushed off and re-optimised rather than shown as a minimum. Wedge and hash bonds drawn in the sketcher are honored, so a center drawn as (S) embeds as (S).
 *   **🎨 Advanced Orbital Rendering:** Powered by THREE.js. Utilizes precise `LatheGeometry` lobes to visualize σ, π, p, and lone pair orbitals.
 *   **💎 Four Atom Looks:** The Style tab styles atoms and orbitals independently. Atoms offer Classic (the original shading), Soft (studio image lighting, no lamps), Glossy (clearcoat ceramic — the default), and Showcase (key/rim/fill rig, brightest); orbitals keep their own Glass / Glossy / Matte / Metal presets.
 *   **🧭 p-AO Directionality:** Automatically orientates all π-system p-orbitals perpendicular to the σ plane, forcing parallel alignment across conjugated networks.
 *   **🧬 True Bond Orders:** Single, double, and triple bonds render from the MOL bond block — doubles and triples as parallel cylinders whose extra lines lie in the molecular plane, the way a textbook drawing shows them.
-*   **⚡ Generic-Parameter Warnings:** When the local MMFF94 path must use generic parameters (hypervalent centers like PCl₅/SF₆, elements outside the MMFF94 type space), the status popup warns that the refined geometry is approximate — validated against the 761-molecule MMFF94 suite so it never false-fires on covered chemistry.
+*   **⚡ Generic-Parameter Warnings:** When a fetched (MMFF94) structure or the MMFF94 charge model must use generic parameters (hypervalent centers like PCl₅/SF₆, elements outside the MMFF94 type space), the status popup says the numbers are approximate — validated against the 761-molecule MMFF94 suite so it never false-fires on covered chemistry.
 *   **📸 Quick Export:** Seamlessly capture and export 2× resolution PNG snapshots of the current viewport, or the molecule itself as SDF (formal charges preserved on `M  CHG` lines) or XYZ, for lectures or assignments. Right-clicking the display copies any of the three straight to the clipboard — XYZ, SDF, or the PNG — for pasting into a report, an issue, or a chat.
 
 ---
@@ -98,14 +98,14 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 ### Data Pipeline
 
 ```text
-[JSME MOL + SMILES] ➔ Kekulize Aromatic SMILES ➔ Validate vs Sketch ➔ 3D Embedder + MMFF94 Refinement ➔ [Three.js Render]
+[JSME MOL + SMILES] ➔ Kekulize Aromatic SMILES ➔ Validate vs Sketch ➔ 3D Embedder + GFN2-xTB Optimisation ➔ [Three.js Render]
 ```
 
 1. **Input:** Draw a molecule in the JSME panel (or select a pre-built example — methane through water, the hypervalent PCl₅ trigonal bipyramid and SF₆ octahedron, and more).
 2. **Kekulize:** JSME's `smiles()` emits aromatic lower-case SMILES; monocyclic aromatic rings are rewritten to explicit Kekulé single/double bonds so the query is unambiguous (an antiaromatic ring like cyclobutadiene otherwise resolves to the saturated cycloalkane at PubChem).
 3. **Primary 3D:** Attempt PubChem PUG REST for MMFF94-optimized coordinates; the returned SDF is accepted only when its heavy-atom bond graph matches the sketch.
 4. **CIR Fallback:** If PubChem has no structure (e.g., its conformer generator fails) or the result mismatches, try the NIH CACTUS (CIR) resolver with the same validation.
-5. **Local Fallback:** If both fail, run the in-house pipeline in a Web Worker: add implicit hydrogens, embed 3D coordinates with the graph-walk embedder, then refine with MMFF94 (the vendored `mmff94-ts` library, L-BFGS, 200-iteration budget). The status popup warns when the molecule must run on generic MMFF94 parameters.
+5. **Local Fallback:** If both fail, run the in-house pipeline in a Web Worker: add implicit hydrogens, embed 3D coordinates with the graph-walk embedder, then optimise with GFN2-xTB (semiempirical tight binding; the vendored `mmff94-ts` library supplies the L-BFGS stepping), within a 30 s budget. A run that stops short shows the lowest structure it reached, labelled not fully converged; a run that cannot start shows the unoptimised embedding, labelled so.
 6. **Render:** Classify hybridization, map orbital geometry, and push to the Three.js canvas.
 
 ### Key Modules
@@ -114,12 +114,12 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 |------------------|---------|
 | `src/mol-parser/` | Custom fixed-width MOL block parser (~40 lines, zero external dependencies). |
 | `src/chem/` | Chemistry engine: `hybridize.ts` (domain-count hybridization, sp → sp³d²), `assign-orbitals.ts` + `orient-pi.ts` (per-atom orbital assignment — lone pairs, π directionality, the conjugation promotion gate), `orient-lone-pairs.ts` (σ lone-pair lobe directions), `ideal-vsepr-vectors.ts` (ideal VSEPR vertex vectors), `fill-hydrogens.ts` (implicit-H filling), `kekulize-smiles.ts` (aromatic SMILES → explicit Kekulé bonds for the PubChem query). |
-| `src/geometry/` | 3D coordinate acquisition: `resolve3d.ts` (PubChem → CIR, each result validated), `validate-structure.ts` (heavy-atom bond-graph mismatch guard), `place3d.ts` + `torsions.ts` (graph-walk embedder), `mmff-refine.ts` + `local-geometry.ts` (MMFF94 refinement in a Web Worker), `parameter-warnings.ts` (generic-parameter feedback). |
+| `src/geometry/` | 3D coordinate acquisition: `resolve3d.ts` (PubChem → CIR, each result validated), `validate-structure.ts` (heavy-atom bond-graph mismatch guard), `place3d.ts` + `torsions.ts` (graph-walk embedder), `embed.ts` + `local-geometry.ts` (the start, then GFN2-xTB optimisation in a Web Worker: `gfn2-refine.ts`), `parameter-warnings.ts` (generic-parameter feedback). |
 | `src/render/` | Core Three.js logic: atoms, bonds, lighting, orbital lobes (`lobes.ts` LatheGeometry profiles), `atom-styles.ts` (the four atom looks — Classic, Soft, Glossy, Showcase), `rebuild.ts` state-driven rebuild, `label-colors.ts` (background-aware label palettes). |
 | `src/ui/` | Control panel, JSME panel wiring, the examples list (`examples.ts`), tooltip. |
 | `src/utils/` | Vector math (`vec3.ts`). |
 
-The MMFF94 engine is consumed from `vendor/mmff94-ts-0.1.0-alpha.2.tgz` (a committed, self-contained bundle of the [mmff94-ts](https://github.com/exergonic/mmff94-ts) library — zero runtime dependencies; Vite embeds it into the worker chunk at build time).
+The MMFF94 engine is consumed from `vendor/mmff94-ts-0.1.0-alpha.2.tgz` (a committed, self-contained bundle of the [mmff94-ts](https://github.com/exergonic/mmff94-ts) library — zero runtime dependencies; Vite embeds it into the worker chunk at build time). It is the charge model (BCI partial charges, the dipole, the ESP) and the GFN2 optimiser's stepping; it no longer optimises geometries itself. The GFN2-xTB engine is `vendor/occ-wasm/` (OCC, LGPL-3), loaded lazily on first use.
 
 ---
 

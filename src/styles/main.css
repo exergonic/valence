@@ -1052,6 +1052,35 @@ html, body {
   font-size: 14px;
 }
 
+/* The running numbers of a long GFN2 optimisation: tabular, so the counter
+   does not jitter as it counts. */
+#loading-detail {
+  color: #8a8f98;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-height: 1em;
+  margin-top: -8px;
+}
+
+#loading-cancel {
+  background: transparent;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 4px 14px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+#loading-cancel:hover {
+  border-color: #888;
+  color: #fff;
+}
+
+#loading-cancel.hidden {
+  display: none;
+}
+
 /* ── Cite Dialog ── */
 
 #cite-dialog {

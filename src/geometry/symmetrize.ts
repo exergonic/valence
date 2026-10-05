@@ -419,6 +419,27 @@ function symbolOf(group: Operation[]): string {
 const IDENTITY_MATRIX: Mat3 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
 /**
+ * The closed group of the operations a geometry nearly has, at `tolerance` —
+ * or, when those operations will not close, at a tighter one.
+ *
+ * A real optimised structure carries a few mÅ of noise, and at the full
+ * tolerance it admits many near-duplicate operations about slightly different
+ * axes (candidate axes come from atom positions, each a little off); their
+ * products never close, the group overflows MAX_GROUP_ORDER, and the molecule
+ * came out C1. Measured on GFN2's pyridine (planar to 8 mÅ, its paired bonds
+ * equal to 1 mÅ): 54 seed operations, no closure, "C1" — while its heavy atoms
+ * alone closed to C2v. Halving the tolerance drops the stray near-duplicates
+ * and keeps the true operations, which hold to the structure's own noise.
+ */
+function detectGroup(centered: Vec3[], elements: string[], tolerance: number): Operation[] | null {
+  for (let t = tolerance; t >= tolerance / 8; t /= 2) {
+    const group = closeGroup(detectOperations(centered, elements, t));
+    if (group) return group;
+  }
+  return null;
+}
+
+/**
  * Detect the point group of a geometry without touching it. The same machinery
  * `symmetrizeMolecule` runs, exposed for callers that need the operations
  * themselves — the irrep labels are built from them (see
@@ -458,7 +479,7 @@ export function detectPointGroup(
     return { symbol: centrosymmetric ? 'D∞h' : 'C∞v', order: 0, operations: [] };
   }
 
-  const group = closeGroup(detectOperations(centered, elements, tolerance));
+  const group = detectGroup(centered, elements, tolerance);
   if (!group || group.length <= 1) return { symbol: 'C1', order: 1, operations: [] };
   return {
     symbol: symbolOf(group),
@@ -512,7 +533,7 @@ export function symmetrizeMolecule(
     return { atoms: out, symbol: centrosymmetric ? 'D∞h' : 'C∞v', order: 2, maxShift };
   }
 
-  let detected = closeGroup(detectOperations(centered, elements, tolerance));
+  let detected = detectGroup(centered, elements, tolerance);
   if (!detected || detected.length === 1) return unchanged;
 
   let current = centered;
@@ -535,7 +556,7 @@ export function symmetrizeMolecule(
     });
     current = projected;
     if (shift < 1e-9) break;
-    const again = closeGroup(detectOperations(current, elements, tolerance));
+    const again = detectGroup(current, elements, tolerance);
     if (!again || again.length === 1) break;
     detected = again;
   }

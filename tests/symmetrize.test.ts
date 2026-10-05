@@ -3,30 +3,32 @@
  * exactly on it, and does it leave alone what it should?
  *
  * The geometries come from the app's own local pipeline, so these tests pin
- * the whole chain (embed → MMFF94 → snap), not a hand-built ideal. The
+ * the whole chain (embed → GFN2-xTB → snap), not a hand-built ideal. The
  * textbook groups are asserted only where the measured shift is well under
  * the tolerance — a molecule sitting near the tolerance would make the
  * expectation depend on the platform's floating point, and that is a fact
  * about the geometry, not about the symmetrizer.
  */
-import { describe, expect, it } from 'vitest';
-import { EXAMPLES } from '../src/ui/examples';
-import { parseMolBlock } from '../src/mol-parser';
+import { beforeAll, describe, expect, it } from 'vitest';
 import type { Molecule } from '../src/mol-parser';
-import { embedAndRefine } from '../src/geometry/mmff-refine';
+import { optimisedExample } from './helpers/local-geometry';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
 import { SYMMETRY_TOLERANCE, detectPointGroup, mirrorNormal, symmetrizeMolecule } from '../src/geometry/symmetrize';
 
-const embedded = (name: string): Molecule => {
-  const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith(name))!.mol)!;
-  return embedAndRefine(sketch).molecule;
-};
+const embedded = (name: string): Promise<Molecule> => optimisedExample(name);
+
+// One GFN2 run per example, up front: the tests below share them.
+beforeAll(async () => {
+  for (const name of ['Methane', 'Ethene', 'Benzene', 'Water', 'Nitrogen', 'Oxygen', 'Pyridine', 'Pyrrole', 'Imidazole', 'But-1-en-3-yne', 'Ethyne', 'Phenol']) {
+    await embedded(name);
+  }
+}, 300_000);
 
 const shiftBetween = (a: Molecule['atoms'], b: Molecule['atoms']) =>
   Math.max(...a.map((atom, i) => Math.hypot(atom.x - b[i].x, atom.y - b[i].y, atom.z - b[i].z)));
 
 describe('the symmetrizer', () => {
-  it('names the group each molecule actually has', () => {
+  it('names the group each molecule actually has', async () => {
     // shifts measured: 0.05 mÅ (methane), 0.23 (ethene), 0.80 (benzene),
     // 1.27 (pyridine), 1.99 (pyrrole) — all ≥10× under the 20 mÅ tolerance
     const expected: Array<[string, string]> = [
@@ -42,18 +44,18 @@ describe('the symmetrizer', () => {
       ['But-1-en-3-yne', 'Cs'],
     ];
     for (const [name, symbol] of expected) {
-      const result = symmetrizeMolecule(embedded(name));
+      const result = symmetrizeMolecule(await embedded(name));
       expect(`${name}: ${result.symbol}`).toBe(`${name}: ${symbol}`);
       expect(result.maxShift).toBeLessThanOrEqual(SYMMETRY_TOLERANCE);
     }
   });
 
-  it('lands exactly on the symmetric subspace, so a second pass does nothing', () => {
+  it('lands exactly on the symmetric subspace, so a second pass does nothing', async () => {
     // The whole point of the fixed-point loop: a single projection over
     // operations that are themselves ~1 mÅ off would leave ~1 mÅ behind,
     // which is exactly the asymmetry that split WebMO's degenerate pairs.
     for (const name of ['Benzene', 'Methane', 'Water', 'Pyrrole']) {
-      const molecule = embedded(name);
+      const molecule = await embedded(name);
       const once = symmetrizeMolecule(molecule);
       const twice = symmetrizeMolecule({ atoms: once.atoms, bonds: molecule.bonds });
       expect(twice.maxShift).toBeLessThan(1e-9);
@@ -61,19 +63,19 @@ describe('the symmetrizer', () => {
     }
   });
 
-  it('still names the group after the calculation frame lays a ring in xy', () => {
+  it('still names the group after the calculation frame lays a ring in xy', async () => {
     // M − I = −2nnᵀ, so a mirror standing on the yz plane (normal along z,
     // the σh of a ring the frame has put in xy) has a zero first column.
     // Reading only that column dropped σh and called benzene D6d, ethene D2d.
     for (const [name, symbol] of [['Benzene', 'D6h'], ['Ethene', 'D2h'], ['Water', 'C2v'], ['Methane', 'Td']] as const) {
-      const snapped = symmetrizeMolecule(embedded(name));
+      const snapped = symmetrizeMolecule(await embedded(name));
       const frame = alignToPrincipalAxes({ atoms: snapped.atoms, bonds: [] });
       const detected = detectPointGroup({ atoms: frame.atoms, bonds: [] });
       expect(`${name}: ${detected.symbol}`).toBe(`${name}: ${symbol}`);
     }
   });
 
-  it('reads a mirror normal from the long column of M − I', () => {
+  it('reads a mirror normal from the long column of M − I', async () => {
     // σh, normal along z. Column 0 of M − I is zero.
     const horizontal = mirrorNormal([[1, 0, 0], [0, 1, 0], [0, 0, -1]]);
     expect(Math.hypot(horizontal[0], horizontal[1])).toBeLessThan(1e-12);
@@ -83,8 +85,8 @@ describe('the symmetrizer', () => {
     expect(Math.abs(vertical[0])).toBeCloseTo(1, 12);
   });
 
-  it('the group it reports is a symmetry of the geometry it returns', () => {
-    const molecule = embedded('Benzene');
+  it('the group it reports is a symmetry of the geometry it returns', async () => {
+    const molecule = await embedded('Benzene');
     const snapped = symmetrizeMolecule(molecule);
     // re-detecting with a tight tolerance finds the same group: the result
     // satisfies it exactly, not approximately
@@ -93,10 +95,10 @@ describe('the symmetrizer', () => {
     expect(strict.maxShift).toBeLessThan(1e-9);
   });
 
-  it('does not erase a genuine distortion', () => {
+  it('does not erase a genuine distortion', async () => {
     // one carbon pulled 0.05 Å out of the ring plane: a real, if small,
     // distortion — the ring must not be flattened back
-    const molecule = embedded('Benzene');
+    const molecule = await embedded('Benzene');
     const bent = molecule.atoms.map((atom, i) => (i === 0 ? { ...atom, z: atom.z + 0.05 } : atom));
     const result = symmetrizeMolecule({ atoms: bent, bonds: molecule.bonds });
     expect(result.maxShift).toBeLessThanOrEqual(SYMMETRY_TOLERANCE);
@@ -106,7 +108,7 @@ describe('the symmetrizer', () => {
     expect(offset).toBeGreaterThan(0.045);
   });
 
-  it('labels a molecule whose only symmetry is a twofold rotation', () => {
+  it('labels a molecule whose only symmetry is a twofold rotation', async () => {
     // The symbol table had no pure-C2 case, which is how a bug slipped through:
     // the order-2 branch looked for the *improper* member of the group, found
     // none for a pure rotation, and fell through to 'Cs' — a mirror the
@@ -119,7 +121,7 @@ describe('the symmetrizer', () => {
     // the pair related by the in-plane twofold axis — and pushing them
     // *oppositely* out of the molecular plane breaks every mirror and leaves
     // exactly that C2.
-    const molecule = embedded('Ethene');
+    const molecule = await embedded('Ethene');
     const atoms = molecule.atoms;
     const carbons = atoms.filter((a) => a.element === 'C');
     const hydrogens = atoms.filter((a) => a.element === 'H');
@@ -167,14 +169,17 @@ describe('the symmetrizer', () => {
     expect(result.maxShift).toBeLessThanOrEqual(SYMMETRY_TOLERANCE);
   });
 
-  it('leaves a geometry with no symmetry alone', () => {
+  it('leaves a geometry with no symmetry alone', async () => {
     // every atom nudged ~0.03 Å in a deterministic pseudo-random direction:
-    // past the tolerance, so nothing may be snapped
-    const molecule = embedded('Benzene');
+    // past the tolerance, so nothing may be snapped. In all three directions —
+    // the optimised benzene lies in xy, and noise in x and y alone leaves the
+    // molecular plane a true mirror (the answer is then Cs, correctly).
+    const molecule = await embedded('Benzene');
     const noisy = molecule.atoms.map((atom, i) => {
       const j = (i * 2654435761) % 1000 / 1000 - 0.5;
       const k = (i * 40503) % 1000 / 1000 - 0.5;
-      return { ...atom, x: atom.x + 0.06 * j, y: atom.y + 0.06 * k };
+      const l = (i * 69069 + 7) % 1000 / 1000 - 0.5;
+      return { ...atom, x: atom.x + 0.06 * j, y: atom.y + 0.06 * k, z: atom.z + 0.06 * l };
     });
     const result = symmetrizeMolecule({ atoms: noisy, bonds: molecule.bonds });
     expect(result.symbol).toBe('C1');
@@ -182,8 +187,8 @@ describe('the symmetrizer', () => {
     expect(result.atoms).toBe(noisy); // untouched, same array
   });
 
-  it('straightens a bent linear molecule', () => {
-    const molecule = embedded('Ethyne');
+  it('straightens a bent linear molecule', async () => {
+    const molecule = await embedded('Ethyne');
     const bent = molecule.atoms.map((atom, i) => (i === 1 ? { ...atom, x: atom.x + 0.01 } : atom));
     const result = symmetrizeMolecule({ atoms: bent, bonds: molecule.bonds });
     expect(result.symbol).toBe('D∞h');
@@ -200,8 +205,8 @@ describe('the symmetrizer', () => {
     }
   });
 
-  it('keeps the atoms, their order and their elements', () => {
-    const molecule = embedded('Phenol');
+  it('keeps the atoms, their order and their elements', async () => {
+    const molecule = await embedded('Phenol');
     const result = symmetrizeMolecule(molecule);
     expect(result.atoms.length).toBe(molecule.atoms.length);
     result.atoms.forEach((atom, i) => {

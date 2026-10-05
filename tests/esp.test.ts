@@ -15,7 +15,7 @@ import {
 } from '../src/chem/charge-model/esp';
 import type { Molecule } from '../src/mol-parser';
 import { parseMolBlock } from '../src/mol-parser';
-import { embedAndRefine } from '../src/geometry/mmff-refine';
+import { embed3D } from '../src/geometry/embed';
 import { resolveCharges } from '../src/chem/charge-model/bci-charges';
 import { getVdwRadius } from '../src/chem/radii';
 
@@ -229,7 +229,7 @@ describe('computeEspSurface — the fused molecular surface', () => {
     // cracking closure. Fixed by the argmin mis-normal and by emitting the
     // slivers. Every directed edge must now be traversed once in each
     // direction: no flipped pairs, no holes.
-    const mol = embedAndRefine(parseMolBlock(`JME 2024-04-29 Mon Sep 28 13:02:00 GMT-400 2026
+    const mol = embed3D(parseMolBlock(`JME 2024-04-29 Mon Sep 28 13:02:00 GMT-400 2026
 
   3  2  0  0  0  0  0  0  0  0999 V2000
    -1.2000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
@@ -238,7 +238,7 @@ describe('computeEspSurface — the fused molecular surface', () => {
   1  2  1  0  0  0  0
   2  3  1  0  0  0  0
 M  END
-`)).molecule;
+`)).separated;
     const charges = resolveCharges(mol)!;
     const surf = computeEspSurface(mol, charges.charges);
 
@@ -280,7 +280,7 @@ M  END
     // ceiling of four overlapping Cl spheres (89.8 Å³) with the carbon buried
     // inside. A guessed ring of 2D sketch coordinates is enough input: the
     // embedder is what produces the tetrahedron.
-    const mol = embedAndRefine(parseMolBlock(`JME 2024-04-29 Mon Sep 28 13:02:00 GMT-400 2026
+    const mol = embed3D(parseMolBlock(`JME 2024-04-29 Mon Sep 28 13:02:00 GMT-400 2026
 
   5  4  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
@@ -293,7 +293,7 @@ M  END
   1  4  1  0  0  0  0
   1  5  1  0  0  0  0
 M  END
-`)).molecule;
+`)).separated;
     const surf = computeEspSurface(mol, mol.atoms.map(() => 0));
 
     let volume6 = 0;

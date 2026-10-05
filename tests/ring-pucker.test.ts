@@ -9,8 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import type { Molecule } from '../src/mol-parser';
 import { parseMolBlock } from '../src/mol-parser';
-import { embedAndRefine } from '../src/geometry/mmff-refine';
 import { ringPuckerWarnings } from '../src/geometry/ring-pucker';
+import { mmff94Conformer } from './helpers/local-geometry';
 
 /** Equilateral C3 ring in the xy-plane; one exocyclic H per carbon, lifted to
  *  the given out-of-plane heights (Å). Synthetic, for the classifier only. */
@@ -79,9 +79,11 @@ describe('ringPuckerWarnings', () => {
     expect(ringPuckerWarnings(cyclopropaneLike())).toEqual([]);
   });
 
-  it('reports the MMFF94 cyclopropenyl cation geometry end-to-end', () => {
+  it('reports the MMFF94 cyclopropenyl cation geometry end-to-end', async () => {
     // The suite's planar cyclopropenyl cation sketch; MMFF94's minimum
     // puckers all three C–H's out of the ring plane (measured 0.85–1.00 Å).
+    // The app optimises with GFN2 now, but a fetched PubChem conformer is an
+    // MMFF94 one, which is what this check guards.
     const mol = parseMolBlock(`JME 2024-04-29 Mon Sep 28 09:40:17 GMT-400 2026
 
   3  3  0  0  0  0  0  0  0  0999 V2000
@@ -94,7 +96,6 @@ describe('ringPuckerWarnings', () => {
 M  CHG  1   2   1
 M  END
 `);
-    const refined = embedAndRefine(mol);
-    expect(ringPuckerWarnings(refined.molecule)).toHaveLength(1);
+    expect(ringPuckerWarnings(await mmff94Conformer(mol))).toHaveLength(1);
   });
 });

@@ -10,11 +10,11 @@
  * are independent of how the detection happens to order its operations.
  */
 import { readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
-import { embedAndRefine } from '../src/geometry/mmff-refine';
+import { exampleGeometry } from './helpers/local-geometry';
 import { detectPointGroup, symmetrizeMolecule } from '../src/geometry/symmetrize';
 import { assignBasis } from '../src/chem/extended-huckel/assign-basis';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
@@ -22,19 +22,17 @@ import { solveExtendedHuckel, closedShellOccupations } from '../src/chem/extende
 import { labelIrreps, representationMatrix } from '../src/chem/extended-huckel/irrep-labels';
 import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
 
-function labelled(name: string): {
+async function labelled(name: string): Promise<{
   symbol: string;
   labels: (string | null)[];
   energies: number[];
   occupiedCount: number;
-} {
-  const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith(name))!.mol)!;
-  const raw = embedAndRefine(sketch).molecule;
-  const snapped = symmetrizeMolecule(raw);
-  const molecule: Molecule = { atoms: snapped.atoms, bonds: raw.bonds };
+}> {
+  // the example as the app shows it: GFN2-optimised, then snapped
+  const molecule = await exampleGeometry(name);
   const result = solveExtendedHuckel(molecule)!;
   return {
-    symbol: snapped.symbol,
+    symbol: detectPointGroup({ atoms: alignToPrincipalAxes(molecule).atoms, bonds: [] }).symbol,
     labels: labelIrreps(molecule, result.basis, result.coefficients, result.energies, result.overlap),
     energies: result.energies,
     // the EH eigenvalues are all negative — occupancy comes from the electron
@@ -75,13 +73,13 @@ function sets(labels: (string | null)[]): (string | null)[] {
   return out;
 }
 
-const occupied = (name: string) => {
-  const { labels, occupiedCount } = labelled(name);
+const occupied = async (name: string) => {
+  const { labels, occupiedCount } = await labelled(name);
   return labels.slice(0, occupiedCount);
 };
 
 describe('the electron-domain model refuses what it cannot describe', () => {
-  it('a metal centre gets no label, and its haptic contacts are not domains', () => {
+  it('a metal centre gets no label, and its haptic contacts are not domains', async () => {
     // Ferrocene is in EXAMPLES for the MO layer. The electron-domain model has
     // no answer for iron — ten contacts clamped into the six-domain ceiling
     // used to come out "sp³d²" — and counting a haptic Fe–C contact as a σ bond
@@ -107,7 +105,7 @@ describe('the electron-domain model refuses what it cannot describe', () => {
     }
   });
 
-  it('a normal organic molecule keeps the same assignments it always had', () => {
+  it('a normal organic molecule keeps the same assignments it always had', async () => {
     for (const [name, check] of [
       ['Water', (a: ReturnType<typeof assignOrbitals>) => a[0].hybridization === 'sp³' && a[0].lonePairs === 2],
       ['Ethene', (a: ReturnType<typeof assignOrbitals>) => a[0].hybridization === 'sp²' && a[0].hasPi],
@@ -123,23 +121,28 @@ describe('the electron-domain model refuses what it cannot describe', () => {
 });
 
 describe('irrep labels', () => {
-  it('gives water its four occupied orbitals', () => {
+  // one GFN2 run per example, shared by the tests below
+  beforeAll(async () => {
+    for (const name of ['Water', 'Methane', 'Nitrogen', 'Ethyne', 'Benzene', 'Ethene']) await exampleGeometry(name);
+  }, 300_000);
+
+  it('gives water its four occupied orbitals', async () => {
     // 1a1 (O 2s), 1b2 (in-plane lone pair), 2a1 (O–H bonding), 1b1 (the HOMO)
-    expect(occupied('Water')).toEqual(['a1', 'b2', 'a1', 'b1']);
+    expect(await occupied('Water')).toEqual(['a1', 'b2', 'a1', 'b1']);
   });
 
-  it('gives methane 1a1 plus the 1t2 triple', () => {
-    expect(occupied('Methane')).toEqual(['a1', 't2', 't2', 't2']);
+  it('gives methane 1a1 plus the 1t2 triple', async () => {
+    expect(await occupied('Methane')).toEqual(['a1', 't2', 't2', 't2']);
   });
 
-  it('gives the diatomics their σ/π sequence', () => {
-    expect(occupied('Nitrogen')).toEqual(['σg', 'σu', 'πu', 'πu', 'σg']);
+  it('gives the diatomics their σ/π sequence', async () => {
+    expect(await occupied('Nitrogen')).toEqual(['σg', 'σu', 'πu', 'πu', 'σg']);
     // ethyne: 1σg, 1σu, 2σg, 1πu (the πg pair above it is the LUMO)
-    expect(occupied('Ethyne')).toEqual(['σg', 'σu', 'σg', 'πu', 'πu']);
+    expect(await occupied('Ethyne')).toEqual(['σg', 'σu', 'σg', 'πu', 'πu']);
   });
 
-  it('gives benzene the π set — e1g for the HOMO pair', () => {
-    const { labels, symbol } = labelled('Benzene');
+  it('gives benzene the π set — e1g for the HOMO pair', async () => {
+    const { labels, symbol } = await labelled('Benzene');
     expect(symbol).toBe('D6h');
     // the π ladder: a2u (lowest), e1g (HOMO), e2u (LUMO), b2g (highest)
     expect(labels[9]).toBe('a2u');
@@ -148,7 +151,7 @@ describe('irrep labels', () => {
     expect(labels[17]).toBe('b2g');
   });
 
-  it('names D2h on Mulliken’s axes — ethene’s π is b3u, its π* b2g', () => {
+  it('names D2h on Mulliken’s axes — ethene’s π is b3u, its π* b2g', async () => {
     // x perpendicular to the plane, z along C=C. Before, D2h was named like an
     // axial group: a1g, a2u, b1g... symbols D2h does not have, and never a b3.
     const { symbol, labels, occupied } = dftLabelled('ethene');
@@ -161,7 +164,7 @@ describe('irrep labels', () => {
     for (const label of naphthalene.labels) expect(label).toMatch(/^(a|b[123])[gu]$/);
   });
 
-  it('names D2d by its S4 — allene’s b2 is not an a', () => {
+  it('names D2d by its S4 — allene’s b2 is not an a', async () => {
     // b2 is symmetric under the C2 along C=C=C and antisymmetric under the S4
     // about it; reading a/b off the C2 made every one-dimensional set an a.
     const { symbol, occupied } = dftLabelled('allene');
@@ -169,7 +172,7 @@ describe('irrep labels', () => {
     expect(occupied).toEqual(['a1', 'b2', 'a1', 'e', 'e', 'b2', 'e', 'e']);
   });
 
-  it('names Oh by its C4 — SF₆’s σ bonds are t1u and its HOMO t1g', () => {
+  it('names Oh by its C4 — SF₆’s σ bonds are t1u and its HOMO t1g', async () => {
     // T1/T2 were read off the mirror through the most atoms, which in SF₆ is
     // the class that cannot tell them apart: every t1u came out t2u.
     const { symbol, occupied } = dftLabelled('SF6');
@@ -177,7 +180,7 @@ describe('irrep labels', () => {
     expect(sets(occupied)).toEqual(['a1g', 't1u', 'eg', 'a1g', 't1u', 't2g', 't2u', 'eg', 't1u', 't1g']);
   });
 
-  it('has no B in a cubic group — cubane’s a2u is an a', () => {
+  it('has no B in a cubic group — cubane’s a2u is an a', async () => {
     // A2u is antisymmetric under C4, and an axial rule called that a b. The
     // eight carbons' 2s combinations are a1g + t1u + t2g + a2u.
     const { symbol, occupied } = dftLabelled('cubane');
@@ -185,7 +188,7 @@ describe('irrep labels', () => {
     expect(sets(occupied).slice(0, 4)).toEqual(['a1g', 't1u', 't2g', 'a2u']);
   });
 
-  it('gives staggered methanol its a′ and a″ — a Cs with no molecular plane', () => {
+  it('gives staggered methanol its a′ and a″ — a Cs with no molecular plane', async () => {
     // The mirror holds C, O and two H. The ′/″ test once looked only for a
     // mirror normal to the frame's z; methanol's happens to be, so this pins
     // the labels rather than that fix (see NOTES.md).
@@ -196,7 +199,7 @@ describe('irrep labels', () => {
     expect(occupied.at(-1)).toBe('a"');
   });
 
-  it('finds Cs’s mirror off the frame’s z axis — CHFCl₂', () => {
+  it('finds Cs’s mirror off the frame’s z axis — CHFCl₂', async () => {
     // The two Cl straddle the mirror (H, C, F), so the largest moment of
     // inertia is not about its normal: the normal lands on the frame's y, and
     // a ′/″ test that only looked along z labelled every orbital a bare a.
@@ -207,16 +210,13 @@ describe('irrep labels', () => {
     expect(labels.filter((l) => l === 'a"').length).toBeGreaterThan(0);
   });
 
-  it('methane’s representation multiplies: D(a) D(b) = D(ab)', () => {
+  it('methane’s representation multiplies: D(a) D(b) = D(ab)', async () => {
     // Rotating the target p axis instead of the source leaves every diagonal
     // right and every off-diagonal wrong. Characters of pure pz (benzene’s π,
     // water’s b1) never see an off-diagonal, so they stayed textbook while a
     // C3 that mixes px with py was not a representation. Td is the group
     // where that shows: 24 operations, and the product rule on all of them.
-    const sketch = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Methane'))!.mol)!;
-    const raw = embedAndRefine(sketch).molecule;
-    const snapped = symmetrizeMolecule(raw);
-    const molecule: Molecule = { atoms: snapped.atoms, bonds: raw.bonds };
+    const molecule = await exampleGeometry('Methane');
     const frame = alignToPrincipalAxes(molecule);
     const group = detectPointGroup({ atoms: frame.atoms, bonds: [] });
     expect(group.symbol).toBe('Td');
@@ -248,9 +248,9 @@ describe('irrep labels', () => {
     expect(worst).toBeLessThan(1e-8);
   });
 
-  it('labels every MO, and agrees with the degeneracy it reports', () => {
+  it('labels every MO, and agrees with the degeneracy it reports', async () => {
     for (const name of ['Water', 'Methane', 'Nitrogen', 'Benzene', 'Ethene', 'Ethyne']) {
-      const { labels, energies } = labelled(name);
+      const { labels, energies } = await labelled(name);
       expect(labels.every((l) => l !== null && l !== '?')).toBe(true);
       // degenerate partners carry the same label
       for (let i = 1; i < labels.length; i++) {
@@ -259,7 +259,7 @@ describe('irrep labels', () => {
     }
   });
 
-  it('represents a rotation on the five d functions with the l = 2 character', () => {
+  it('represents a rotation on the five d functions with the l = 2 character', async () => {
     // A d function has no axis to rotate, so the representation is built from
     // the quadratic forms the five of them are. The character of a rotation by
     // θ is the textbook 1 + 2cosθ + 2cos2θ, which is what says the matrix is

@@ -16,7 +16,7 @@
  */
 import { assign_atom_types, assign_bci_charges } from 'mmff94-ts';
 import type { Molecule } from '../../mol-parser';
-import { toMMFFMol } from '../../geometry/mmff-refine';
+import { toMMFFMol } from '../../geometry/mmff94-molecule';
 import { parameterGapInfo } from '../../geometry/parameter-warnings';
 
 /** The BCI charges of a molecule and how much of its drawn charge they

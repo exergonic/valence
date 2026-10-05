@@ -3,12 +3,11 @@
 /**
  * GFN2-xTB geometry optimisation, off the main thread.
  *
- * The default tier of the geometry pipeline: a real semiempirical
- * calculation (extended tight binding) rather than a force field. It runs
- * first because it is structurally right where MMFF94 is not (hypervalent
- * centres, untabled elements) — for a well-parameterised organic MMFF94 is
- * often the better number, and it stays as the fallback when this engine
- * cannot run. Costs ~3 MB of wasm, loaded lazily.
+ * The app's one local geometry optimiser: a real semiempirical calculation
+ * (extended tight binding) rather than a force field, structurally right where
+ * a force field is not (hypervalent centres, untabled elements). When it cannot
+ * deliver a minimum the pipeline shows the unrefined start and says so — there
+ * is no second engine behind it. Costs ~3 MB of wasm, loaded lazily.
  *
  * Everything below the API boundary is OCC's, and OCC is not consistent about
  * units or conventions. The traps, all verified against the Fortran xTB
@@ -29,18 +28,25 @@ import { jacobiSymmetric } from '../utils/eigen';
 import {
   optimize_lbfgs,
   optimize_steepest_descent,
+  set_parameter_warning_handler,
   type Molecule as LibraryMolecule,
   type OptimizationResult,
 } from 'mmff94-ts';
-import { toMMFFMol } from './mmff-refine';
+import { toMMFFMol } from './mmff94-molecule';
 import createOccModule from '../../vendor/occ-wasm/occjs.js';
 import wasmUrl from '../../vendor/occ-wasm/occjs.wasm?url';
 import dataUrl from '../../vendor/occ-wasm/occjs.data?url';
 import type { Molecule } from '../mol-parser';
 
-const BOHR_PER_ANGSTROM = 0.529177210903;
+// The library is only the stepper here — the energy and gradient are GFN2's —
+// so its report on MMFF94 parameter coverage, printed for every rung, describes
+// a force field this worker never evaluates. This worker's copy only; the
+// charge model's gap report is read elsewhere and is unaffected.
+set_parameter_warning_handler(null);
+
+const ANGSTROM_PER_BOHR = 0.529177210903;
 /** Eh/bohr → kcal/mol/Å: the engine's gradient unit against the library's. */
-const FORCE_UNIT = 627.509474 / BOHR_PER_ANGSTROM;
+const FORCE_UNIT = 627.509474 / ANGSTROM_PER_BOHR;
 /** The optimiser's stop, in the library's unit — the app's long-standing
  *  max|g| < 1e-4 Eh/bohr, so the convergence claim does not change. */
 const GRADIENT_TOLERANCE_KCAL_MOL_A = 1e-4 * FORCE_UNIT;
@@ -82,6 +88,32 @@ const MAX_CALLS = { lbfgs: 2500, fallback: 1500 };
  *  for ("a pathological starting geometry"). 0.1 Å is the trust region the
  *  removed hand-rolled loop enforced. */
 const FALLBACK_STEP_ANGSTROM = 0.1;
+/**
+ * OCC's analytic GFN2 gradient is not the exact derivative of its energy, and
+ * the error grows with how polar the molecule is. Measured 2026-10-05 against
+ * central differences of the engine's own energy (h = 1e-3 bohr, SCF converged
+ * to ~1e-11 Eh, so the reference is good to ~1e-8): P₄ 1e-7, water 9e-6,
+ * SF₆ and CHFCl₂ 6e-5, ethene 9e-5, methanol 2.2e-4, the cyclopropenyl anion
+ * 4.6e-4 — and 1e-3 where its optimisation stalls, ten times the 1e-4
+ * convergence gate. An optimiser steered by that gradient cannot satisfy its
+ * line search near the minimum and grinds (the anion: 3 400 evaluations at a
+ * flat energy). The engine's NUMERICAL gradient is exact to the step, at 6N
+ * energies apiece, so it is the third rung: started from wherever the analytic
+ * rungs stopped, gated on size, with its own budget.
+ */
+const NUMERICAL_GRADIENT_STEP_BOHR = 1e-3;
+const MAX_NUMERICAL_GRADIENT_ATOMS = 24;
+const MAX_NUMERICAL_CALLS = 400;
+/**
+ * The whole run's time budget (ms): every rung, every saddle escape. This is a
+ * teaching tool, and a good-enough structure in seconds beats a perfect one in
+ * minutes — measured on the app's examples, the organics and the hypervalent
+ * main-group cases converge in 0.1–12 s, while a hostile start (a metal
+ * complex the embedder knows nothing about) burned 15–118 s to reach nothing.
+ * Past the budget the run stops and reports what it has; the call budgets
+ * above still bound each rung inside it.
+ */
+const TIME_BUDGET_MS = 30_000;
 /** Above this atom count the Hessian verdict is skipped: the cost is 6N
  *  gradient evaluations (measured on the vendored engine, 2026-10-02: 45 ms at
  *  N=3, 182 ms at N=8, 653 ms at N=13, 3.1 s at N=21), and the verdict is a
@@ -89,6 +121,35 @@ const FALLBACK_STEP_ANGSTROM = 0.1;
 const MAX_HESSIAN_ATOMS = 16;
 /** Finite-difference step for the numerical Hessian, in bohr. */
 const HESSIAN_STEP_BOHR = 0.005;
+/** Below this lowest Hessian eigenvalue (Eh/bohr²) the stationary point is a
+ *  saddle: the noise floor is ±0.003, a real imaginary mode of the planar
+ *  cyclopropenyl anion −0.16 (the measurements are in NOTES.md, and
+ *  gfn2-refine.ts carries the same number for the display). */
+const SADDLE_THRESHOLD = -0.02;
+/** How far a saddle is pushed down its imaginary mode before re-optimising, in
+ *  bohr (the length of the 3N displacement). Measured 2026-10-02 on the planar
+ *  cyclopropenyl anion: 0.30 bohr along the mode lowers the energy by 4.15
+ *  kcal/mol on both sides, enough for the optimiser to leave the saddle and
+ *  small enough not to jump a basin. */
+const SADDLE_ESCAPE_BOHR = 0.3;
+/** Saddle escapes before the run gives up and reports what it has. A
+ *  higher-order saddle can take one push per imaginary mode; past two, the
+ *  start is the problem, not the curvature. */
+const MAX_SADDLE_ESCAPES = 2;
+/** Evaluations between progress reports — frequent enough to move a counter,
+ *  rare enough that the messages cost nothing next to an SCF. */
+const PROGRESS_EVERY = 10;
+
+/** What a long run tells the page while it works. */
+export interface Gfn2Progress {
+  /** 'optimising' (either rung), 'curvature' (the Hessian), 'saddle' (pushed
+   *  off a saddle and re-optimising). */
+  stage: 'optimising' | 'curvature' | 'saddle';
+  /** Energy evaluations so far, over the whole run. */
+  evaluations: number;
+  /** Lowest energy seen so far (hartree), or null before the first. */
+  energyHartree: number | null;
+}
 
 export interface Gfn2Result {
   /** The optimised structure, in Angstrom, same atom order as the input. */
@@ -108,8 +169,11 @@ export interface Gfn2Result {
    *  converge, the molecule is above the size gate, or the Hessian failed.
    *  Negative beyond the numerical noise floor means the geometry is a
    *  saddle, not a minimum (a saddle has zero gradient too, so the stop
-   *  criterion cannot tell them apart). */
+   *  criterion cannot tell them apart) — which, after the escapes, means the
+   *  run could not get off it. */
   lowestHessianMode: number | null;
+  /** How many times the run was pushed off a saddle and re-optimised. */
+  saddleEscapes: number;
 }
 
 let modulePromise: Promise<any> | null = null;
@@ -129,13 +193,18 @@ function loadGfn2(
 ): Promise<any> {
   if (!modulePromise) {
     modulePromise = (async () => {
-      const module = await createOccModule({ locateFile });
+      // The SCF prints its table for every energy evaluation straight to
+      // stdout — outside OCC's logger, so no log level silences it — and an
+      // optimisation makes thousands of evaluations: 409 851 console lines for
+      // one cyclopropenyl-anion run (measured 2026-10-05), slower to print than
+      // to compute. Emscripten routes stdout through `print`; drop it. stderr
+      // (`printErr`) is left alone, so a real error still reaches the console.
+      const module = await createOccModule({ locateFile, print: () => {} });
       module.setNumThreads?.(1);
       module.setDataDirectory?.('/');
-      // OCC logs every SCF cycle at info level; a worker's console is not the place.
-      if (module.LogLevel && module.setLogLevel) {
-        module.setLogLevel(module.LogLevel.WARN ?? 3);
-      }
+      // OCC's own logger, by name: the LogLevel enum binding does not map onto
+      // spdlog's levels — passing LogLevel.WARN made it four times noisier.
+      module.setLogLevelString?.('warn');
       return module;
     })().catch((err) => {
       modulePromise = null;
@@ -196,20 +265,21 @@ const energyComponents = (totalHartree: number) => ({
  *
  * The optimiser is mmff94-ts's, driving OCC's energy and gradient through the
  * library's `EnergyGradientFn` oracle — the arrangement chosen for this app and
- * recorded in NOTES.md. It is the library's *steepest descent* (Armijo line
- * search) at the 0.1 Å step the old hand-rolled loop used, not the library's
- * L-BFGS: measured on OCC's surface, L-BFGS converges from the pipeline's start
- * (30 iterations) but walks off a far-off one (12 223 oracle calls, unconverged,
- * after following a spurious SCF solution 3.8 Eh below the true PCl5 minimum),
- * where the bounded-step method converges from both — water 26 iterations, PCl5
- * 34, cyclopropenyl cation 55, cyclopropene 140, cyclopropyl cation 218 — and
- * reaches the same minima. The hand-rolled loop this replaces (energy
- * backtracking, no Armijo condition) stalled on the strained cases the tier
- * exists for; the library's does not.
+ * recorded in NOTES.md. Two rungs, both the library's: L-BFGS first (fast, and
+ * what the app's real starts converge with), then steepest descent at a bounded
+ * 0.1 Å step, the library's answer to a pathological start — measured, L-BFGS
+ * can follow a spurious SCF solution off a far-off PCl5 start where the bounded
+ * walk converges.
+ *
+ * Then the curvature: a converged run is only a minimum if the Hessian agrees.
+ * If it is a saddle, the structure is pushed down the imaginary mode both ways,
+ * each push re-optimised, and the lower minimum kept — at most
+ * MAX_SADDLE_ESCAPES times.
  */
 export async function optimizeWithGfn2(
   input: Molecule,
   locateFile?: (path: string) => string,
+  onProgress?: (progress: Gfn2Progress) => void,
 ): Promise<Gfn2Result | null> {
   const molecule = fillMissingHydrogens(input);
   const count = molecule.atoms.length;
@@ -222,7 +292,7 @@ export async function optimizeWithGfn2(
   // Angstrom in, for the constructor only.
   const startAngstrom = molecule.atoms.flatMap((a) => [a.x, a.y, a.z]);
   const toBohrMat = (flatAngstrom: number[]) =>
-    toMat3N(M, flatAngstrom.map((v) => v / BOHR_PER_ANGSTROM), count);
+    toMat3N(M, flatAngstrom.map((v) => v / ANGSTROM_PER_BOHR), count);
   const buildCalculator = () => {
     const calc = M.XtbCalculator.fromMolecule(
       new M.Molecule(M.IVec.fromArray(molecule.atoms.map((a) => elementToZ(a.element))), toMat3N(M, startAngstrom, count)),
@@ -232,19 +302,27 @@ export async function optimizeWithGfn2(
     return calc;
   };
 
+  // Progress, over the whole run — every rung, every saddle escape.
+  let evaluations = 0;
+  const deadline = performance.now() + TIME_BUDGET_MS;
+  let lowestEnergy: number | null = null;
+  let stage: Gfn2Progress['stage'] = 'optimising';
+  const report = () => onProgress?.({ stage, evaluations, energyHartree: lowestEnergy });
+
   // The engine throws on some trial geometries: a wild line-search trial can
   // fail the SCC, and the analytic gradient throws outright when the
   // multipole-on SCC does not converge (measured on PCl5: 2 of 289 calls). The
   // library has no failure channel, so a failed evaluation is reported as the
   // sentinel energy above, which the line search rejects. If nothing has
-  // succeeded yet, there is no run to save: abort, and the caller falls back
-  // to MMFF94.
+  // succeeded yet, there is no run to save: abort, and the caller shows the
+  // unrefined start.
   // One oracle per optimiser attempt: each carries its own baseline for the
   // spurious-drop check and its own abort budgets, so the fallback starts
   // clean. `calc` is that attempt's engine instance.
   const makeOracle = (
     calc: ReturnType<typeof buildCalculator>,
     budgets: { engineFailures: number; spuriousDrops: number; calls: number },
+    numerical = false,
   ) => {
     let hasValidEvaluation = false;
     let bestEnergy = Infinity;
@@ -254,10 +332,15 @@ export async function optimizeWithGfn2(
     const oracle = (work: LibraryMolecule) => {
       calls += 1;
       if (calls > budgets.calls) throw new Error('GFN2: aborting — too many evaluations for this start');
+      if (performance.now() > deadline) throw new Error('GFN2: aborting — out of time');
+      evaluations += 1;
+      if (evaluations % PROGRESS_EVERY === 0) report();
       const flatAngstrom = work.atoms.flatMap((a) => [a.x, a.y, a.z]);
       try {
         calc.updateStructure(toBohrMat(flatAngstrom));
-        const result = calc.energyAndGradient(false, 1e-3);
+        // the second argument is the finite-difference step, read only when
+        // the gradient is numerical
+        const result = calc.energyAndGradient(numerical, NUMERICAL_GRADIENT_STEP_BOHR);
         if (!Number.isFinite(result.energy) || calc.lastResult()?.converged === false) {
           throw new Error('GFN2: the SCC did not converge at a trial geometry');
         }
@@ -277,6 +360,7 @@ export async function optimizeWithGfn2(
         }
         hasValidEvaluation = true;
         bestEnergy = Math.min(bestEnergy, result.energy);
+        lowestEnergy = lowestEnergy === null ? result.energy : Math.min(lowestEnergy, result.energy);
         return { energy: energyComponents(result.energy), gradient };
       } catch (error) {
         if (!hasValidEvaluation) throw error;
@@ -293,80 +377,102 @@ export async function optimizeWithGfn2(
     return oracle;
   };
 
-  // The optimiser ladder, both rungs the library's own: L-BFGS (fast, and what
-  // the app's real starts converge to), then steepest descent at a bounded step
-  // (the library's documented answer to a pathological starting geometry).
-  const started = performance.now();
   const options = {
     max_iterations: MAX_ITERATIONS,
     criterion: 'max' as const,
     gradient_tolerance: GRADIENT_TOLERANCE_KCAL_MOL_A,
   };
-  let libraryResult: OptimizationResult | null = null;
-  let calc = buildCalculator();
-  try {
-    libraryResult = optimize_lbfgs(toMMFFMol(molecule), makeOracle(calc, {
-      engineFailures: MAX_ENGINE_FAILURES.lbfgs,
-      spuriousDrops: MAX_SPURIOUS_DROPS,
-      calls: MAX_CALLS.lbfgs,
-    }), options);
-  } catch {
-    libraryResult = null;
-  }
-  if (!libraryResult?.converged) {
-    // A fresh engine instance: the first rung's thrash leaves the SCF warm
-    // start on whatever it last touched, and the fallback must begin from the
-    // molecule, not from that state.
-    calc = buildCalculator();
+
+  /** The molecule at a library result's coordinates. */
+  const at = (result: OptimizationResult): Molecule => ({
+    ...molecule,
+    atoms: molecule.atoms.map((atom, i) => ({
+      ...atom, x: result.molecule.atoms[i].x, y: result.molecule.atoms[i].y, z: result.molecule.atoms[i].z,
+    })),
+  });
+
+  /**
+   * One optimisation from `start` (Angstrom coordinates, the molecule's atom
+   * order) — a ladder of rungs, each run only if the one before did not
+   * converge, each on a fresh engine instance (a thrashing rung leaves the
+   * SCF's warm start wherever it last touched):
+   *
+   *   1. L-BFGS on the analytic gradient, from the start;
+   *   2. steepest descent at a bounded step, from the start — the library's
+   *      answer to a pathological start;
+   *   3. L-BFGS on the NUMERICAL gradient, from the lowest point the first two
+   *      reached — for a surface where the analytic gradient is too inexact to
+   *      converge on (see NUMERICAL_GRADIENT_STEP_BOHR).
+   *
+   * Then one evaluation at the accepted point, so the engine's cache (the
+   * charges, the Hessian) describes the geometry returned — the library's
+   * last oracle call can be a rejected trial. Null when no rung produced
+   * anything.
+   */
+  const relax = (start: Molecule) => {
+    // a holder, not a bare let: the rungs assign it from inside a closure
+    const ladder: { best: OptimizationResult | null } = { best: null };
+    let iterations = 0;
+    let calc = buildCalculator();
+    const rung = (run: (c: ReturnType<typeof buildCalculator>) => OptimizationResult) => {
+      release(calc);
+      calc = buildCalculator();
+      try {
+        const result = run(calc);
+        iterations += result.iterations;
+        // a converged result always wins; otherwise keep the lowest point seen
+        if (result.converged || !ladder.best || result.energy.total < ladder.best.energy.total) ladder.best = result;
+      } catch {
+        // this rung refused the start; the next one gets its turn
+      }
+    };
+    rung((c) => optimize_lbfgs(toMMFFMol(start), makeOracle(c, {
+      engineFailures: MAX_ENGINE_FAILURES.lbfgs, spuriousDrops: MAX_SPURIOUS_DROPS, calls: MAX_CALLS.lbfgs,
+    }), options));
+    if (!ladder.best?.converged) {
+      rung((c) => optimize_steepest_descent(toMMFFMol(start), makeOracle(c, {
+        engineFailures: MAX_ENGINE_FAILURES.fallback, spuriousDrops: MAX_SPURIOUS_DROPS, calls: MAX_CALLS.fallback,
+      }), { ...options, initial_step_size: FALLBACK_STEP_ANGSTROM }));
+    }
+    if (!ladder.best?.converged && count <= MAX_NUMERICAL_GRADIENT_ATOMS) {
+      const from = ladder.best ? at(ladder.best) : start;
+      rung((c) => optimize_lbfgs(toMMFFMol(from), makeOracle(c, {
+        engineFailures: MAX_ENGINE_FAILURES.lbfgs, spuriousDrops: MAX_SPURIOUS_DROPS, calls: MAX_NUMERICAL_CALLS,
+      }, true), options));
+    }
+    const result = ladder.best;
+    if (!result || result.molecule.atoms.length !== count) {
+      release(calc);
+      return null;
+    }
+    const geometry = at(result);
+    let energy = result.energy.total;
+    let evaluates = true;
     try {
-      libraryResult = optimize_steepest_descent(toMMFFMol(molecule), makeOracle(calc, {
-        engineFailures: MAX_ENGINE_FAILURES.fallback,
-        spuriousDrops: MAX_SPURIOUS_DROPS,
-        calls: MAX_CALLS.fallback,
-      }), {
-        ...options,
-        initial_step_size: FALLBACK_STEP_ANGSTROM,
-      });
+      calc.updateStructure(toBohrMat(geometry.atoms.flatMap((a) => [a.x, a.y, a.z])));
+      energy = calc.energyAndGradient(false, NUMERICAL_GRADIENT_STEP_BOHR).energy;
     } catch {
-      // The fallback refused this start too; keep whatever the first rung
-      // managed, or nothing.
+      // The accepted point itself did not evaluate: the geometry and the
+      // optimiser's energy stand, but nothing read from the cache would.
+      evaluates = false;
     }
-  }
-  // Nothing ran at all: no geometry rather than a wrong one — the caller falls
-  // back to MMFF94.
-  if (!libraryResult) return null;
+    return { geometry, energy, iterations, converged: result.converged, calc, evaluates };
+  };
+  type Relaxed = NonNullable<ReturnType<typeof relax>>;
 
-  const { molecule: optimised, iterations, converged } = libraryResult;
-  let energyHartree = libraryResult.energy.total;
-  if (optimised.atoms.length !== count) return null;
-
-  // Charges and the verdict must describe the geometry we return: the
-  // library's last oracle call can be a rejected trial. One evaluation at the
-  // accepted point puts the engine's cache there (one SCF out of hundreds).
-  const finalAngstrom = optimised.atoms.flatMap((a) => [a.x, a.y, a.z]);
-  let charges: number[] | null = null;
-  try {
-    calc.updateStructure(toBohrMat(finalAngstrom));
-    energyHartree = calc.energyAndGradient(false, 1e-3).energy;
-    const q = calc.charges();
-    if (q.size() === count) {
-      charges = [];
-      for (let i = 0; i < count; i++) charges.push(q.get(i));
-    }
-  } catch {
-    // The accepted point itself did not evaluate: no charges (the geometry
-    // and the optimiser's own energy are still returned), and no verdict.
-  }
-
-  // Minimum or saddle? A gradient-based stop cannot tell them apart — a
-  // saddle has zero gradient too — so a converged run is only called a
-  // minimum when the curvature agrees. One numerical Hessian at the returned
-  // geometry; the raw matrix is enough for a sign verdict (mass weighting and
-  // rigid-body projection only matter for a frequency report).
-  let lowestHessianMode: number | null = null;
-  if (converged && count <= MAX_HESSIAN_ATOMS) {
+  /** The lowest Hessian mode at a relaxed point — the eigenvalue (Eh/bohr²)
+   *  and its eigenvector, per atom — or null when the check is skipped or
+   *  fails. The raw matrix is enough for a sign verdict and a direction (mass
+   *  weighting and rigid-body projection only matter for a frequency report).
+   *  OCC's Hessian rows are atom-major (x₀ y₀ z₀ x₁ …), unlike its gradient —
+   *  measured: a rigid translation gives |H·t| ≈ 1e-6 that way and ≈ 1 the
+   *  other. */
+  const curvature = (relaxed: Relaxed) => {
+    if (!relaxed.converged || !relaxed.evaluates || count > MAX_HESSIAN_ATOMS) return null;
+    stage = 'curvature';
+    report();
     try {
-      const H = calc.hessian(HESSIAN_STEP_BOHR);
+      const H = relaxed.calc.hessian(HESSIAN_STEP_BOHR);
       const dim = H.rows();
       const matrix: number[][] = [];
       for (let i = 0; i < dim; i++) {
@@ -374,41 +480,105 @@ export async function optimizeWithGfn2(
         for (let j = 0; j < dim; j++) row.push(H.get(i, j));
         matrix.push(row);
       }
-      lowestHessianMode = jacobiSymmetric(matrix).values[0] ?? null;
+      const { values, vectors } = jacobiSymmetric(matrix);
+      const mode = molecule.atoms.map((_, a) => [vectors[3 * a][0], vectors[3 * a + 1][0], vectors[3 * a + 2][0]]);
+      return { value: values[0], mode };
     } catch {
-      // No verdict rather than a wrong one.
+      return null; // no verdict rather than a wrong one
     }
+  };
+
+  const started = performance.now();
+  let best = relax(molecule);
+  // Nothing ran at all: no geometry rather than a wrong one — the caller shows
+  // the unrefined start.
+  if (!best) return null;
+  let iterations = best.iterations;
+  let lowest = curvature(best);
+  let saddleEscapes = 0;
+
+  // A saddle has zero gradient too, so the optimiser stops on it. Push the
+  // structure down the imaginary mode — both ways, because the two sides can
+  // lead to different minima — re-optimise each, and keep the lower converged
+  // result. Its curvature is checked again: a higher-order saddle may need
+  // another push.
+  while (lowest && lowest.value < SADDLE_THRESHOLD && saddleEscapes < MAX_SADDLE_ESCAPES
+    && performance.now() < deadline) {
+    saddleEscapes += 1;
+    stage = 'saddle';
+    report();
+    const from: Relaxed = best;
+    const push = SADDLE_ESCAPE_BOHR * ANGSTROM_PER_BOHR; // Angstrom, along a unit 3N vector
+    let escaped: Relaxed | null = null;
+    for (const sign of [1, -1]) {
+      const start: Molecule = {
+        ...from.geometry,
+        atoms: from.geometry.atoms.map((atom, a) => ({
+          ...atom,
+          x: atom.x + sign * push * lowest!.mode[a][0],
+          y: atom.y + sign * push * lowest!.mode[a][1],
+          z: atom.z + sign * push * lowest!.mode[a][2],
+        })),
+      };
+      const candidate = relax(start);
+      if (!candidate) continue;
+      iterations += candidate.iterations;
+      if (candidate.converged && candidate.evaluates && (!escaped || candidate.energy < escaped.energy)) {
+        if (escaped) release(escaped.calc);
+        escaped = candidate;
+      } else {
+        release(candidate.calc);
+      }
+    }
+    // Only a lower point is progress; otherwise keep the saddle and say so.
+    if (!escaped || escaped.energy >= from.energy) {
+      if (escaped) release(escaped.calc);
+      break;
+    }
+    release(from.calc);
+    best = escaped;
+    lowest = curvature(best);
   }
 
-  const refined: Molecule = {
-    ...molecule,
-    atoms: molecule.atoms.map((atom, i) => ({
-      ...atom,
-      x: optimised.atoms[i].x,
-      y: optimised.atoms[i].y,
-      z: optimised.atoms[i].z,
-    })),
+  let charges: number[] | null = null;
+  if (best.evaluates) {
+    try {
+      const q = best.calc.charges();
+      if (q.size() === count) {
+        charges = [];
+        for (let i = 0; i < count; i++) charges.push(q.get(i));
+      }
+    } catch {
+      // no charges rather than another geometry's
+    }
+  }
+  release(best.calc);
+  return {
+    molecule: best.geometry,
+    energyHartree: best.energy,
+    iterations,
+    converged: best.converged,
+    milliseconds: performance.now() - started,
+    charges,
+    lowestHessianMode: lowest?.value ?? null,
+    saddleEscapes,
   };
+}
+
+/** Releasing an engine handle is best-effort. */
+function release(calc: { delete?: () => void }): void {
   try {
     calc.delete?.();
   } catch {
-    /* releasing the handle is best-effort */
+    /* nothing to do */
   }
-  return {
-    molecule: refined,
-    energyHartree,
-    iterations,
-    converged,
-    milliseconds: performance.now() - started,
-    charges,
-    lowestHessianMode,
-  };
 }
 
 self.onmessage = async (e: MessageEvent<{ id: number; molecule: Molecule }>) => {
   const { id, molecule } = e.data;
   try {
-    self.postMessage({ id, result: await optimizeWithGfn2(molecule) });
+    const result = await optimizeWithGfn2(molecule, undefined, (progress) => self.postMessage({ id, progress }));
+    self.postMessage({ id, result });
   } catch (error) {
     // Never fail silently: the caller surfaces this, and a console line keeps
     // it diagnosable in a worker's devtools too.
