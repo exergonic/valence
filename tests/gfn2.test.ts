@@ -195,6 +195,42 @@ M  END
   }, 180_000);
 });
 
+describe('Berny and the analytic-gradient bug', () => {
+  // OCC's analytic GFN2 gradient is wrong for polar species (upstream; the
+  // Fortran xTB oracle's gradient matches OCC's finite differences to 1e-6
+  // and its analytic gradient to only 4.7e-4 here). Berny on that gradient
+  // alone reports the cyclopropenyl anion converged at −7.899336 Eh, 4.7
+  // kcal/mol above the minimum; the exact-gradient check has to catch it.
+  // The start is the user's planar wb97x-D3 geometry (a saddle), as in
+  // hessian-verdict.test.ts.
+  it('does not stop where the analytic gradient says — the cyclopropenyl anion', async () => {
+    const coordinates = [
+      [-0.38805807296094, -0.55379677203097, -0.00000516874794], [1.96428381555042, -0.33618719672166, 0.00000798989796],
+      [-0.4817129625322, 0.79178857900362, -0.00000671254584], [0.90831673450787, -0.18163055167206, -0.00000886276546],
+      [-1.01558024601627, -1.45147946730454, 0.00000575624305], [-0.98794926854887, 1.73130540872561, 0.00000699791823],
+    ];
+    const elements = ['C', 'H', 'C', 'C', 'H', 'H'];
+    const anion: Molecule = {
+      atoms: elements.map((element, i) => ({ ...atom(element, coordinates[i][0], coordinates[i][1], coordinates[i][2]), charge: i === 0 ? -1 : 0 })),
+      bonds: [
+        bond(0, 2), { ...bond(2, 3), order: 2 }, bond(3, 0), bond(3, 1), bond(0, 4), bond(2, 5),
+      ],
+    };
+    const result = await refine(anion);
+    expect(result).not.toBeNull();
+    expect(result!.converged).toBe(true);
+    // the true minimum is −7.906790 Eh; Berny on the analytic gradient alone stops at −7.899336
+    expect(result!.energyHartree).toBeLessThan(-7.9065);
+    expect(result!.lowestHessianMode!).toBeGreaterThan(HESSIAN_SADDLE_THRESHOLD);
+    // ...and it is the exact-gradient check that gets it there, not the saddle
+    // escape. Here the false stop happens to be the planar saddle, so with the
+    // check removed the escape rescues the run (measured: one escape, same
+    // minimum) — but the escape only runs below 16 atoms and only when the
+    // false stop is a saddle. The check is the safeguard that always applies.
+    expect(result!.saddleEscapes).toBe(0);
+  }, 180_000);
+});
+
 const linearWater: Molecule = {
   atoms: [atom('O', 0, 0, 0), atom('H', 0.97, 0, 0), atom('H', -0.97, 0, 0)],
   bonds: [bond(0, 1), bond(0, 2)],

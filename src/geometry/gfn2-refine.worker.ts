@@ -114,6 +114,12 @@ const MAX_NUMERICAL_CALLS = 400;
  * above still bound each rung inside it.
  */
 const TIME_BUDGET_MS = 30_000;
+/** Berny's steps before it hands over to the ladder — it converges the app's
+ *  molecules in 6–35, so a run past this is not going to. */
+const BERNY_MAX_STEPS = 100;
+/** The exact gradient a Berny-converged point must meet, Eh/bohr: Berny's own
+ *  default gate (Gaussian's max-force 4.5e-4), held to the true gradient. */
+const BERNY_GRADIENT_MAX = 4.5e-4;
 /** Above this atom count the Hessian verdict is skipped: the cost is 6N
  *  gradient evaluations (measured on the vendored engine, 2026-10-02: 45 ms at
  *  N=3, 182 ms at N=8, 653 ms at N=13, 3.1 s at N=21), and the verdict is a
@@ -263,13 +269,11 @@ const energyComponents = (totalHartree: number) => ({
 /**
  * GFN2-xTB geometry optimisation.
  *
- * The optimiser is mmff94-ts's, driving OCC's energy and gradient through the
- * library's `EnergyGradientFn` oracle — the arrangement chosen for this app and
- * recorded in NOTES.md. Two rungs, both the library's: L-BFGS first (fast, and
- * what the app's real starts converge with), then steepest descent at a bounded
- * 0.1 Å step, the library's answer to a pathological start — measured, L-BFGS
- * can follow a spurious SCF solution off a far-off PCl5 start where the bounded
- * walk converges.
+ * The optimiser is OCC's own Berny (internal coordinates — 6–35 steps on the
+ * app's molecules), with the converged point checked against the exact
+ * gradient because OCC's analytic one is wrong for polar species (see
+ * `relax`). When Berny cannot finish, mmff94-ts's Cartesian optimisers take
+ * over through the library's `EnergyGradientFn` oracle (see `ladder`).
  *
  * Then the curvature: a converged run is only a minimum if the Hessian agrees.
  * If it is a saddle, the structure is pushed down the imaginary mode both ways,
@@ -392,10 +396,11 @@ export async function optimizeWithGfn2(
   });
 
   /**
-   * One optimisation from `start` (Angstrom coordinates, the molecule's atom
-   * order) — a ladder of rungs, each run only if the one before did not
-   * converge, each on a fresh engine instance (a thrashing rung leaves the
-   * SCF's warm start wherever it last touched):
+   * The fallback when Berny cannot finish (see `relax`): a ladder of Cartesian
+   * rungs from `start` (Angstrom coordinates, the molecule's atom order), each
+   * run only if the one before did not converge, each on a fresh engine
+   * instance (a thrashing rung leaves the SCF's warm start wherever it last
+   * touched):
    *
    *   1. L-BFGS on the analytic gradient, from the start;
    *   2. steepest descent at a bounded step, from the start — the library's
@@ -409,7 +414,7 @@ export async function optimizeWithGfn2(
    * last oracle call can be a rejected trial. Null when no rung produced
    * anything.
    */
-  const relax = (start: Molecule) => {
+  const ladder = (start: Molecule) => {
     // a holder, not a bare let: the rungs assign it from inside a closure
     const ladder: { best: OptimizationResult | null } = { best: null };
     let iterations = 0;
@@ -458,7 +463,110 @@ export async function optimizeWithGfn2(
     }
     return { geometry, energy, iterations, converged: result.converged, calc, evaluates };
   };
-  type Relaxed = NonNullable<ReturnType<typeof relax>>;
+  type Relaxed = NonNullable<ReturnType<typeof ladder>>;
+
+  /**
+   * OCC's Berny optimiser from `start`: internal coordinates, a model Hessian
+   * and a trust radius, driven step by step with the engine's energy and
+   * gradient (analytic, or `numerical`). On the app's own starts it reaches
+   * the ladder's minima to 1e-6 Eh in 6–12 steps — benzene 0.1 s against the
+   * ladder's 3.5 s, PCl₅ 0.2 s against 6.8 s (NOTES.md). Converged is Berny's
+   * own test, Gaussian's default gate (max 4.5e-4, rms 1.5e-4). Null when the
+   * engine fails on a step; the calculator is left at the last point
+   * evaluated, which on convergence is the point returned.
+   */
+  const berny = (start: Molecule, numerical: boolean): Relaxed | null => {
+    const startAngstrom = start.atoms.flatMap((a) => [a.x, a.y, a.z]);
+    const calc = buildCalculator();
+    const shape = new M.Molecule(M.IVec.fromArray(start.atoms.map((a) => elementToZ(a.element))), toMat3N(M, startAngstrom, count));
+    const optimiser = new M.BernyOptimizer(shape);
+    let positions = startAngstrom;
+    let energy = Number.NaN;
+    let steps = 0;
+    let converged = false;
+    try {
+      for (; steps < BERNY_MAX_STEPS && performance.now() < deadline; steps++) {
+        calc.updateStructure(toBohrMat(positions));
+        const result = calc.energyAndGradient(numerical, NUMERICAL_GRADIENT_STEP_BOHR);
+        if (!Number.isFinite(result.energy) || calc.lastResult()?.converged === false) {
+          throw new Error('GFN2: the SCC did not converge at a Berny step');
+        }
+        evaluations += numerical ? 1 + 6 * count : 1;
+        energy = result.energy;
+        lowestEnergy = lowestEnergy === null ? energy : Math.min(lowestEnergy, energy);
+        report();
+        optimiser.update(result.energy, result.gradient);
+        if (optimiser.step()) {
+          converged = true;
+          break;
+        }
+        const next = optimiser.getNextGeometry().positions(); // Angstrom
+        positions = Array.from({ length: 3 * count }, (_, k) => next.get(k % 3, Math.floor(k / 3)));
+      }
+    } catch {
+      release(calc);
+      return null;
+    } finally {
+      release(optimiser);
+      release(shape);
+    }
+    if (!Number.isFinite(energy)) {
+      release(calc);
+      return null;
+    }
+    const geometry: Molecule = {
+      ...molecule,
+      atoms: molecule.atoms.map((atom, i) => ({
+        ...atom, x: positions[3 * i], y: positions[3 * i + 1], z: positions[3 * i + 2],
+      })),
+    };
+    return { geometry, energy, iterations: steps, converged, calc, evaluates: true };
+  };
+
+  /** The exact (numerical) gradient's largest component at a relaxed point,
+   *  Eh/bohr — and the cache put back at that point afterwards, since the
+   *  charges and the Hessian are read from it. */
+  const exactGradientMax = (relaxed: Relaxed): number => {
+    const flatBohr = toBohrMat(relaxed.geometry.atoms.flatMap((a) => [a.x, a.y, a.z]));
+    relaxed.calc.updateStructure(flatBohr);
+    const exact = relaxed.calc.energyAndGradient(true, NUMERICAL_GRADIENT_STEP_BOHR);
+    evaluations += 1 + 6 * count;
+    let largest = 0;
+    for (let a = 0; a < count; a++) {
+      for (let c = 0; c < 3; c++) largest = Math.max(largest, Math.abs(exact.gradient.get(c, a)));
+    }
+    relaxed.calc.updateStructure(toBohrMat(relaxed.geometry.atoms.flatMap((a) => [a.x, a.y, a.z])));
+    relaxed.calc.energyAndGradient(false, NUMERICAL_GRADIENT_STEP_BOHR);
+    return largest;
+  };
+
+  /**
+   * One optimisation from `start`. Berny first, on the analytic gradient —
+   * fast, and right for most molecules. But OCC's analytic GFN2 gradient is
+   * wrong for polar species (an upstream bug, confirmed against the Fortran
+   * xTB oracle: methanol 2.2e-4, the cyclopropenyl anion 4.7e-4 Eh/bohr, while
+   * xTB's own analytic gradient matches OCC's finite differences to 1e-6), and
+   * Berny believes it: on the anion it reported convergence 4.7 kcal/mol above
+   * the minimum. So a converged point is checked with the exact gradient, and
+   * when they disagree Berny goes on from there on the exact gradient. Below
+   * 24 atoms — above, the check costs more than it is worth and the analytic
+   * answer stands. When Berny cannot finish, the Cartesian ladder runs from
+   * the start, as it did before Berny.
+   */
+  const relax = (start: Molecule): Relaxed | null => {
+    const fast = berny(start, false);
+    if (fast?.converged) {
+      if (count > MAX_NUMERICAL_GRADIENT_ATOMS || exactGradientMax(fast) <= BERNY_GRADIENT_MAX) return fast;
+      const exact = berny(fast.geometry, true);
+      if (exact?.converged) {
+        release(fast.calc);
+        return { ...exact, iterations: fast.iterations + exact.iterations };
+      }
+      if (exact) release(exact.calc);
+    }
+    if (fast) release(fast.calc);
+    return ladder(start);
+  };
 
   /** The lowest Hessian mode at a relaxed point — the eigenvalue (Eh/bohr²)
    *  and its eigenvector, per atom — or null when the check is skipped or

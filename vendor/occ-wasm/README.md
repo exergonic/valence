@@ -44,9 +44,10 @@ upstream `XtbCalculator::set_solvent` is a stub that returns false).
 EMSCRIPTEN_BINDINGS(occ) {
     register_core_bindings();      // Molecule, Mat3N, IVec, logging, threading
     register_xtb_bindings();       // GFN2-xTB — the geometry engine
+    register_opt_bindings();       // Berny optimiser (trimmed — step 3b)
     // register_solvent_bindings(); // COSMO-RS solvents
     // register_qm_bindings();      // register_correlation_bindings();
-    // register_dft_bindings();     // register_opt_bindings();
+    // register_dft_bindings();
     // register_isosurface_bindings();  // register_cube_bindings();
     // register_crystal_bindings();     // register_descriptors_bindings();
     // register_dma_bindings();         // register_mults_bindings();
@@ -56,8 +57,9 @@ EMSCRIPTEN_BINDINGS(occ) {
 }
 ```
 
-Only the `core` and `xtb` binding sources are compiled (the rest still link
-~0.5 MB of dead glue); the `fromXyzFile`/`fromXyzString` Molecule bindings are
+Only the `core`, `xtb` and `opt` binding sources are compiled — `src/CMakeLists.txt`'s
+`JS_BINDING_SOURCES` lists `js/core_bindings.cpp`, `js/xtb_bindings.cpp` and
+`js/opt_bindings.cpp` (the rest still link ~0.5 MB of dead glue); the `fromXyzFile`/`fromXyzString` Molecule bindings are
 removed (the app builds molecules from atoms); the allocator is emscripten's
 default (no `MALLOC=mimalloc`, which costs size for no single-threaded gain).
 
@@ -75,6 +77,16 @@ from the stubbed modules: `fromDimer`, `fromCrystal`, `toCrystal`,
 `toWavefunction`, `isPeriodic`, `lattice`, `setKpoints`, `kpoints`,
 `updateStructureWithLattice`, plus the `dimer.h`, `crystal.h` and
 `wavefunction.h` includes. This app is molecular and only calls `fromMolecule`.
+
+**3b. Trim `src/js/opt_bindings.cpp` to Berny.** Upstream also registers
+`HessianEvaluator<HartreeFock>` and `HessianEvaluator<DFT>` and the XYZ writer,
+which anchor the HF/DFT/integral code: measured, they take the wasm from 2.3 to
+14 MB (gzip 0.76 → 4.7 MB). Delete the `occ/qm/hessians.h`, `occ/qm/hf.h`,
+`occ/dft/dft.h` and `occ/io/xyz.h` includes and the `occ::qm`/`occ::dft` using
+lines, the two `HessianEvaluator` classes and the `moleculeToXYZ*` functions.
+What remains is Berny (`BernyOptimizer`, `ConvergenceCriteria`,
+`OptimizationState`, `OptPoint`), the internal coordinates and the core
+vibrational helpers: +55 KB gzip over the build without it.
 
 **4. Move aside the unread `share/` data** (the `--preload-file share@/` link
 packs the whole tree, so absent files simply don't ship): `share/basis`
@@ -126,8 +138,9 @@ needs `SharedArrayBuffer`, which needs COOP/COEP headers, which GitHub Pages
 cannot serve — single-threaded is what makes this deployable as a static site
 at all.
 
-Registered bindings: `core` (Molecule, Mat3N, IVec, logging, threading) and
-`xtb` (the GFN2 engine). Everything else upstream registers — QM, DFT,
+Registered bindings: `core` (Molecule, Mat3N, IVec, logging, threading),
+`xtb` (the GFN2 engine) and a trimmed `opt` (the Berny optimiser the app
+optimises with — step 3b). Everything else upstream registers — QM, DFT,
 solvent/COSMO-RS, crystals and the rest — stays commented out; uncomment a
 line to restore that capability (rebuild required). The preloaded data is the
 GFN2 parameters (`share/xtb`), the D4 tables (`share/dftd4`), COSMO/SMD data
@@ -135,8 +148,8 @@ GFN2 parameters (`share/xtb`), the D4 tables (`share/dftd4`), COSMO/SMD data
 
 | file | raw | gzip |
 |---|---|---|
-| `occjs.wasm` | 2,203 KiB | 747 KiB |
-| `occjs.data` | 326 KiB | 70 KiB |
+| `occjs.wasm` | 2,375 KiB | 796 KiB |
+| `occjs.data` | 326 KiB | 68 KiB |
 | `occjs.js` | 122 KiB | 31 KiB |
 
 About **0.5 MiB brotli** in total (estimated from the gzip ratio), lazily loaded,
@@ -159,6 +172,10 @@ bond lengths. Successive trims return bit-identical numbers (16 digits on the
 water and PCl5 optimisations), and the full test suite passes. A rebuild from
 identical inputs is expected bit-identical too — confirm a fresh build with
 `md5sum` against the vendored bytes before swapping it in.
+
+The Berny-enabled build (2026-10-05; `occjs.wasm` md5
+`f84f0dd331d69f4e3fd6ad7ca8e2a421`) adds bindings only — the GFN2 engine is
+the same code, and the oracle-pinned tests pass unchanged on it.
 
 ## API notes for callers
 

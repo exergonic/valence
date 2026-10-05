@@ -1,10 +1,10 @@
 /**
  * Valence Molecule → mmff94-ts Molecule, for everything that hands a molecule
  * to that library: the BCI charge model (chem/charge-model/bci-charges.ts) and
- * its parameter-gap report, and the GFN2 worker, whose optimiser is the
- * library's own L-BFGS and steepest descent. The library is not a geometry
- * engine here any more — GFN2-xTB is — but it is still the charge model and
- * the stepping.
+ * its parameter-gap report, and the GFN2 worker, whose fallback optimisers
+ * (behind OCC's Berny) are the library's own L-BFGS and steepest descent.
+ * The library is not a geometry engine here any more — GFN2-xTB is — but it
+ * is still the charge model and that fallback.
  *
  * The valence data model names bonds atom1Index/atom2Index/order and atoms
  * element/x/y/z/charge; the library wants atomic index fields,

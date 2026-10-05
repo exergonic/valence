@@ -105,7 +105,7 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 2. **Kekulize:** JSME's `smiles()` emits aromatic lower-case SMILES; monocyclic aromatic rings are rewritten to explicit Kekulé single/double bonds so the query is unambiguous (an antiaromatic ring like cyclobutadiene otherwise resolves to the saturated cycloalkane at PubChem).
 3. **Primary 3D:** Attempt PubChem PUG REST for MMFF94-optimized coordinates; the returned SDF is accepted only when its heavy-atom bond graph matches the sketch.
 4. **CIR Fallback:** If PubChem has no structure (e.g., its conformer generator fails) or the result mismatches, try the NIH CACTUS (CIR) resolver with the same validation.
-5. **Local Fallback:** If both fail, run the in-house pipeline in a Web Worker: add implicit hydrogens, embed 3D coordinates with the graph-walk embedder, then optimise with GFN2-xTB (semiempirical tight binding; the vendored `mmff94-ts` library supplies the L-BFGS stepping), within a 30 s budget. A run that stops short shows the lowest structure it reached, labelled not fully converged; a run that cannot start shows the unoptimised embedding, labelled so.
+5. **Local Fallback:** If both fail, run the in-house pipeline in a Web Worker: add implicit hydrogens, embed 3D coordinates with the graph-walk embedder, then optimise with GFN2-xTB (semiempirical tight binding) using OCC's Berny optimiser in internal coordinates — most molecules in well under a second — with the vendored `mmff94-ts` library's Cartesian optimisers as the fallback, all within a 30 s budget. A run that stops short shows the lowest structure it reached, labelled not fully converged; a run that cannot start shows the unoptimised embedding, labelled so.
 6. **Render:** Classify hybridization, map orbital geometry, and push to the Three.js canvas.
 
 ### Key Modules
@@ -119,7 +119,7 @@ Valence features a modern, lightweight frontend stack built with **Vite** and **
 | `src/ui/` | Control panel, JSME panel wiring, the examples list (`examples.ts`), tooltip. |
 | `src/utils/` | Vector math (`vec3.ts`). |
 
-The MMFF94 engine is consumed from `vendor/mmff94-ts-0.1.0-alpha.2.tgz` (a committed, self-contained bundle of the [mmff94-ts](https://github.com/exergonic/mmff94-ts) library — zero runtime dependencies; Vite embeds it into the worker chunk at build time). It is the charge model (BCI partial charges, the dipole, the ESP) and the GFN2 optimiser's stepping; it no longer optimises geometries itself. The GFN2-xTB engine is `vendor/occ-wasm/` (OCC, LGPL-3), loaded lazily on first use.
+The MMFF94 engine is consumed from `vendor/mmff94-ts-0.1.0-alpha.2.tgz` (a committed, self-contained bundle of the [mmff94-ts](https://github.com/exergonic/mmff94-ts) library — zero runtime dependencies; Vite embeds it into the worker chunk at build time). It is the charge model (BCI partial charges, the dipole, the ESP) and the fallback optimiser behind Berny; it no longer optimises geometries with its own force field. The GFN2-xTB engine is `vendor/occ-wasm/` (OCC, LGPL-3), loaded lazily on first use.
 
 ---
 
