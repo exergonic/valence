@@ -18,6 +18,7 @@ import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import type { BasisFunction, DFunction } from '../chem/extended-huckel/assign-basis';
 import { frameDirectionToWorld, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
+import { getVisualRadius } from './chem-data';
 import { createLobeMesh, orientLobe, piLobe } from './lobes';
 
 /** The textbook phase pair: the app's π blue against a warm contrast. */
@@ -25,39 +26,41 @@ export const MO_PHASE_POSITIVE = 0x4488ff;
 export const MO_PHASE_NEGATIVE = 0xff6644;
 
 /**
- * Where a d function's lobes point, in the calculation frame, and which phase
- * each carries. Four lobes for x²−y², xy, xz and yz; z² has two axial lobes and
- * the negative collar, which is drawn as the four equatorial directions here
- * (the smooth surface draws the ring itself).
+ * Where a d function's lobes point, in the calculation frame, which phase each
+ * carries, and how large it is next to the others. Four equal lobes for x²−y²,
+ * xy, xz and yz; z² has two axial lobes and the negative collar, drawn as four
+ * equatorial lobes at HALF size — its angular factor 3cos²θ − 1 is −1 in the
+ * equator against +2 along the axis (the smooth surface draws the ring itself).
  */
-function dLobes(kind: DFunction): Array<{ direction: [number, number, number]; positive: boolean }> {
+function dLobes(kind: DFunction): Array<{ direction: [number, number, number]; positive: boolean; relative: number }> {
   const h = Math.SQRT1_2;
+  const lobe = (direction: [number, number, number], positive: boolean, relative = 1) => ({ direction, positive, relative });
   switch (kind) {
     case 'x2-y2':
       return [
-        { direction: [1, 0, 0], positive: true }, { direction: [-1, 0, 0], positive: true },
-        { direction: [0, 1, 0], positive: false }, { direction: [0, -1, 0], positive: false },
+        lobe([1, 0, 0], true), lobe([-1, 0, 0], true),
+        lobe([0, 1, 0], false), lobe([0, -1, 0], false),
       ];
     case 'z2':
       return [
-        { direction: [0, 0, 1], positive: true }, { direction: [0, 0, -1], positive: true },
-        { direction: [h, h, 0], positive: false }, { direction: [-h, h, 0], positive: false },
-        { direction: [-h, -h, 0], positive: false }, { direction: [h, -h, 0], positive: false },
+        lobe([0, 0, 1], true), lobe([0, 0, -1], true),
+        lobe([h, h, 0], false, 0.5), lobe([-h, h, 0], false, 0.5),
+        lobe([-h, -h, 0], false, 0.5), lobe([h, -h, 0], false, 0.5),
       ];
     case 'xy':
       return [
-        { direction: [h, h, 0], positive: true }, { direction: [-h, -h, 0], positive: true },
-        { direction: [-h, h, 0], positive: false }, { direction: [h, -h, 0], positive: false },
+        lobe([h, h, 0], true), lobe([-h, -h, 0], true),
+        lobe([-h, h, 0], false), lobe([h, -h, 0], false),
       ];
     case 'xz':
       return [
-        { direction: [h, 0, h], positive: true }, { direction: [-h, 0, -h], positive: true },
-        { direction: [-h, 0, h], positive: false }, { direction: [h, 0, -h], positive: false },
+        lobe([h, 0, h], true), lobe([-h, 0, -h], true),
+        lobe([-h, 0, h], false), lobe([h, 0, -h], false),
       ];
     default: // yz
       return [
-        { direction: [0, h, h], positive: true }, { direction: [0, -h, -h], positive: true },
-        { direction: [0, -h, h], positive: false }, { direction: [0, h, -h], positive: false },
+        lobe([0, h, h], true), lobe([0, -h, -h], true),
+        lobe([0, -h, h], false), lobe([0, h, -h], false),
       ];
   }
 }
@@ -121,15 +124,23 @@ export function renderMoOrbitals(
     const origin: [number, number, number] = [atom.x, atom.y, atom.z];
     const positive = coefficient >= 0;
     const color = positive ? positiveColour : negativeColour;
-    const size = 0.50 + 0.62 * weight;
+    // Lobe scale, 0.75 (the weakest drawn) to 1.5 (the largest): a p lobe then
+    // runs 0.8–1.7 Å from its nucleus, clear of every ball-and-stick atom
+    // sphere (the largest, K, is 0.83 Å). At 0.50–1.12 the weak ones barely
+    // cleared a carbon.
+    const size = 0.75 + 0.75 * weight;
     // the basis label already reads "2px" / "2s" — reuse its tail
     const shortName = orbital.label.split(' ').pop() ?? '';
     const label = `${shortName} ${coefficient >= 0 ? '+' : '−'}${Math.abs(coefficient).toFixed(2)}`;
 
     if (orbital.angular === 's') {
-      // an s contribution is a sphere, its phase its color
+      // An s contribution is a sphere, its phase its colour, sized from the
+      // atom's own sphere: 1.15× it for the weakest drawn, 1.7× for the
+      // largest. A fixed 0.15–0.34 Å (as this was) sat wholly inside every
+      // atom — a hydrogen's is 0.36 Å — so no s contribution was ever visible.
+      const radius = getVisualRadius(atom.element) * (1.15 + 0.55 * weight);
       const mesh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.30 * size, 16, 16),
+        new THREE.SphereGeometry(radius, 24, 24),
         new THREE.MeshPhongMaterial({ color, transparent: true, opacity, depthWrite: false }),
       );
       applyMoOpacity(mesh, opacity);
@@ -142,14 +153,15 @@ export function renderMoOrbitals(
     if (orbital.angular === 'd') {
       // A d contribution drawn as a p dumbbell would be a lie about its shape,
       // so it gets its own lobes: four for x²−y², xy, xz and yz, and for z² the
-      // two axial lobes plus the negative collar as a torus. (The smooth
-      // surface draws all five exactly; this is the "which AO, which phase"
-      // view, and a four-lobed cloverleaf is what that view needs to say.)
+      // two axial lobes plus the negative collar as four half-size equatorial
+      // lobes. (The smooth surface draws all five exactly; this is the "which
+      // AO, which phase" view, and a four-lobed cloverleaf is what that view
+      // needs to say.)
       for (const lobe of dLobes(orbital.d!)) {
         const direction = frameDirectionToWorld(frame, lobe.direction);
         // the AO's own sign flips every lobe's phase, as it does for a p
         const samePhase = lobe.positive === positive;
-        const mesh = createLobeMesh(piLobe(), samePhase ? positiveColour : negativeColour, opacity, preset, size * 0.85);
+        const mesh = createLobeMesh(piLobe(), samePhase ? positiveColour : negativeColour, opacity, preset, size * 0.85 * lobe.relative);
         applyMoOpacity(mesh, opacity);
         mesh.userData = { atomIndex: orbital.atomIndex, element: atom.element, lobeType: 'mo', label };
         orientLobe(mesh, origin, direction);

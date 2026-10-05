@@ -9,6 +9,7 @@
  * or every s-to-p ratio in the picture is wrong. The known value of a
  * normalized 1s orbital pins it exactly.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
@@ -197,6 +198,30 @@ describe('the MO isosurface', () => {
     }
     expect(near.get('S') ?? 0).toBeGreaterThan(30);
     expect(near.get('F') ?? 0).toBeGreaterThan(30);
+  });
+
+  it('draws the orbital the solver normalized — ∫ψ² over the grid is 1', () => {
+    // The coefficients are normalized in the S of slater-overlap.ts; the
+    // surface evaluates its own amplitude. If the two ever describe different
+    // functions (a normalization, an angular factor, a d convention), the drawn
+    // orbital is not the computed one, and this is where it shows. SF₆ brings
+    // sulfur's 3d in; a localized orbital is checked beside the canonical ones.
+    const lines = readFileSync(new URL('./references/dft/SF6.xyz', import.meta.url), 'utf8').trim().split(/\r?\n/).slice(2);
+    const atoms = lines.map((line) => {
+      const [element, x, y, z] = line.trim().split(/\s+/);
+      return { element, x: Number(x), y: Number(y), z: Number(z), charge: 0 };
+    });
+    const molecule: Molecule = { atoms: symmetrizeMolecule({ atoms, bonds: [] }).atoms, bonds: [] };
+    const result = solveExtendedHuckel(molecule)!;
+    const homo = result.electronCount / 2 - 1;
+    const localized = localizeOrbitals(molecule, result)!;
+    for (const coefficients of [result.coefficients[homo], result.coefficients[homo + 1], localized.occupied[0]]) {
+      const grid = computeMoField(molecule, result.basis, coefficients, 0.1)!;
+      let sum = 0;
+      for (const value of grid.values) sum += value * value;
+      const voxelBohr3 = (grid.spacing / 0.529177210903) ** 3;
+      expect(sum * voxelBohr3).toBeCloseTo(1, 2);
+    }
   });
 
   it('evaluates a normalized 3d Slater orbital, and its gradient, exactly', () => {
