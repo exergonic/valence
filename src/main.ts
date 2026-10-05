@@ -22,6 +22,7 @@ import { EXAMPLES } from './ui/examples';
 import { isVseprElement } from './chem/vsepr/assign-orbitals';
 import { preloadGfn2 } from './geometry/gfn2-refine';
 import { setupTheme } from './ui/theme';
+import { setupSketcherToolbar } from './ui/sketcher-toolbar';
 
 function setupSplitter() {
   const splitter = document.getElementById('splitter')!;
@@ -259,6 +260,7 @@ async function main() {
     scene.orbitalGroup,
   );
   setupContextMenu(scene, document.getElementById('canvas-container')!);
+  setupSketcherToolbar();
   const moPanel = setupMoPanel(scene);
   setupModelViews(scene, moPanel);
   setupKeyboardShortcuts();

@@ -41,7 +41,14 @@
   --scrim: rgba(0, 0, 0, 0.5);
   --shadow: 0 10px 32px rgba(0, 0, 0, 0.4);
   --bevel: none;              /* Steel's machined top edge */
-  --sketcher-filter: invert(0.94) hue-rotate(180deg);
+  /* the sketcher's drawing (JSME's SVG, recoloured below) */
+  --sketch-bg: #0d0f12;
+  --sketch-ink: #dde2e8;
+  --sketch-n: #8fb0ff;
+  --sketch-o: #ff8f8f;
+  --sketch-s: #e8cf5a;
+  --sketch-halogen: #7fdb9a;
+  --sketch-p: #f5a65b;
 }
 
 :root[data-theme="steel"] {
@@ -79,7 +86,13 @@
   --scrim: rgba(2, 6, 12, 0.55);
   --shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
   --bevel: inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  --sketcher-filter: invert(0.94) hue-rotate(180deg);
+  --sketch-bg: #08101b;
+  --sketch-ink: #d8e1ec;
+  --sketch-n: #8fb0ff;
+  --sketch-o: #ff8f8f;
+  --sketch-s: #e8cf5a;
+  --sketch-halogen: #7fdb9a;
+  --sketch-p: #f5a65b;
 }
 
 :root[data-theme="light"] {
@@ -117,7 +130,13 @@
   --scrim: rgba(16, 24, 40, 0.35);
   --shadow: 0 10px 32px rgba(16, 24, 40, 0.14);
   --bevel: none;
-  --sketcher-filter: none;
+  --sketch-bg: #ffffff;
+  --sketch-ink: #1d2127;
+  --sketch-n: #2747b8;
+  --sketch-o: #c42b2b;
+  --sketch-s: #8c6a00;
+  --sketch-halogen: #1e7a44;
+  --sketch-p: #b4570a;
 }
 
 * {
@@ -307,17 +326,117 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--text-faint);
 }
 
-/* JSME paints its own canvas, out of the stylesheet's reach. On a dark theme
-   the well inverts it — black-on-white becomes white-on-dark, and the
-   hue-rotate turns the element colours back round (theme.ts picks the chrome
-   colour that inverts to the theme's dark). */
+/* ── The sketcher ──
+   JSME draws its drawing area and its own menus as SVG. The menus are clipped
+   out of the well: the stage is moved up and left by their size, and grown by
+   it (the sizes are measured once JSME has drawn them — sketcher-toolbar.ts),
+   and our toolbar presses the hidden buttons. Until then the stage is the
+   well, and the well hides it, so the menus never flash. */
 #jsme_container {
   flex: 1;
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 12px;
-  background: var(--surface-sunken);
-  filter: var(--sketcher-filter);
+  background: var(--sketch-bg);
+}
+
+#jsme-stage {
+  position: absolute;
+  top: calc(-1 * var(--jsme-top, 0px));
+  left: calc(-1 * var(--jsme-left, 0px));
+  width: calc(100% + var(--jsme-left, 0px) + var(--jsme-right, 0px));
+  height: calc(100% + var(--jsme-top, 0px) + var(--jsme-bottom, 0px));
+}
+
+#jsme_container:not(.menus-clipped) #jsme-stage { visibility: hidden; }
+
+/* JSME's drawing, recoloured: its colours are presentation attributes, which
+   any stylesheet rule outranks. It uses a handful — black ink, white behind
+   labels, blue N, red O, olive S, magenta for every halogen, orange P, a blue
+   hover box — so each maps to a theme token. */
+#jsme-stage svg rect[fill="white"] { fill: var(--sketch-bg); }
+#jsme-stage svg line[stroke="black"] { stroke: var(--sketch-ink); }
+#jsme-stage svg [fill="black"] { fill: var(--sketch-ink); }
+#jsme-stage svg text { font-family: var(--font-sans); font-weight: 500; }
+#jsme-stage svg text[fill="blue"] { fill: var(--sketch-n); }
+#jsme-stage svg text[fill="red"] { fill: var(--sketch-o); }
+#jsme-stage svg text[fill="rgb(178,178,0)"] { fill: var(--sketch-s); }
+#jsme-stage svg text[fill="rgb(255,0,255)"] { fill: var(--sketch-halogen); }
+#jsme-stage svg text[fill="rgb(255,200,0)"] { fill: var(--sketch-p); }
+#jsme-stage svg [stroke="blue"] { stroke: var(--accent); }
+
+/* our toolbar: one line of tools, then the elements */
+#sketch-tools,
+#sketch-elements {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+#sketch-elements { gap: 4px; margin: 8px 0 10px; }
+
+.sketch-tool {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.sketch-tool:hover { background: var(--hover); color: var(--text); }
+
+.sketch-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 3px;
+  background: var(--border);
+}
+
+.sketch-element {
+  height: 28px;
+  min-width: 32px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: var(--bevel);
+}
+
+.sketch-element:hover { border-color: var(--border-strong); }
+.sketch-element[data-element="N"] { color: var(--sketch-n); }
+.sketch-element[data-element="O"] { color: var(--sketch-o); }
+.sketch-element[data-element="S"] { color: var(--sketch-s); }
+.sketch-element[data-element="P"] { color: var(--sketch-p); }
+.sketch-element[data-element="F"],
+.sketch-element[data-element="Cl"],
+.sketch-element[data-element="Br"],
+.sketch-element[data-element="I"] { color: var(--sketch-halogen); }
+
+.sketch-tool[aria-pressed="true"],
+.sketch-element[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+  color: var(--accent-text);
+}
+
+.sketch-credit {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--text-faint);
 }
 
 #render-btn {
@@ -352,8 +471,11 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 #jsme-panel.collapsed #brand-bar,
+#jsme-panel.collapsed #sketch-tools,
+#jsme-panel.collapsed #sketch-elements,
 #jsme-panel.collapsed #jsme_container,
-#jsme-panel.collapsed #render-btn {
+#jsme-panel.collapsed #render-btn,
+#jsme-panel.collapsed .sketch-credit {
   display: none;
 }
 

@@ -381,7 +381,7 @@ export function mountJsmePanel(ctx: SceneContext) {
 
       showMolecule(ctx, molecule, gfn2Charges);
     } finally {
-      renderBtn.textContent = 'Render Molecule';
+      renderBtn.textContent = 'Build 3D model';
       renderBtn.disabled = false;
       hideLoading();
     }

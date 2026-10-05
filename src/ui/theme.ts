@@ -4,10 +4,10 @@
  *
  * The interface's colours and typefaces live in the stylesheet as tokens per
  * theme (`:root[data-theme=…]` in main.css), so a theme switch is one
- * attribute on <html>. What the stylesheet cannot reach is set here: the 3D
- * scene's background — set through the Background control's own input, so the
- * View tab and the labels' contrast palette follow it — and the sketcher's
- * chrome.
+ * attribute on <html> — the sketcher's drawing included (its SVG colours are
+ * remapped in the stylesheet). What the stylesheet cannot reach is set here:
+ * the 3D scene's background, set through the Background control's own input
+ * so its swatches and the labels' contrast palette follow it.
  *
  * The choice is remembered per browser. "System" follows the computer's own
  * light/dark setting: Graphite for dark, Light for light.
@@ -17,10 +17,10 @@ import type { SceneContext } from '../render';
 export type ThemeName = 'graphite' | 'steel' | 'light';
 export type ThemeChoice = ThemeName | 'system';
 
-const THEMES: Record<ThemeName, { sceneBackground: string; dark: boolean; sketcherChrome: string }> = {
-  graphite: { sceneBackground: '#0d0f12', dark: true, sketcherChrome: '#eceef1' },
-  steel: { sceneBackground: '#0a1220', dark: true, sketcherChrome: '#ebeff5' },
-  light: { sceneBackground: '#ffffff', dark: false, sketcherChrome: '#f3f4f6' },
+const THEMES: Record<ThemeName, { sceneBackground: string; dark: boolean }> = {
+  graphite: { sceneBackground: '#0d0f12', dark: true },
+  steel: { sceneBackground: '#0a1220', dark: true },
+  light: { sceneBackground: '#ffffff', dark: false },
 };
 
 const STORAGE_KEY = 'valence-theme';
@@ -55,16 +55,6 @@ function resolve(choice: ThemeChoice): ThemeName {
   return choice;
 }
 
-/**
- * The sketcher is drawn by JSME on its own canvas, which no stylesheet
- * reaches. On a dark theme the container inverts it (main.css), so its chrome
- * colour is chosen light: inverted, it comes out as the theme's dark.
- */
-function applySketcherTheme(name: ThemeName): void {
-  window.jsmeApplet?.setUserInterfaceBackgroundColor?.(THEMES[name].sketcherChrome);
-  window.jsmeApplet?.repaint?.();
-}
-
 function applyTheme(choice: ThemeChoice): void {
   const name = resolve(choice);
   document.documentElement.dataset.theme = name;
@@ -76,7 +66,6 @@ function applyTheme(choice: ThemeChoice): void {
     background.value = THEMES[name].sceneBackground;
     background.dispatchEvent(new Event('input'));
   }
-  applySketcherTheme(name);
   for (const option of document.querySelectorAll<HTMLButtonElement>('#theme-options [data-theme-choice]')) {
     option.setAttribute('aria-pressed', String(option.dataset.themeChoice === choice));
   }
@@ -105,8 +94,5 @@ export function setupTheme(ctx: SceneContext): void {
       ctx.rerender();
     }
   });
-  // JSME loads after this module; give it the theme once it exists
-  window.addEventListener('jsme-ready', () => applySketcherTheme(resolve(choice)));
-
   applyTheme(choice);
 }
