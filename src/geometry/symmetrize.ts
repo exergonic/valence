@@ -394,6 +394,17 @@ function symbolOf(group: Operation[]): string {
     .map((op) => Math.round((2 * Math.PI) / rotationAngle(op.m)));
   const improperMax = improperOrders.length > 0 ? Math.max(...improperOrders) : 0;
 
+  // D2d (allene) has three C2s and only one of them is special: the one an S4
+  // shares. Taking whichever C2 came first as the principal axis could pick a
+  // perpendicular one, against which the σd are neither σh nor σv, and the
+  // group came out D2. When C2 is the highest proper rotation, an S4's axis is
+  // the principal one.
+  if (highestOrder === 2) {
+    const s4 = group.find((op) => determinant(op.m) < 0 && !sameMatrix(op.m, INVERSION)
+      && rotationAngle(op.m) > 1e-6 && Math.round((2 * Math.PI) / rotationAngle(op.m)) === 4);
+    if (s4) highestAxis = rotationAxis(s4.m); // an S4's antisymmetric part lies along its axis too
+  }
+
   if (perpendicularC2 > 0) {
     if (hasSigmaH) return `D${highestOrder}h`;
     if (hasSigmaV) return `D${highestOrder}d`;

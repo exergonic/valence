@@ -9,6 +9,7 @@
  * The labels come from characters computed numerically, so the expectations
  * are independent of how the detection happens to order its operations.
  */
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
@@ -42,6 +43,36 @@ function labelled(name: string): {
     // same one the panel applies. These molecules are closed shells.
     occupiedCount: (closedShellOccupations(result.electronCount, result.energies.length, result.energies) ?? []).filter((o) => o > 0).length,
   };
+}
+
+/** A DFT minimum from tests/references/dft (see its README), snapped and
+ *  labelled — for the groups no example in the app reaches with exact
+ *  symmetry. */
+function dftLabelled(file: string): { symbol: string; labels: (string | null)[]; occupied: (string | null)[] } {
+  const lines = readFileSync(new URL(`./references/dft/${file}.xyz`, import.meta.url), 'utf8').trim().split(/\r?\n/).slice(2);
+  const atoms = lines.map((line) => {
+    const [element, x, y, z] = line.trim().split(/\s+/);
+    return { element, x: Number(x), y: Number(y), z: Number(z), charge: 0 };
+  });
+  const snapped = symmetrizeMolecule({ atoms, bonds: [] });
+  const molecule: Molecule = { atoms: snapped.atoms, bonds: [] };
+  const result = solveExtendedHuckel(molecule)!;
+  const labels = labelIrreps(molecule, result.basis, result.coefficients, result.energies, result.overlap);
+  const filling = closedShellOccupations(result.electronCount, result.energies.length, result.energies)!;
+  return { symbol: snapped.symbol, labels, occupied: labels.filter((_, i) => filling[i] > 0) };
+}
+
+/** One entry per degenerate set: t1u, t1u, t1u → t1u (a set's members are
+ *  adjacent and share their label). */
+function sets(labels: (string | null)[]): (string | null)[] {
+  const out: (string | null)[] = [];
+  let remaining = 0;
+  for (const label of labels) {
+    if (remaining > 0) { remaining--; continue; }
+    out.push(label);
+    remaining = label?.startsWith('t') ? 2 : label?.startsWith('e') ? 1 : 0;
+  }
+  return out;
 }
 
 const occupied = (name: string) => {
@@ -115,6 +146,65 @@ describe('irrep labels', () => {
     expect(labels.slice(13, 15)).toEqual(['e1g', 'e1g']);
     expect(labels.slice(15, 17)).toEqual(['e2u', 'e2u']);
     expect(labels[17]).toBe('b2g');
+  });
+
+  it('names D2h on Mulliken’s axes — ethene’s π is b3u, its π* b2g', () => {
+    // x perpendicular to the plane, z along C=C. Before, D2h was named like an
+    // axial group: a1g, a2u, b1g... symbols D2h does not have, and never a b3.
+    const { symbol, labels, occupied } = dftLabelled('ethene');
+    expect(symbol).toBe('D2h');
+    expect(occupied).toEqual(['ag', 'b1u', 'b2u', 'b3g', 'ag', 'b3u']);
+    expect(labels[occupied.length]).toBe('b2g');
+    const naphthalene = dftLabelled('naphthalene');
+    expect(naphthalene.symbol).toBe('D2h');
+    expect(naphthalene.occupied.at(-1)).toBe('au');
+    for (const label of naphthalene.labels) expect(label).toMatch(/^(a|b[123])[gu]$/);
+  });
+
+  it('names D2d by its S4 — allene’s b2 is not an a', () => {
+    // b2 is symmetric under the C2 along C=C=C and antisymmetric under the S4
+    // about it; reading a/b off the C2 made every one-dimensional set an a.
+    const { symbol, occupied } = dftLabelled('allene');
+    expect(symbol).toBe('D2d');
+    expect(occupied).toEqual(['a1', 'b2', 'a1', 'e', 'e', 'b2', 'e', 'e']);
+  });
+
+  it('names Oh by its C4 — SF₆’s σ bonds are t1u and its HOMO t1g', () => {
+    // T1/T2 were read off the mirror through the most atoms, which in SF₆ is
+    // the class that cannot tell them apart: every t1u came out t2u.
+    const { symbol, occupied } = dftLabelled('SF6');
+    expect(symbol).toBe('Oh');
+    expect(sets(occupied)).toEqual(['a1g', 't1u', 'eg', 'a1g', 't1u', 't2g', 't2u', 'eg', 't1u', 't1g']);
+  });
+
+  it('has no B in a cubic group — cubane’s a2u is an a', () => {
+    // A2u is antisymmetric under C4, and an axial rule called that a b. The
+    // eight carbons' 2s combinations are a1g + t1u + t2g + a2u.
+    const { symbol, occupied } = dftLabelled('cubane');
+    expect(symbol).toBe('Oh');
+    expect(sets(occupied).slice(0, 4)).toEqual(['a1g', 't1u', 't2g', 'a2u']);
+  });
+
+  it('gives staggered methanol its a′ and a″ — a Cs with no molecular plane', () => {
+    // The mirror holds C, O and two H. The ′/″ test once looked only for a
+    // mirror normal to the frame's z; methanol's happens to be, so this pins
+    // the labels rather than that fix (see NOTES.md).
+    const { symbol, occupied } = dftLabelled('methanol');
+    expect(symbol).toBe('Cs');
+    expect(occupied.filter((l) => l === "a'")).toHaveLength(5);
+    expect(occupied.filter((l) => l === 'a"')).toHaveLength(2);
+    expect(occupied.at(-1)).toBe('a"');
+  });
+
+  it('finds Cs’s mirror off the frame’s z axis — CHFCl₂', () => {
+    // The two Cl straddle the mirror (H, C, F), so the largest moment of
+    // inertia is not about its normal: the normal lands on the frame's y, and
+    // a ′/″ test that only looked along z labelled every orbital a bare a.
+    const { symbol, labels } = dftLabelled('dichlorofluoromethane');
+    expect(symbol).toBe('Cs');
+    for (const label of labels) expect(label).toMatch(/^a['"]$/);
+    expect(labels.filter((l) => l === "a'").length).toBeGreaterThan(0);
+    expect(labels.filter((l) => l === 'a"').length).toBeGreaterThan(0);
   });
 
   it('methane’s representation multiplies: D(a) D(b) = D(ab)', () => {

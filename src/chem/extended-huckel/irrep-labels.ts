@@ -23,9 +23,12 @@
  * operational rather than tabulated: a/b from the sign under the principal
  * rotation, e/t by dimension, the 1/2 subscript from a perpendicular C2 (or a
  * mirror containing the principal axis), g/u from the inversion, ′/″ from a
- * mirror perpendicular to the principal axis. Where a case is ambiguous the
- * label degrades to the bare letter rather than guessing — a wrong label is
- * worse than a partial one.
+ * mirror perpendicular to the principal axis. Three families bend those rules
+ * and get their own: the cubic groups (no B at all; 1/2 from the four-fold
+ * operation), D2 and D2h (B1/B2/B3 by which C2 is kept, on Mulliken's axes),
+ * and S4/D2d/D4d (the principal operation is the S2n, not its C_n). Where a
+ * case is ambiguous the label degrades to the bare letter rather than guessing
+ * — a wrong label is worse than a partial one.
  *
  * Linear molecules get their own path: their groups have infinitely many
  * operations, so the detector reports none. The label is the character of a
@@ -172,7 +175,9 @@ function orbitalCharacter(
 }
 
 interface Census {
-  /** the order of the highest proper rotation */
+  /** the Schoenflies symbol, which decides which naming rules apply */
+  symbol: string;
+  /** the order of the principal operation (2n for an S2n group, see below) */
   order: number;
   /** one operation of that order, for its character */
   principalOperation: SymmetryOperation | null;
@@ -187,9 +192,29 @@ interface Census {
   /** one mirror perpendicular to the axis, if any */
   mirrorPerpendicular: SymmetryOperation | null;
   inversion: SymmetryOperation | null;
+  /** cubic groups: a C4 (O, Oh) or an S4 (Td), whose character splits A1 from
+   *  A2 and T1 from T2 */
+  fourFold: SymmetryOperation | null;
+  /** D2 and D2h: the three C2s as Mulliken's z, y and x — null when his
+   *  convention cannot decide between them */
+  d2Axes: { z: SymmetryOperation; y: SymmetryOperation; x: SymmetryOperation } | null;
 }
 
-function censusOf(operations: SymmetryOperation[]): Census {
+const CUBIC_GROUPS = new Set(['T', 'Td', 'Th', 'O', 'Oh']);
+
+/** The axis of a rotation (proper or improper): the antisymmetric part gives
+ *  it directly, except at 180° where any long column of M + I lies along it. */
+function axisOf(op: SymmetryOperation): Vec3 {
+  const m = op.matrix;
+  const antisymmetric: Vec3 = [m[2][1] - m[1][2], m[0][2] - m[2][0], m[1][0] - m[0][1]];
+  if (length(antisymmetric) > 1e-9) return unit(antisymmetric);
+  const columns: Vec3[] = [
+    [m[0][0] + 1, m[1][0], m[2][0]], [m[0][1], m[1][1] + 1, m[2][1]], [m[0][2], m[1][2], m[2][2] + 1],
+  ];
+  return unit(columns.reduce((best, c) => (length(c) > length(best) ? c : best), columns[0]));
+}
+
+function censusOf(operations: SymmetryOperation[], symbol: string): Census {
   const identity = (op: SymmetryOperation) =>
     Math.abs(op.matrix[0][0] - 1) < 1e-6 && Math.abs(op.matrix[1][1] - 1) < 1e-6 && Math.abs(op.matrix[2][2] - 1) < 1e-6
     && Math.abs(op.matrix[0][1]) < 1e-6 && Math.abs(op.matrix[0][2]) < 1e-6 && Math.abs(op.matrix[1][0]) < 1e-6
@@ -201,22 +226,14 @@ function censusOf(operations: SymmetryOperation[]): Census {
     const cos = Math.max(-1, Math.min(1, (trace(op.matrix) + (proper ? -1 : 1)) / 2));
     return Math.acos(cos);
   };
-  const axisOf = (op: SymmetryOperation): Vec3 => {
-    const m = op.matrix;
-    const antisymmetric: Vec3 = [m[2][1] - m[1][2], m[0][2] - m[2][0], m[1][0] - m[0][1]];
-    if (length(antisymmetric) > 1e-9) return unit(antisymmetric);
-    const columns: Vec3[] = [
-      [m[0][0] + 1, m[1][0], m[2][0]], [m[0][1], m[1][1] + 1, m[2][1]], [m[0][2], m[1][2], m[2][2] + 1],
-    ];
-    return unit(columns.reduce((best, c) => (length(c) > length(best) ? c : best), columns[0]));
-  };
-
   let order = 1;
   let principal: SymmetryOperation | null = null;
   let axis: Vec3 = [0, 0, 1];
   const properC2: SymmetryOperation[] = [];
   const mirrors: { op: SymmetryOperation; normal: Vec3 }[] = [];
+  const improperRotations: { op: SymmetryOperation; n: number }[] = [];
   let inversion: SymmetryOperation | null = null;
+  let c4: SymmetryOperation | null = null;
 
   for (const op of operations) {
     if (identity(op)) continue;
@@ -225,12 +242,32 @@ function censusOf(operations: SymmetryOperation[]): Census {
     if (proper) {
       const n = Math.round((2 * Math.PI) / theta);
       if (n === 2) properC2.push(op);
+      if (n === 4) c4 ??= op;
       if (n > order) { order = n; principal = op; axis = axisOf(op); }
     } else if (Math.abs(theta) < 1e-6) {
       mirrors.push({ op, normal: mirrorNormal(op.matrix) });
     } else if (trace(op.matrix) < -2.9) {
       inversion = op;
+    } else {
+      improperRotations.push({ op, n: Math.round((2 * Math.PI) / theta) });
     }
+  }
+
+  // The cubic groups split A1/A2 and T1/T2 by the four-fold operation: the C4
+  // in O and Oh, the S4 in Td, which has no C4. Never the S4 in Oh — its
+  // character flips sign between g and u (T1u is −1 under S4, +1 under C4).
+  const s4 = improperRotations.find((r) => r.n === 4)?.op ?? null;
+  const fourFold = CUBIC_GROUPS.has(symbol) ? c4 ?? s4 : null;
+
+  // In S4, D2d, S8 and D4d the principal axis is an S2n whose C_n is even, and
+  // it is the S2n, not the C_n, that tells A from B: allene's b2 is symmetric
+  // under the C2 along the C=C=C axis and antisymmetric under the S4 about it.
+  // (With an odd C_n — S6, D3d — the S2n is i·C_n and adds nothing.)
+  const s2n = improperRotations.find((r) => order % 2 === 0 && r.n === 2 * order);
+  if (s2n) {
+    order = s2n.n;
+    principal = s2n.op;
+    axis = axisOf(s2n.op);
   }
 
   const fixedAtoms = (op: SymmetryOperation) => op.permutation.filter((target, i) => target === i).length;
@@ -250,12 +287,49 @@ function censusOf(operations: SymmetryOperation[]): Census {
     // the plane that fixes every atom is the molecular plane; the reference is
     // the other one (the convention's σv(xz))
     .filter((op) => op !== molecularPlane);
-  const mirrorParallel = mostAtoms(parallelMirrors);
-  const mirrorPerpendicular = mirrors.find((m) => Math.abs(dot(m.normal, axis)) > 1 - 1e-6)?.op ?? null;
+  // "contains the principal axis" needs an axis: Cs has none, and testing its
+  // mirror against the default z gave CHFCl₂ an a1′/a2″ that Cs does not have
+  const mirrorParallel = principal ? mostAtoms(parallelMirrors) : null;
+  // Cs has no axis at all, so its one mirror is the ′/″ reference wherever it
+  // lies — staggered methanol's mirror is not the frame's xy plane
+  const mirrorPerpendicular = symbol === 'Cs'
+    ? mirrors[0]?.op ?? null
+    : mirrors.find((m) => Math.abs(dot(m.normal, axis)) > 1 - 1e-6)?.op ?? null;
+
   return {
-    order, principalOperation: principal, axis, perpendicularC2,
-    mirrorParallel, molecularPlane, mirrorPerpendicular, inversion,
+    symbol, order, principalOperation: principal, axis, perpendicularC2,
+    mirrorParallel, molecularPlane, mirrorPerpendicular, inversion, fourFold,
+    d2Axes: symbol === 'D2' || symbol === 'D2h' ? mullikenD2Axes(properC2, molecularPlane, fixedAtoms) : null,
   };
+}
+
+/**
+ * D2 and D2h have three equivalent-looking C2 axes, and B1, B2, B3 only mean
+ * something once they are named z, y and x. Mulliken's convention (J. Chem.
+ * Phys. 23, 1997 (1955)) — the same one water's b1/b2 follow above: for a
+ * planar molecule x is perpendicular to the plane, and z is the in-plane axis
+ * through the most atoms — ethene's C=C, pyrazine's N···N. So ethene's π is
+ * b3u and its π* b2g. A non-planar molecule is ordered the same way by atom
+ * count alone. Where the count ties (diborane: two B on one axis, two bridging
+ * H on another) the convention has no answer, and neither does this — the
+ * label stays a bare b.
+ */
+function mullikenD2Axes(
+  c2s: SymmetryOperation[],
+  molecularPlane: SymmetryOperation | null,
+  fixedAtoms: (op: SymmetryOperation) => number,
+): Census['d2Axes'] {
+  if (c2s.length !== 3) return null;
+  const byAtoms = [...c2s].sort((a, b) => fixedAtoms(b) - fixedAtoms(a));
+  if (molecularPlane) {
+    const normal = mirrorNormal(molecularPlane.matrix);
+    const x = c2s.find((op) => Math.abs(dot(axisOf(op), normal)) > 1 - 1e-6);
+    if (!x) return null;
+    const [z, y] = byAtoms.filter((op) => op !== x);
+    return fixedAtoms(z) > fixedAtoms(y) ? { z, y, x } : null;
+  }
+  const [z, y, x] = byAtoms;
+  return fixedAtoms(z) > fixedAtoms(y) && fixedAtoms(y) > fixedAtoms(x) ? { z, y, x } : null;
 }
 
 /**
@@ -267,12 +341,40 @@ function nameSet(
   dimension: number,
   characterOf: (op: SymmetryOperation | null) => number,
 ): string {
+  const parity = (): string => {
+    if (census.inversion) return characterOf(census.inversion) >= 0 ? 'g' : 'u';
+    if (census.mirrorPerpendicular) return characterOf(census.mirrorPerpendicular) >= 0 ? "'" : '"';
+    return '';
+  };
+
+  // The cubic groups have no unique axis, so no B: every one-dimensional set
+  // is an A. Subscripts come from the four-fold operation (see censusOf).
+  if (CUBIC_GROUPS.has(census.symbol)) {
+    const base = dimension === 1 ? 'a' : dimension === 2 ? 'e' : dimension === 3 ? 't' : null;
+    if (!base) return '?';
+    let subscript = '';
+    if (base !== 'e' && census.fourFold) subscript = characterOf(census.fourFold) >= 0 ? '1' : '2';
+    return base + subscript + parity();
+  }
+
+  // D2 and D2h: A is symmetric under all three C2s; B_k under exactly one —
+  // the z axis for B1, y for B2, x for B3 (Mulliken's axes, see mullikenD2Axes)
+  if (census.symbol === 'D2' || census.symbol === 'D2h') {
+    if (dimension !== 1) return '?';
+    const axes = census.d2Axes;
+    // symmetric under two of the C2s is symmetric under their product, the third
+    const [one, other] = axes ? [axes.z, axes.y] : [census.principalOperation, census.perpendicularC2];
+    if (characterOf(one) >= 0 && characterOf(other) >= 0) return 'a' + parity();
+    if (!axes) return 'b' + parity();
+    const k = characterOf(axes.z) >= 0 ? '1' : characterOf(axes.y) >= 0 ? '2' : '3';
+    return 'b' + k + parity();
+  }
+
   const principal = characterOf(census.principalOperation);
   let base: string;
   if (dimension === 1) base = principal >= 0 ? 'a' : 'b';
   else if (dimension === 2) base = 'e';
-  else if (dimension === 3) base = 't';
-  else return '?';
+  else return '?'; // a three-fold set needs a cubic group
 
   let subscript = '';
   if (base === 'a' || base === 'b') {
@@ -286,15 +388,10 @@ function nameSet(
     // a1/b1 are symmetric under that mirror while a2/b2 are antisymmetric.
     const reference = census.perpendicularC2 ?? census.mirrorParallel;
     if (reference) subscript = characterOf(reference) >= 0 ? '1' : '2';
-  } else if (base === 't') {
-    // T1/T2 have the same character under every C2, so the σd decides — and
-    // with the opposite sense to A1/A2: T2 is the one *symmetric* under σd in
-    // both Td and Oh
-    if (census.mirrorParallel) subscript = characterOf(census.mirrorParallel) >= 0 ? '2' : '1';
-    else if (census.perpendicularC2) subscript = characterOf(census.perpendicularC2) >= 0 ? '2' : '1';
-  } else if (base === 'e') {
+  } else {
     // numeric subscripts only where a group has more than one E irrep, which
-    // for the axial families means floor((n−1)/2) > 1, i.e. n ≥ 5
+    // for the axial families means floor((n−1)/2) > 1, i.e. n ≥ 5 — where n
+    // is the S2n's order in S8 and D4d, whose E1, E2, E3 it numbers
     const eCount = Math.floor((census.order - 1) / 2);
     if (eCount > 1) {
       const k = Math.round((Math.acos(Math.max(-1, Math.min(1, principal / 2))) * census.order) / (2 * Math.PI));
@@ -302,10 +399,7 @@ function nameSet(
     }
   }
 
-  let suffix = '';
-  if (census.inversion) suffix = characterOf(census.inversion) >= 0 ? 'g' : 'u';
-  else if (census.mirrorPerpendicular) suffix = characterOf(census.mirrorPerpendicular) >= 0 ? "'" : '"';
-  return base + subscript + suffix;
+  return base + subscript + parity();
 }
 
 /** Rotation by `angle` about a unit axis (Rodrigues) — for the operations a
@@ -437,7 +531,7 @@ export function labelIrreps(
   }
   if (group.operations.length <= 1) return labels;
 
-  const census = censusOf(group.operations);
+  const census = censusOf(group.operations, group.symbol);
 
   const matrices = group.operations.map((op) => representationMatrix(basis, op));
   for (const set of degenerateSets(energies)) {

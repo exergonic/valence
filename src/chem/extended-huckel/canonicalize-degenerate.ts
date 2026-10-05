@@ -10,13 +10,22 @@
  *
  * This rotates each degenerate set into the combination a chemist expects, by
  * diagonalizing the second-moment operators x², then y², then z² within the
- * set, refining any remaining degeneracy in that order. Those operators are
- * symmetry operators whenever the molecule has symmetry — x² commutes with a
- * mirror plane perpendicular to x, so it does not mix the symmetry-adapted
- * partners and its eigenvalues separate them — and they are perfectly
- * well-defined when it has none, which is why no symmetry detection is
- * needed. The result for a set of atomic p orbitals is px, py, pz; for
- * benzene's e1g π pair it is the textbook pair with a nodal plane each.
+ * set, refining any remaining degeneracy in that order. Each is a point-charge
+ * version of the true operator: every AO is weighted by its *nucleus's* x², not
+ * by ⟨χ|x²|χ⟩, and overlap is ignored. That keeps it diagonal in the AO basis
+ * and cheap, and it is all the job needs, because the operators commute with
+ * the molecule's mirror planes — x² is unchanged by a mirror perpendicular to
+ * x — so they do not mix symmetry-adapted partners and their eigenvalues
+ * separate them, with no symmetry detection at all. For benzene's e1g π pair
+ * the result is the textbook pair with a nodal plane each.
+ *
+ * What the point-charge form cannot see is the shape of an orbital on one
+ * centre: AOs on the same atom, or on atoms with the same x², y² and z², weigh
+ * the same. A set carried only by such AOs (a lone atom's p shell) is left as
+ * the solver returned it — still a correct orthonormal basis of the set. A set
+ * with weight on neighbours is separated by where the neighbours sit, which is
+ * why methane's t2 comes out near px/py/pz only because the frame of a
+ * spherical top happens to put one C–H bond on an axis.
  *
  * The rotation is internal to the subspace, so energies, occupations and the
  * space spanned are untouched. Each orbital's overall sign is fixed too (the
@@ -111,10 +120,14 @@ export function canonicalizeDegenerateSets(
     i = j;
   }
 
-  // a sign is arbitrary too: make each orbital's largest coefficient positive
+  // A sign is arbitrary too: make each orbital's largest coefficient positive.
+  // Symmetry-equivalent atoms carry coefficients equal in size, so "largest" is
+  // a tie decided by rounding noise; taking the FIRST AO within a hair of the
+  // largest makes the choice — and the drawn phase colours — stable.
   for (const mo of orbitals) {
-    let largest = 0;
-    for (let ao = 1; ao < mo.length; ao++) if (Math.abs(mo[ao]) > Math.abs(mo[largest])) largest = ao;
+    let largestSize = 0;
+    for (const c of mo) largestSize = Math.max(largestSize, Math.abs(c));
+    const largest = mo.findIndex((c) => Math.abs(c) > largestSize - 1e-6);
     if (mo[largest] < 0) for (let ao = 0; ao < mo.length; ao++) mo[ao] = -mo[ao];
   }
 
