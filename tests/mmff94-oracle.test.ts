@@ -158,8 +158,8 @@ const CORPUS: [string, Molecule][] = [
   // The mapping this test checks — MMFF94 atom type to the valence model's
   // hybridization — is a main-group one: it has no entry for a metal centre,
   // and a metallocene's haptic bonding is outside the VSEPR picture entirely.
-  // Ferrocene is in EXAMPLES for the MO layer, so it is excluded here by its
-  // own element set rather than excused by a deviation entry.
+  // The metal-complex examples are excluded here by their own element sets
+  // rather than excused by deviation entries.
   ...EXAMPLES
     .map((e) => [e.name, parseMolBlock(e.mol)] as [string, Molecule])
     .filter(([, mol]) => mol.atoms.every((a) => VALENCE_MODEL_ELEMENTS.has(a.element))),

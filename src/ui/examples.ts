@@ -279,64 +279,6 @@ M  END
 `;
 
 
-// Ferrocene, from the ORCA optimisation in ~/Code/avo_ibo/examples/ferrocene.xyz
-// (wB97X-D3/def2-TZVP, D5h held to 1e-4, no imaginary modes). The bonds are by
-// distance from that geometry, not hand-placed. It is the fixture molecule for
-// the d block — see tests/references/eht/tm-reference.json.
-const FERROCENE = HEADER + ` 21 30  0  0  0  0  0  0  0  0999 V2000
-    0.0003   -0.0000    0.0000 Fe  0  0  0  0  0  0  0  0  0  0  0  0
-    1.2076    0.0000    1.6568 C   0  0  0  0  0  0  0  0  0  0  0  0
-    2.2862    0.0000    1.6354 H   0  0  0  0  0  0  0  0  0  0  0  0
-    0.3733    1.1486    1.6566 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.7067    2.1744    1.6358 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.9768    0.7098    1.6565 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.8501    1.3429    1.6356 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.9768   -0.7098    1.6566 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.8502   -1.3429    1.6361 H   0  0  0  0  0  0  0  0  0  0  0  0
-    0.3733   -1.1486    1.6567 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.7066   -2.1744    1.6355 H   0  0  0  0  0  0  0  0  0  0  0  0
-    1.2076    0.0000   -1.6568 C   0  0  0  0  0  0  0  0  0  0  0  0
-    2.2862    0.0000   -1.6354 H   0  0  0  0  0  0  0  0  0  0  0  0
-    0.3733    1.1486   -1.6566 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.7066    2.1744   -1.6358 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.9768    0.7098   -1.6565 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.8501    1.3429   -1.6356 H   0  0  0  0  0  0  0  0  0  0  0  0
-   -0.9768   -0.7098   -1.6566 C   0  0  0  0  0  0  0  0  0  0  0  0
-   -1.8502   -1.3429   -1.6361 H   0  0  0  0  0  0  0  0  0  0  0  0
-    0.3733   -1.1486   -1.6567 C   0  0  0  0  0  0  0  0  0  0  0  0
-    0.7066   -2.1744   -1.6355 H   0  0  0  0  0  0  0  0  0  0  0  0
-  1  2  1  0  0  0  0
-  1  4  1  0  0  0  0
-  1  6  1  0  0  0  0
-  1  8  1  0  0  0  0
-  1 10  1  0  0  0  0
-  1 12  1  0  0  0  0
-  1 14  1  0  0  0  0
-  1 16  1  0  0  0  0
-  1 18  1  0  0  0  0
-  1 20  1  0  0  0  0
-  2  3  1  0  0  0  0
-  2  4  1  0  0  0  0
-  2 10  1  0  0  0  0
-  4  5  1  0  0  0  0
-  4  6  1  0  0  0  0
-  6  7  1  0  0  0  0
-  6  8  1  0  0  0  0
-  8  9  1  0  0  0  0
-  8 10  1  0  0  0  0
- 10 11  1  0  0  0  0
- 12 13  1  0  0  0  0
- 12 14  1  0  0  0  0
- 12 20  1  0  0  0  0
- 14 15  1  0  0  0  0
- 14 16  1  0  0  0  0
- 16 17  1  0  0  0  0
- 16 18  1  0  0  0  0
- 18 19  1  0  0  0  0
- 18 20  1  0  0  0  0
- 20 21  1  0  0  0  0
-M  END`;
-
 
 // Diborane, from the wB97X-D/6-31G(d,p) geometry in ~/Code/avo_ibo/examples
 // (its bonds by distance). The hydrogen bridges are the 3c-2e case the
@@ -435,7 +377,6 @@ export const EXAMPLES: Example[] = [
   { name: 'Phosphorus pentachloride (PCl₅)', mol: PCL5 },
   { name: 'Sulfur hexafluoride (SF₆)', mol: SF6 },
   { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
-  { name: 'Ferrocene (Fe(C₅H₅)₂)', mol: FERROCENE },
   { name: 'Diborane (B₂H₆)', mol: DIBORANE },
   { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2 },
   { name: 'Tetrachloronickelate(II) ([NiCl₄]²⁻, triplet)', mol: NICL4, multiplicity: 3 },

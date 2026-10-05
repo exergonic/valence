@@ -15,6 +15,7 @@ import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { exampleGeometry } from './helpers/local-geometry';
+import { FERROCENE_MOL } from './fixtures';
 import { detectPointGroup, symmetrizeMolecule } from '../src/geometry/symmetrize';
 import { assignBasis } from '../src/chem/extended-huckel/assign-basis';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
@@ -80,11 +81,11 @@ const occupied = async (name: string) => {
 
 describe('the electron-domain model refuses what it cannot describe', () => {
   it('a metal centre gets no label, and its haptic contacts are not domains', async () => {
-    // Ferrocene is in EXAMPLES for the MO layer. The electron-domain model has
+    // Ferrocene (no longer an example; drawn by a user). The electron-domain model has
     // no answer for iron — ten contacts clamped into the six-domain ceiling
     // used to come out "sp³d²" — and counting a haptic Fe–C contact as a σ bond
     // made every cyclopentadienyl carbon read sp³ instead of sp².
-    const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.includes('Ferrocene'))!.mol);
+    const molecule = parseMolBlock(FERROCENE_MOL);
     const assigned = assignOrbitals(molecule);
     const iron = assigned[0];
     expect(iron.described).toBe(false);
