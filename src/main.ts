@@ -5,6 +5,7 @@ import { setupControls } from './ui/controls';
 import { setupTooltip } from './ui/tooltip';
 import { setupContextMenu } from './ui/context-menu';
 import { setupMoPanel } from './ui/mo-diagram';
+import { setupModelViews } from './ui/model-views';
 import { setupAnnotations } from './ui/annotations';
 import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, applyViewState } from './ui/view-state';
 import { parseMolBlock } from './mol-parser';
@@ -231,7 +232,8 @@ async function main() {
     scene.orbitalGroup,
   );
   setupContextMenu(scene, document.getElementById('canvas-container')!);
-  setupMoPanel(scene);
+  const moPanel = setupMoPanel(scene);
+  setupModelViews(scene, moPanel);
   setupKeyboardShortcuts(scene);
   setupMeasureMode(scene);
   setupViewStateUI(scene, annotations);

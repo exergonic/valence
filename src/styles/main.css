@@ -982,6 +982,65 @@ html, body {
 
 /* ── Floating Action Buttons ── */
 
+/* ── Model views: the preset bar along the bottom of the 3D view ── */
+
+/* The strip runs from the canvas's left edge to the right dock's, and the bar
+   centres in it — centred on the canvas instead, the open MO panel (380 px,
+   absolutely positioned at the right) covered the last button. Collapsed, the
+   panel is a rail, and only it and the corner buttons need clearing. */
+#model-views {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 56px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+#canvas-container:has(#mo-panel:not(.collapsed)) #model-views {
+  right: 404px;
+}
+
+.model-views-bar {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(30, 30, 35, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+  max-width: 100%;
+  /* a narrow window with the MO panel open leaves ~320 px: wrap to two rows
+     rather than scroll sideways and hide a button */
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#model-views button {
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #aaa;
+  font-size: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+
+#model-views button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#model-views button.active {
+  color: #fff;
+  background: #4488ff;
+}
+
 #canvas-actions {
   position: absolute;
   bottom: 12px;

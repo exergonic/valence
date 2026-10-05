@@ -58,7 +58,14 @@ const DEGENERATE_TOLERANCE = DEGENERATE_TOLERANCE_EV;
 /** localStorage key for the MO panel's collapsed state (see setupMoPanel). */
 const MO_COLLAPSED_KEY = 'valence:mo-collapsed';
 
-export function setupMoPanel(ctx: SceneContext) {
+/** What the rest of the UI may ask of the MO panel (the model-view presets). */
+export interface MoPanel {
+  setCollapsed(collapsed: boolean): void;
+  setView(view: 'delocalized' | 'localized'): void;
+  clearSelections(): void;
+}
+
+export function setupMoPanel(ctx: SceneContext): MoPanel {
   const panel = document.getElementById('mo-panel')!;
   const list = document.getElementById('mo-list')!;
   const readout = document.getElementById('mo-readout')!;
@@ -169,17 +176,20 @@ export function setupMoPanel(ctx: SceneContext) {
       ctx.rerender();
     });
   }
-  collapse?.addEventListener('click', () => {
-    const collapsed = panel.classList.toggle('collapsed');
+  const setCollapsed = (collapsed: boolean) => {
+    panel.classList.toggle('collapsed', collapsed);
     try {
       localStorage.setItem(MO_COLLAPSED_KEY, collapsed ? '1' : '0');
     } catch {
       // private mode or no storage: the panel just won't remember
     }
-    collapse.textContent = collapsed ? '+' : '−';
-    collapse.title = collapsed ? 'Expand' : 'Collapse';
+    if (collapse) {
+      collapse.textContent = collapsed ? '+' : '−';
+      collapse.title = collapsed ? 'Expand' : 'Collapse';
+    }
     draw();
-  });
+  };
+  collapse?.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
 
   // A collapsed panel survives reloads — it is a workspace preference,
   // not a per-molecule state.
@@ -460,6 +470,19 @@ export function setupMoPanel(ctx: SceneContext) {
   }
 
   draw();
+
+  return {
+    setCollapsed,
+    setView,
+    /** Stop drawing any MO or localized orbital — the VSEPR lobes and the
+     *  plain molecule are then what is on stage. */
+    clearSelections: () => {
+      ctx.display.moIndex = null;
+      ctx.display.localizedSelection = [];
+      draw();
+      ctx.rerender();
+    },
+  };
 }
 
 /** The spin names a chemist reads, for the open-shell note. */
