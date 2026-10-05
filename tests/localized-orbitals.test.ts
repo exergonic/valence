@@ -5,6 +5,7 @@
 // under a delocalized π sextet. The localization is a unitary transform, so the
 // invariants (S-orthonormality, the energy sum) are pinned too — those catch a
 // rotation applied in the wrong convention, which the topology alone did.
+import { readFileSync } from 'node:fs';
 import { describe, it, expect } from 'vitest';
 import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock, type Molecule } from '../src/mol-parser';
@@ -304,6 +305,27 @@ describe('the topology PM recovers', () => {
     const list = orderLocalizedOrbitals(molecule, result, rows).filter((o) => o.occupied);
     expect(count(list, 'sigma')).toBe(1);
     expect(count(list, 'lone pair')).toBe(6);
+    expect(count(list, 'pi')).toBe(0);
+  });
+
+  it('P₄ is six σ bonds and four lone pairs — a p-rich bond off the frame axes is still σ', () => {
+    // wB97X-D3/def2-TZVP minimum (tests/references/dft). Each P draws 0.87 of
+    // its share of a bond from p, past the π test's 0.85 gate, so the bond
+    // direction decides — and a tetrahedron's edges do not lie on the frame's
+    // axes. Weighting each p AO by its own axis's projection² scored a bond
+    // along (1,1,1) at 1/3 and called five of the six edges π.
+    const lines = readFileSync(new URL('./references/dft/tetraphosphorus.xyz', import.meta.url), 'utf8')
+      .trim().split(/\r?\n/).slice(2);
+    const atoms = lines.map((line) => {
+      const [element, x, y, z] = line.trim().split(/\s+/);
+      return { element, x: Number(x), y: Number(y), z: Number(z), charge: 0 };
+    });
+    const edges = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
+    const molecule: Molecule = { atoms, bonds: edges.map(([a, b]) => ({ atom1Index: a, atom2Index: b, order: 1 })) };
+    const result = solveExtendedHuckel(molecule)!;
+    const list = orderLocalizedOrbitals(molecule, result, localizeOrbitals(molecule, result)!).filter((o) => o.occupied);
+    expect(count(list, 'sigma')).toBe(6);
+    expect(count(list, 'lone pair')).toBe(4);
     expect(count(list, 'pi')).toBe(0);
   });
 

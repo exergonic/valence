@@ -11,9 +11,11 @@
  *
  * The list is an **energy ladder**, ascending: lowest at the bottom of the
  * panel, rising as you read up, the way the canonical level diagram and other
- * programs draw it. Water comes out as the two O–H bonds (−22.05 eV), the
- * in-plane lone pair (−21.72), the pure 2p lone pair (−14.80, which is the 1b1
- * exactly), then the two σ*: bonds below lone pairs, below the empties.
+ * programs draw it. Water comes out as the two O–H bonds (−21.94 eV on the
+ * snapped MMFF94 geometry the tests use), the in-plane lone pair (−21.91), the
+ * pure 2p lone pair (−14.80, which is the 1b1 exactly), then the two σ*: bonds
+ * below lone pairs, below the empties. The bonds and the in-plane lone pair
+ * sit 0.03 eV apart, so that part of the order is the geometry's to decide.
  *
  * **Class-first was tried and reversed** (added 2026-09-29, removed 2026-09-30).
  * Grouping lone pairs, then bonds, then the delocalized set gives a legible
@@ -197,11 +199,18 @@ function atomShares(
 }
 
 /** True when both atoms' p density lies along the bond rather than across it.
- *  The basis axes are the calculation frame's, so the bond has to be too. */
+ *  The basis axes are the calculation frame's, so the bond has to be too.
+ *
+ *  An atom's three p coefficients are one vector, the direction its p hybrid
+ *  points, and the share along the bond is (c·û)²/|c|² — a projection, so it
+ *  does not care how the bond sits in the frame. Weighting each AO's Mulliken
+ *  weight by its own axis's projection² instead (as this did) is only right
+ *  for a bond along a coordinate axis: a p hybrid pointing straight down a
+ *  bond along (1,1,1) scored 1/3, under the 0.5 cut — a σ bond called π. */
 function pPointsAlongBond(
   a: number,
   b: number,
-  weights: number[],
+  coefficients: number[],
   basis: ExtendedHuckelResult['basis'],
   frameAtoms: Molecule['atoms'],
 ): boolean {
@@ -214,17 +223,16 @@ function pPointsAlongBond(
   const by = dy / norm;
   const bz = dz / norm;
   const alongFraction = (atom: number) => {
-    let along = 0;
-    let total = 0;
+    let along = 0; // c·û
+    let total = 0; // |c|²: the three p functions on one atom are orthonormal
     for (let m = 0; m < basis.length; m++) {
       const orbital = basis[m];
       if (orbital.atomIndex !== atom || orbital.angular !== 'p') continue;
-      const w = Math.max(0, weights[m]);
-      const proj = orbital.axis[0] * bx + orbital.axis[1] * by + orbital.axis[2] * bz;
-      total += w;
-      along += w * proj * proj;
+      const c = coefficients[m];
+      along += c * (orbital.axis[0] * bx + orbital.axis[1] * by + orbital.axis[2] * bz);
+      total += c * c;
     }
-    return total > 1e-8 ? along / total : 0;
+    return total > 1e-12 ? (along * along) / total : 0;
   };
   return alongFraction(a) > 0.5 && alongFraction(b) > 0.5;
 }
@@ -248,7 +256,7 @@ function twoCentreType(
   a: AtomShare,
   b: AtomShare,
   elements: string[],
-  weights: number[],
+  coefficients: number[],
   basis: ExtendedHuckelResult['basis'],
   frameAtoms: Molecule['atoms'],
 ): 'sigma' | 'pi' | 'delta' {
@@ -264,7 +272,7 @@ function twoCentreType(
   }
   const fraction = (share: AtomShare) => (share.total > 0 ? share.p / share.total : 0);
   if (fraction(a) <= PI_P_FRACTION || fraction(b) <= PI_P_FRACTION) return 'sigma';
-  return pPointsAlongBond(a.atom, b.atom, weights, basis, frameAtoms) ? 'sigma' : 'pi';
+  return pPointsAlongBond(a.atom, b.atom, coefficients, basis, frameAtoms) ? 'sigma' : 'pi';
 }
 
 /**
@@ -279,7 +287,7 @@ function classify(
   occupied: boolean,
   bondPops: number[],
   molecule: Molecule,
-  weights: number[],
+  coefficients: number[],
   basis: ExtendedHuckelResult['basis'],
   frameAtoms: Molecule['atoms'],
 ): LocalizedCharacter {
@@ -293,7 +301,7 @@ function classify(
   const twoCentre = (gate: number) => share(0) + share(1) > gate && share(1) > BOND_SECOND_MIN;
   const bondCharacter = (): LocalizedCharacter => {
     if (!second) return 'sigma';
-    const kind = twoCentreType(first, second, elements, weights, basis, frameAtoms);
+    const kind = twoCentreType(first, second, elements, coefficients, basis, frameAtoms);
     const bondedPair = molecule.bonds.findIndex(
       (b) => (b.atom1Index === first.atom && b.atom2Index === second.atom)
         || (b.atom2Index === first.atom && b.atom1Index === second.atom),
@@ -337,7 +345,7 @@ function classify(
   }
 
   if (second && twoCentre(BOND_SHARE)) {
-    const kind = twoCentreType(first, second, elements, weights, basis, frameAtoms);
+    const kind = twoCentreType(first, second, elements, coefficients, basis, frameAtoms);
     return kind === 'pi' ? 'pi antibond' : kind === 'delta' ? 'delta antibond' : 'sigma antibond';
   }
   if (third && third.total > VIRT_THREE_CENTRE_THIRD) {
@@ -370,7 +378,7 @@ function describe(
   return {
     coefficients,
     energy: quadratic(result.hamiltonian, coefficients),
-    character: classify(shares, occupied, bondPops, molecule, weights, result.basis, frameAtoms),
+    character: classify(shares, occupied, bondPops, molecule, coefficients, result.basis, frameAtoms),
     occupied,
     populations,
     atoms: ordered,

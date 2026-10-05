@@ -6,8 +6,9 @@ Final geometries of ORCA optimizations, copied verbatim from the run's `.xyz`:
 
 Each run converged and its frequency calculation has no imaginary mode, so
 every structure here is a true minimum. Used where a test needs the molecule's
-real symmetry (the irrep labels): an embedder's geometry is only approximately
-symmetric, and a hand-typed one carries silent errors.
+real geometry (the irrep labels, the σ/π typing of P₄'s off-axis bonds): an
+embedder's geometry is only approximately symmetric, a hand-typed one carries
+silent errors, and PubChem's 3D conformers are not minima at any stated level.
 
 | File | Point group | Lowest frequency (cm⁻¹) |
 |------|-------------|-------------------------|
@@ -18,3 +19,4 @@ symmetric, and a hand-typed one carries silent errors.
 | cubane.xyz | Oh | 624 |
 | naphthalene.xyz | D2h | 170 |
 | dichlorofluoromethane.xyz | Cs | 280 |
+| tetraphosphorus.xyz | Td | 415 |

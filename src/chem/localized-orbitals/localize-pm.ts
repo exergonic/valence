@@ -326,11 +326,14 @@ function localizeBlock(
 
 /** Each orbital's largest coefficient made positive: a sign is as arbitrary as
  *  a mixture, and a stable one keeps the drawn phase colours and the list
- *  order from moving between runs. */
+ *  order from moving between runs. A localized π* carries equal and opposite
+ *  coefficients on its two atoms, so "largest" is a tie that rounding would
+ *  settle; the FIRST coefficient within a hair of the largest settles it. */
 function fixSigns(rows: number[][]): void {
   for (const row of rows) {
-    let largest = 0;
-    for (const c of row) if (Math.abs(c) > Math.abs(largest)) largest = c;
-    if (largest < 0) for (let m = 0; m < row.length; m++) row[m] = -row[m];
+    let largestSize = 0;
+    for (const c of row) largestSize = Math.max(largestSize, Math.abs(c));
+    const largest = row.findIndex((c) => Math.abs(c) > largestSize - 1e-6);
+    if (row[largest] < 0) for (let m = 0; m < row.length; m++) row[m] = -row[m];
   }
 }
