@@ -4,8 +4,9 @@ import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { computeLocalGeometry } from '../geometry/local-geometry';
-import { refineWithGfn2, GFN2_NOTE } from '../geometry/gfn2-refine';
+import { refineWithGfn2, GFN2_NOTE, HESSIAN_SADDLE_THRESHOLD } from '../geometry/gfn2-refine';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
+import { ringPuckerWarnings } from '../geometry/ring-pucker';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import { symmetrizeMolecule } from '../geometry/symmetrize';
 import type { PubChemInfo } from '../geometry/resolve3d';
@@ -107,9 +108,42 @@ function composeNotes(
   // dipole caveats below are for.
   const gaps = engine === 'gfn2' ? [] : parameterGapWarnings(molecule);
   const info = [...gaps];
+  // A puckered trigonal 3-ring centre is MMFF94's reference-angle artifact
+  // (ring-pucker.ts) — reported, never repaired. The GFN2 tier gets those
+  // centres right on its own, so the check runs only on other sources.
+  if (engine !== 'gfn2') info.push(...ringPuckerWarnings(molecule));
   if (dipole && gaps.length > 0) info.push(DIPOLE_APPROXIMATE);
   if (dipole?.residualCharge) info.push(DIPOLE_RESIDUAL_CHARGE);
   return { warnings, info };
+}
+
+/**
+ * The Hessian verdict line for a converged GFN2 run. A gradient-based stop
+ * cannot tell a minimum from a saddle — both have zero gradient — so the
+ * curvature check is what lets the app say which one is on screen. The saddle
+ * case is real: the planar cyclopropenyl anion is one, and the optimiser would
+ * otherwise report it as converged.
+ */
+function gfn2HessianNote(lowestMode: number): string {
+  return lowestMode < HESSIAN_SADDLE_THRESHOLD
+    ? 'GFN2-xTB converged to a saddle, not a minimum — the lowest Hessian mode is imaginary '
+      + `(λ = ${lowestMode.toFixed(3)} Eh/bohr²), so the geometry on screen is that stationary point.`
+    // The raw Hessian's lowest eigenvalue at a minimum is a rigid-body zero
+    // mode (~0 ± the FD noise floor), so it is not a number worth printing —
+    // only a negative one, far below the floor, is information.
+    : 'GFN2-xTB Hessian: minimum — no imaginary mode.';
+}
+
+/**
+ * Put a geometry in the scene. `gfn2Charges` rides along only when the GFN2
+ * tier produced this structure — they belong to exactly this atom list, and
+ * buildScene drops the pairing if it is ever broken.
+ */
+function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number[] | null) {
+  ctx.currentMolecule = molecule;
+  ctx.gfn2Charges =
+    gfn2Charges && gfn2Charges.length === molecule.atoms.length ? { molecule, charges: gfn2Charges } : null;
+  buildScene(ctx);
 }
 
 function updateMoleculeInfo(info: PubChemInfo & { dipole?: DipoleResult | null; info?: string[] }) {
@@ -246,6 +280,9 @@ export function mountJsmePanel(ctx: SceneContext) {
       const molBlock = applet.molFile();
       const t1 = performance.now();
       let molecule = parseMolBlock(molBlock);
+      // The GFN2 tier hands back its own charges with the geometry; the fetch
+      // and MMFF94 paths have none to offer.
+      let gfn2Charges: number[] | null = null;
       const t2 = performance.now();
       if (molecule.atoms.length === 0) return;
 
@@ -286,12 +323,16 @@ export function mountJsmePanel(ctx: SceneContext) {
           return;
         }
         molecule = local.molecule;
+        gfn2Charges = local.gfn2Charges ?? null;
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
         const dipole = computeDipole(molecule);
         const notes = composeNotes(local.warnings, molecule, dipole, local.engine);
         notes.info.push(...snapped.info);
+        if (local.engine === 'gfn2' && local.gfn2LowestMode !== undefined) {
+          notes.info.push(gfn2HessianNote(local.gfn2LowestMode));
+        }
         updateMoleculeInfo({
           source: local.engine === 'gfn2' ? 'gfn2' : 'local',
           formula,
@@ -312,8 +353,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         });
       }
 
-      ctx.currentMolecule = molecule;
-      buildScene(ctx);
+      showMolecule(ctx, molecule, gfn2Charges);
     } finally {
       renderBtn.textContent = 'Render Molecule';
       renderBtn.disabled = false;
@@ -345,8 +385,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         }
         const snapped = snapToSymmetry(refined.molecule);
         const next = snapped.molecule;
-        ctx.currentMolecule = next;
-        buildScene(ctx);
+        showMolecule(ctx, next, refined.charges);
         const { formula, weight } = computeFormula(next.atoms.map(a => a.element));
         const dipole = computeDipole(next);
         // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
@@ -365,6 +404,7 @@ export function mountJsmePanel(ctx: SceneContext) {
             : `GFN2-xTB stopped after ${refined.iterations} steps at ${refined.energyHartree.toFixed(6)} Eh `
               + 'without reaching its convergence threshold — treat the geometry as approximate.',
         );
+        if (refined.lowestHessianMode !== null) info.push(gfn2HessianNote(refined.lowestHessianMode));
         updateMoleculeInfo({ source: 'gfn2', formula, weight: `${weight}`, dipole, warnings: [], info });
       } catch {
         showRenderError('GFN2-xTB refinement failed — the geometry is unchanged.');

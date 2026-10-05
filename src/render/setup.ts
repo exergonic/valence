@@ -16,6 +16,24 @@ import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
 export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complementary' | 'cool' | 'warm' | 'highcontrast' | 'custom';
 
+/**
+ * Which partial-charge model the charge labels and the ESP surface draw.
+ *
+ * MMFF94 BCI charges always exist (unless an element is outside the MMFF94
+ * type space); GFN2-xTB's own Mulliken SCC charges exist only for a structure
+ * the GFN2 tier produced, and the control that offers the choice stays
+ * disabled without one (see syncChargeModelControl). The dipole arrow is not
+ * part of this: it stays on MMFF94.
+ */
+export type ChargeModel = 'mmff94' | 'gfn2';
+
+/** GFN2-xTB per-atom charges, paired with the molecule they belong to — a
+ *  charge array is only valid for the geometry it was computed at. */
+export interface Gfn2Charges {
+  molecule: Molecule;
+  charges: number[];
+}
+
 export interface ColorSettings {
   scheme: ColorScheme;
   sigma: [number, number, number];  // HSV
@@ -52,6 +70,10 @@ export interface DisplaySettings {
   showOrbitals: boolean;
   /** Charge-model ESP surface (translucent vdW spheres colored by V). */
   showEsp: boolean;
+  /** Which partial-charge model the charge labels and the ESP surface draw.
+   *  GFN2-xTB's own charges are offered only for a structure the GFN2 tier
+   *  produced; the dipole arrow stays on MMFF94 either way. */
+  chargeModel: ChargeModel;
   /** ESP surface translucency — 0.05..0.95 (1 − opacity reads as see-through). */
   espOpacity: number;
   /** Draw a selected MO as one continuous isosurface (default) rather than as
@@ -123,11 +145,21 @@ export interface SceneContext {
   dipole: DipoleResult | null;
   /** Resolved per-atom partial charges for the current molecule — the same
    *  values the dipole arrow uses (BCI + residual placement). Feeds the
-   *  charge label mode (and the future ESP surface). */
+   *  charge label mode and, at the charge model the control selects, the ESP
+   *  surface. */
   charges: ResolvedCharges | null;
+  /** GFN2-xTB's own per-atom charges for the displayed structure, when it
+   *  came out of the GFN2 tier — the second charge model the display can
+   *  offer. Paired with its molecule: buildScene drops the bundle when it does
+   *  not describe the molecule on screen, so a stale array can never be read. */
+  gfn2Charges: Gfn2Charges | null;
   /** Cached fused vdW ESP surface for the current molecule (computed lazily
    *  on the first ESP render; null until then or for an untypeable molecule). */
   espSurface: EspSurfaceData | null;
+  /** The charge model `espSurface` was built from — the surface is a function
+   *  of the charges as much as of the geometry, so a model switch re-extracts
+   *  rather than reusing the other model's potential field. */
+  espSurfaceModel: ChargeModel | null;
   /** Extracted isosurfaces, keyed `mo:<index>` / `localized:<index>`. Each
    *  costs ~50 ms to extract, and the same orbital can be picked, dropped and
    *  picked again while comparing orbitals — so they are kept until the
@@ -278,6 +310,7 @@ export function initScene(container: HTMLElement): SceneContext {
       localizedSelection: [],
       showOrbitals: true,
       showEsp: false,
+      chargeModel: 'mmff94',
       espOpacity: 0.5,
       smoothMo: true,
       moOpacity: 0.85,
@@ -290,7 +323,9 @@ export function initScene(container: HTMLElement): SceneContext {
     atomOrbitals: null,
     dipole: null,
     charges: null,
+    gfn2Charges: null,
     espSurface: null,
+    espSurfaceModel: null,
     moSurfaces: new Map(),
     moFields: new Map(),
     ehResult: null,

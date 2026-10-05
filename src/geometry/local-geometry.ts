@@ -26,7 +26,6 @@
  */
 import type { Molecule } from '../mol-parser';
 import { scaleSkeleton } from './place3d';
-import { restoreThreeRingPlanarity } from './ring-planarity';
 import { refineWithGfn2 } from './gfn2-refine';
 import { embed3D, embedAndRefine, finite, honourWedges, type EmbedResult } from './mmff-refine';
 
@@ -42,9 +41,16 @@ export async function computeLocalGeometry(molecule: Molecule): Promise<EmbedRes
   const refined = await refineWithGfn2(start).catch(() => null);
   if (!refined || !refined.converged) return mmff();
 
-  const planar = restoreThreeRingPlanarity(refined.molecule);
-  if (!finite(planar)) return mmff();
-  return { ...honourWedges(start, planar), engine: 'gfn2' };
+  if (!finite(refined.molecule)) return mmff();
+  // The engine's geometry is the authority — no post-hoc planarity repair. The
+  // charges ride along with the geometry they were computed at, so the display
+  // can offer GFN2 charges next to the MMFF94 charge model.
+  return {
+    ...honourWedges(start, refined.molecule),
+    engine: 'gfn2',
+    gfn2Charges: refined.charges ?? undefined,
+    gfn2LowestMode: refined.lowestHessianMode ?? undefined,
+  };
 }
 
 let worker: Worker | null = null;

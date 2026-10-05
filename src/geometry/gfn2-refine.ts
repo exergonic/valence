@@ -26,7 +26,26 @@ export interface Gfn2Result {
   iterations: number;
   converged: boolean;
   milliseconds: number;
+  /** Per-atom GFN2 charges (electrons) at the returned geometry, indexed like
+   *  `molecule.atoms`; null when the engine could not supply them for that
+   *  point. */
+  charges: number[] | null;
+  /** Lowest eigenvalue of the numerical Hessian at the returned geometry
+   *  (Eh/bohr²), or null when the check was skipped (non-converged run, above
+   *  the size gate, or the Hessian failed). Compare with
+   *  HESSIAN_SADDLE_THRESHOLD. */
+  lowestHessianMode: number | null;
 }
+
+/**
+ * Below this lowest Hessian eigenvalue (Eh/bohr²) a converged geometry is a
+ * saddle, not a minimum. A gradient-based stop cannot tell the two apart — a
+ * saddle has zero gradient too — so the curvature is what makes the claim.
+ * The numerical Hessian's noise floor measures ±0.003 (step-independent,
+ * 2026-10-02), while a real imaginary mode of the planar cyclopropenyl anion
+ * sits at −0.16, so 0.02 separates them cleanly.
+ */
+export const HESSIAN_SADDLE_THRESHOLD = -0.02;
 
 /**
  * The honest label for a GFN2-refined geometry, shown in the Info log.

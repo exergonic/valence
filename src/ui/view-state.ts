@@ -15,6 +15,8 @@ export interface ViewState {
     atomScale: number;
     bondScale: number;
     labelMode: string;
+    /** Absent in views saved before the charge-model selector existed. */
+    chargeModel?: string;
     orbitalPreset: string;
     atomStyle: string;
     bgColor: string;
@@ -43,6 +45,7 @@ export function serializeView(ctx: SceneContext, annotations: Annotation[]): Vie
       atomScale: ctx.display.atomScale,
       bondScale: ctx.display.bondScale,
       labelMode: ctx.display.labelMode,
+      chargeModel: ctx.display.chargeModel,
       orbitalPreset: ctx.display.orbitalPreset,
       atomStyle: ctx.display.atomStyle,
       bgColor: ctx.display.bgColor,
@@ -73,6 +76,10 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
   ctx.display.atomScale = d.atomScale;
   ctx.display.bondScale = d.bondScale;
   ctx.display.labelMode = d.labelMode as any;
+  // Views saved before the charge-model selector existed show MMFF94 charges.
+  // A restored 'gfn2' has no engine charges behind it yet — the control falls
+  // back to MMFF94 when the scene is rebuilt (syncChargeModelControl).
+  ctx.display.chargeModel = d.chargeModel === 'gfn2' ? 'gfn2' : 'mmff94';
   ctx.display.orbitalPreset = d.orbitalPreset as any;
   // Views saved before atom styles existed fall back to the classic look.
   ctx.display.atomStyle = (d.atomStyle ?? 'classic') as any;

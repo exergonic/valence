@@ -44,9 +44,34 @@ function clearGroup(g: THREE.Group) {
   }
 }
 
+/**
+ * Keep the charge-model control honest. GFN2 charges exist only for a
+ * structure the GFN2 tier produced, so the option is disabled without one —
+ * and a selection that outlives its charges falls back to MMFF94 rather than
+ * leaving the labels and the ESP blank.
+ */
+export function syncChargeModelControl(ctx: SceneContext) {
+  const select = document.getElementById('ctrl-charge-model') as HTMLSelectElement | null;
+  if (!select) return;
+  const available = ctx.gfn2Charges !== null;
+  const gfn2Option = select.querySelector<HTMLOptionElement>('option[value="gfn2"]');
+  if (gfn2Option) gfn2Option.disabled = !available;
+  select.title = available
+    ? 'Which partial charges the charge labels and the ESP surface show. The dipole arrow stays on MMFF94.'
+    : 'GFN2-xTB charges need a structure from the GFN2 tier — press "Refine with GFN2-xTB". '
+      + 'Until then the labels and the ESP surface show MMFF94 charges.';
+  if (!available && ctx.display.chargeModel === 'gfn2') {
+    ctx.display.chargeModel = 'mmff94';
+    select.value = 'mmff94';
+  }
+}
+
 // Rebuild all molecule meshes from ctx.currentMolecule without touching the
 // camera. Used for display settings (atom size, orbital style, colors).
 export function rebuildDisplay(ctx: SceneContext) {
+  // Before the molecule guard: with no molecule on screen the GFN2 option has
+  // nothing to describe either, and the control must not offer it.
+  syncChargeModelControl(ctx);
   if (!ctx.currentMolecule) return;
   // Atom lighting first — the atoms below build their materials from it.
   // Every rebuild path (dropdown, loaded view, share link) comes through here.
@@ -88,6 +113,13 @@ export function rebuildDisplay(ctx: SceneContext) {
   // background: pale tints on the dark presets, darkened hues on white/gray).
   const labelMode = ctx.display.labelMode;
   const labelPalette = labelPaletteFor(ctx.display.bgColor);
+  // The partial charges on display: the model the control selects, MMFF94 when
+  // the selection has no GFN2 charges for this structure. The control is
+  // disabled without them, so the fallback is a safety net, not the norm — but
+  // it is what keeps the two branches below from disagreeing about the model.
+  const gfn2Charges = ctx.gfn2Charges?.charges ?? null;
+  const charges =
+    ctx.display.chargeModel === 'gfn2' && gfn2Charges ? gfn2Charges : (ctx.charges?.charges ?? null);
   if (labelMode === 'atom') {
     // Element symbol labels (C, N, O...)
     renderLabels(ctx.labelGroup, ctx.currentMolecule);
@@ -105,10 +137,11 @@ export function rebuildDisplay(ctx: SceneContext) {
     renderHybridizationLabels(ctx.labelGroup, ctx.currentMolecule, ctx.atomOrbitals);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
-  } else if (labelMode === 'charge' && ctx.charges) {
-    // Partial charges — the same resolved charge-model values the dipole
-    // arrow uses (BCI + residual placement), drawn like element labels.
-    renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, ctx.charges.charges);
+  } else if (labelMode === 'charge' && charges) {
+    // Partial charges — from the model the charge-model control selects:
+    // MMFF94 BCI (with any residual placement), or the GFN2-xTB engine's own
+    // Mulliken SCC charges when the structure came out of the GFN2 tier.
+    renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, charges);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
   } else {
@@ -142,9 +175,13 @@ export function rebuildDisplay(ctx: SceneContext) {
 // molecules get no surface, like no dipole) and the toggle asks for it. The
 // surface mesh is cached per molecule and extracted lazily on first render —
 // opacity changes reuse it.
-  if (ctx.display.showEsp && ctx.charges) {
-    if (!ctx.espSurface) {
-      ctx.espSurface = computeEspSurface(ctx.currentMolecule, ctx.charges.charges);
+  if (ctx.display.showEsp && charges) {
+    // The surface is a function of the charges as much as of the geometry, so
+    // the cache is keyed by both: a charge-model switch re-extracts (tens of
+    // ms), an opacity change reuses what is in hand.
+    if (!ctx.espSurface || ctx.espSurfaceModel !== ctx.display.chargeModel) {
+      ctx.espSurface = computeEspSurface(ctx.currentMolecule, charges);
+      ctx.espSurfaceModel = ctx.display.chargeModel;
     }
     renderEsp(ctx.espGroup, ctx.espSurface, ctx.display.espOpacity);
     ctx.espGroup.visible = true;
@@ -240,6 +277,11 @@ function filterOrbitalsByPreset(group: THREE.Group, preset: string) {
 
 // Full build: rebuildDisplay plus frame the camera on the new molecule.
 export function buildScene(ctx: SceneContext) {
+  // A GFN2 charge bundle belongs to one geometry: drop it when it does not
+  // describe the molecule now on screen — a new sketch, a loaded view, an
+  // example, none of which carry the engine's charges. This is what makes the
+  // pairing safe to carry at all (see SceneContext.gfn2Charges).
+  if (ctx.gfn2Charges && ctx.gfn2Charges.molecule !== ctx.currentMolecule) ctx.gfn2Charges = null;
   // Cache the per-molecule orbital assignment here so renderHybridOrbitals can
   // read it instead of recomputing on every display-setting change.
   ctx.atomOrbitals = ctx.currentMolecule ? assignOrbitals(ctx.currentMolecule) : null;
@@ -250,6 +292,7 @@ export function buildScene(ctx: SceneContext) {
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
+  ctx.espSurfaceModel = null;
   ctx.moSurfaces.clear();
   ctx.moFields.clear();
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is

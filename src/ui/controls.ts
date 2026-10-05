@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { SceneContext, ColorScheme, AtomStyle } from '../render';
+import { syncChargeModelControl } from '../render';
 import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 
@@ -69,6 +70,17 @@ export function setupControls(ctx: SceneContext) {
     ctx.display.espOpacity = parseFloat(espOpacity.value);
     rerender();
   });
+
+  // Charge model — which partial charges the charge labels and the ESP surface
+  // draw. The selection is intent only: syncChargeModelControl re-reads it per
+  // molecule, because GFN2 charges exist only for a GFN2-refined structure.
+  const chargeModelSelect = panel.querySelector<HTMLSelectElement>('#ctrl-charge-model')!;
+  chargeModelSelect.value = ctx.display.chargeModel;
+  chargeModelSelect.addEventListener('change', () => {
+    ctx.display.chargeModel = chargeModelSelect.value === 'gfn2' ? 'gfn2' : 'mmff94';
+    rerender();
+  });
+  syncChargeModelControl(ctx);
 
   // Labels dropdown — one control for all label modes
   const labelModeSelect = panel.querySelector<HTMLSelectElement>('#ctrl-label-mode')!;

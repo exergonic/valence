@@ -10,4 +10,4 @@ export { renderOrbitalLabels } from './orbital-labels';
 export { renderPiSystems } from './pi-systems';
 export { renderDipole } from './dipole';
 export { renderEsp } from './esp';
-export { rebuildDisplay, buildScene } from './rebuild';
+export { rebuildDisplay, buildScene, syncChargeModelControl } from './rebuild';

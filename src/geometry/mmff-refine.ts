@@ -23,7 +23,6 @@ import type { Molecule } from '../mol-parser';
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { place3D, hasRingBonds } from './place3d';
 import { applyWedgeStereo } from './stereo-wedge';
-import { restoreThreeRingPlanarity } from './ring-planarity';
 
 /**
  * Valence Molecule → mmff94-ts Molecule adapter, shared by every caller
@@ -142,6 +141,15 @@ export interface EmbedResult {
   warnings: string[];
   /** Which engine produced the geometry — the app labels it honestly. */
   engine?: 'mmff94' | 'gfn2';
+  /** Per-atom GFN2 charges (electrons) for `molecule` — the engine's own, for
+   *  the display to offer alongside the MMFF94 charge model. Absent for the
+   *  MMFF94 tier, and when the engine could not supply them. */
+  gfn2Charges?: number[];
+  /** Lowest Hessian eigenvalue of the GFN2 run (Eh/bohr²) — the raw number
+   *  behind the minimum/saddle verdict (compare with HESSIAN_SADDLE_THRESHOLD
+   *  in gfn2-refine.ts). Absent for the MMFF94 tier, and when the check was
+   *  skipped. */
+  gfn2LowestMode?: number;
 }
 
 /**
@@ -214,14 +222,7 @@ export function embedAndRefine(molecule: Molecule): EmbedResult {
   const { placed, separated } = embed3D(molecule);
   const refined = refineWithMMFF94(separated);
   if (refined && finite(refined)) {
-    // MMFF94 has no reference angle for a trigonal center's substituent in
-    // a 3-ring, so its minimum puckers the ring's exocyclic bonds out of
-    // the plane (cyclopropenyl cation: all C–H ~54° out — measured
-    // 2026-09-28, faithful MMFF94; see ring-planarity.ts). The chemistry is
-    // planar there, so restore it after the refinement and before the
-    // stereo enforcement, so the sketch's wedge still wins.
-    const planar = restoreThreeRingPlanarity(refined);
-    return { ...honourWedges(separated, planar), engine: 'mmff94' };
+    return { ...honourWedges(separated, refined), engine: 'mmff94' };
   }
   // The unrefined path kept place3D's geometry, whose enforcement ran before
   // separateOverlaps moved nonbonded pairs apart — a push through a
@@ -229,7 +230,7 @@ export function embedAndRefine(molecule: Molecule): EmbedResult {
   // too, so the fallback never ships a wedge it has silently dropped.
   const unrefined = finite(separated) ? separated : placed;
   if (unrefined.bonds.some((b) => b.stereo)) return { ...honourWedges(unrefined, unrefined), engine: 'mmff94' };
-  return { molecule: restoreThreeRingPlanarity(unrefined), warnings: [], engine: 'mmff94' };
+  return { molecule: unrefined, warnings: [], engine: 'mmff94' };
 }
 
 export function refineWithMMFF94(molecule: Molecule): Molecule | null {

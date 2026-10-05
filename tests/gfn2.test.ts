@@ -19,6 +19,8 @@
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Molecule } from '../src/mol-parser';
+import { parseMolBlock } from '../src/mol-parser';
+import { HESSIAN_SADDLE_THRESHOLD } from '../src/geometry/gfn2-refine';
 
 beforeAll(() => {
   // The worker module registers `self.onmessage` at import time.
@@ -84,6 +86,79 @@ describe('GFN2-xTB', () => {
     expect(Math.min(...axial)).toBeGreaterThan(Math.max(...equatorial));
     for (const d of axial) expect(d).toBeCloseTo(2.156, 2);
     for (const d of equatorial) expect(d).toBeCloseTo(2.027, 2);
+
+    // The charges see the same split, which is the point of offering them next
+    // to MMFF94's: BCI types all five chlorines alike (generic parameters for
+    // a 5-coordinate phosphorus), GFN2 distinguishes the axial pair.
+    const charges = result!.charges;
+    expect(charges).not.toBeNull();
+    expect(charges!.length).toBe(atoms.length);
+    const axialQ = [charges![4], charges![5]];
+    const equatorialQ = [charges![1], charges![2], charges![3]];
+    expect(Math.max(...axialQ)).toBeLessThan(Math.min(...equatorialQ));
+  }, 180_000);
+
+  // The charges ride back with the geometry: the display offers them next to
+  // the MMFF94 model, and they are only usable if they describe the returned
+  // structure — a wrong length, or an array left over from a rejected
+  // line-search trial, would be silently wrong on screen.
+  it('returns per-atom charges for the geometry it returns', async () => {
+    const result = await refine(water);
+    expect(result).not.toBeNull();
+    const charges = result!.charges;
+    expect(charges).not.toBeNull();
+    expect(charges!.length).toBe(result!.molecule.atoms.length);
+    // A neutral molecule sums to zero, oxygen is the negative end (GFN2's
+    // Mulliken charges for water sit near O −0.56, H +0.28), and the two
+    // hydrogens of the optimised, symmetric water carry the same charge.
+    expect(charges!.reduce((sum, q) => sum + q, 0)).toBeCloseTo(0, 6);
+    expect(charges![0]).toBeLessThan(-0.4);
+    expect(charges![1]).toBeGreaterThan(0.2);
+    expect(charges![1]).toBeCloseTo(charges![2], 3);
+  }, 180_000);
+
+  // The Hessian verdict: a gradient-based stop cannot tell a minimum from a
+  // saddle — both have zero gradient — so a converged run reports its
+  // curvature, and the app says which one is on screen.
+  it('reports a curvature verdict for a converged run', async () => {
+    const result = await refine(water);
+    expect(result!.lowestHessianMode).not.toBeNull();
+    expect(result!.lowestHessianMode!).toBeGreaterThan(HESSIAN_SADDLE_THRESHOLD);
+  }, 180_000);
+
+  // The 3-ring planarity repair that used to run after this tier was removed
+  // 2026-10-02 (the engines own the geometry). This pins the premise of that
+  // removal: GFN2's own cyclopropenyl cation is planar — no correction needed.
+  it('optimises the cyclopropenyl cation to a planar ring', async () => {
+    const mol = parseMolBlock(`JME 2024-04-29 Mon Sep 28 09:40:17 GMT-400 2026
+
+  3  3  0  0  0  0  0  0  0  0999 V2000
+    1.4000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7000    1.2124    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  3  1  2  0  0  0  0
+M  CHG  1   2   1
+M  END
+`);
+    const result = await refine(mol);
+    expect(result).not.toBeNull();
+    expect(result!.converged).toBe(true);
+
+    // Ring = the three carbons; each exocyclic H must sit in the ring plane.
+    const [c0, c1, c2] = [0, 1, 2].map((i) => result!.molecule.atoms[i]);
+    const u = [c1.x - c0.x, c1.y - c0.y, c1.z - c0.z];
+    const v = [c2.x - c0.x, c2.y - c0.y, c2.z - c0.z];
+    const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+    const len = Math.hypot(n[0], n[1], n[2]);
+    for (let h = 3; h < 6; h++) {
+      const p = result!.molecule.atoms[h];
+      const outOfPlane = Math.abs(
+        (n[0] * (p.x - c0.x) + n[1] * (p.y - c0.y) + n[2] * (p.z - c0.z)) / len,
+      );
+      expect(outOfPlane).toBeLessThan(0.01);
+    }
   }, 180_000);
 
   // A drawn H-O-H reaches the engine exactly linear (the embedder's
