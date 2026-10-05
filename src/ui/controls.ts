@@ -3,9 +3,9 @@ import type { SceneContext, ColorScheme, AtomStyle } from '../render';
 import { syncChargeModelControl } from '../render';
 import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
+import { espColor } from '../chem/charge-model/esp';
 
 export function setupControls(ctx: SceneContext) {
-  const panel = document.getElementById('controls-panel')!;
   let rafScheduled = false;
   const rerender = () => {
     if (rafScheduled) return;
@@ -16,23 +16,22 @@ export function setupControls(ctx: SceneContext) {
     });
   };
 
-  // ── Tab switching ──
-  const tabBtns = panel.querySelectorAll<HTMLButtonElement>('.tab-btn');
-  const tabContents = panel.querySelectorAll<HTMLElement>('.tab-content');
-  tabBtns.forEach((btn) => {
-    btn.addEventListener('click', () => {
-      tabBtns.forEach((b) => b.classList.remove('active'));
-      tabContents.forEach((c) => c.classList.remove('active'));
-      btn.classList.add('active');
-      const tab = btn.dataset.tab!;
-      panel.querySelector(`#tab-${tab}`)!.classList.add('active');
-    });
-  });
+  // The controls live in two places — the inspector (the active model's) and
+  // the settings drawer (everything global) — so they are found by id.
 
-  // ── Build tab ──
+  // ── Settings drawer ──
+  const settingsBtn = document.getElementById('settings-btn')!;
+  const settingsDrawer = document.getElementById('settings-drawer')!;
+  const setSettingsOpen = (open: boolean) => {
+    settingsDrawer.classList.toggle('hidden', !open);
+    settingsBtn.setAttribute('aria-expanded', String(open));
+    settingsBtn.classList.toggle('active', open);
+  };
+  settingsBtn.addEventListener('click', () => setSettingsOpen(settingsDrawer.classList.contains('hidden')));
+  document.getElementById('settings-close')!.addEventListener('click', () => setSettingsOpen(false));
 
   // Show Atoms & Bonds
-  const molToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-mol')!;
+  const molToggle = document.querySelector<HTMLInputElement>('#ctrl-show-mol')!;
   ctx.moleculeGroup.visible = molToggle.checked;
   molToggle.addEventListener('change', () => {
     ctx.moleculeGroup.visible = molToggle.checked;
@@ -41,7 +40,7 @@ export function setupControls(ctx: SceneContext) {
   // Show Orbitals — the checkbox records the intent; visibility is resolved
   // in rebuildDisplay, because a selected MO takes the stage over the
   // VSEPR/hybrid lobes (two answers to the same question).
-  const orbToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-orb')!;
+  const orbToggle = document.querySelector<HTMLInputElement>('#ctrl-show-orb')!;
   ctx.display.showOrbitals = orbToggle.checked;
   orbToggle.addEventListener('change', () => {
     ctx.display.showOrbitals = orbToggle.checked;
@@ -50,7 +49,7 @@ export function setupControls(ctx: SceneContext) {
 
   // Dipole arrow — same visibility pattern as the orbital toggle: the arrow
   // is rebuilt per molecule by rebuildDisplay, the checkbox only shows it.
-  const dipoleToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-dipole')!;
+  const dipoleToggle = document.querySelector<HTMLInputElement>('#ctrl-show-dipole')!;
   ctx.dipoleGroup.visible = dipoleToggle.checked;
   dipoleToggle.addEventListener('change', () => {
     ctx.dipoleGroup.visible = dipoleToggle.checked;
@@ -58,13 +57,17 @@ export function setupControls(ctx: SceneContext) {
 
   // Charge-model ESP surface — rebuilt per molecule by rebuildDisplay; the
   // checkbox shows it and the slider sets the translucency.
-  const espToggle = panel.querySelector<HTMLInputElement>('#ctrl-show-esp')!;
+  const espToggle = document.querySelector<HTMLInputElement>('#ctrl-show-esp')!;
   espToggle.checked = ctx.display.showEsp;
   espToggle.addEventListener('change', () => {
     ctx.display.showEsp = espToggle.checked;
     rerender();
   });
-  const espOpacity = panel.querySelector<HTMLInputElement>('#ctrl-esp-opacity')!;
+  // The key beside the slider is drawn from the surface's own colour function,
+  // so the two cannot disagree (the ramp is linear in RGB between its stops).
+  const espKey = document.querySelector<HTMLElement>('.esp-scale');
+  if (espKey) espKey.style.background = `linear-gradient(90deg, ${[-1, 0, 1].map((t) => `rgb(${espColor(t).join(', ')})`).join(', ')})`;
+  const espOpacity = document.querySelector<HTMLInputElement>('#ctrl-esp-opacity')!;
   espOpacity.value = String(ctx.display.espOpacity);
   espOpacity.addEventListener('input', () => {
     ctx.display.espOpacity = parseFloat(espOpacity.value);
@@ -74,7 +77,7 @@ export function setupControls(ctx: SceneContext) {
   // Charge model — which partial charges the charge labels, the ESP surface
   // and the dipole draw. The selection is intent only: syncChargeModelControl
   // re-reads it per molecule, because either model can lack charges for one.
-  const chargeModelSelect = panel.querySelector<HTMLSelectElement>('#ctrl-charge-model')!;
+  const chargeModelSelect = document.querySelector<HTMLSelectElement>('#ctrl-charge-model')!;
   chargeModelSelect.value = ctx.display.chargeModel;
   chargeModelSelect.addEventListener('change', () => {
     ctx.display.chargeModel = chargeModelSelect.value === 'gfn2' ? 'gfn2' : 'mmff94';
@@ -83,7 +86,7 @@ export function setupControls(ctx: SceneContext) {
   syncChargeModelControl(ctx);
 
   // Labels dropdown — one control for all label modes
-  const labelModeSelect = panel.querySelector<HTMLSelectElement>('#ctrl-label-mode')!;
+  const labelModeSelect = document.querySelector<HTMLSelectElement>('#ctrl-label-mode')!;
   labelModeSelect.addEventListener('change', () => {
     ctx.display.labelMode = labelModeSelect.value as 'atom' | 'orbital' | 'hybrid' | 'charge' | 'off';
     ctx.rerender();
@@ -95,49 +98,47 @@ export function setupControls(ctx: SceneContext) {
   // which sets the lobe length so lobes overlap bonds at the right
   // atomic centers. Making them track this slider would decouple the
   // lobes from the bond endpoints.
-  const atomScale = panel.querySelector<HTMLInputElement>('#ctrl-atom-scale')!;
+  const atomScale = document.querySelector<HTMLInputElement>('#ctrl-atom-scale')!;
   atomScale.addEventListener('input', () => {
     ctx.display.atomScale = parseFloat(atomScale.value);
     rerender();
   });
 
   // Bond Scale — drives only the cylinders; atoms and lobes are independent.
-  const bondScale = panel.querySelector<HTMLInputElement>('#ctrl-bond-scale')!;
+  const bondScale = document.querySelector<HTMLInputElement>('#ctrl-bond-scale')!;
   bondScale.addEventListener('input', () => {
     ctx.display.bondScale = parseFloat(bondScale.value);
     rerender();
   });
 
   // Force local lookup
-  const forceLocal = panel.querySelector<HTMLInputElement>('#ctrl-force-fallback')!;
+  const forceLocal = document.querySelector<HTMLInputElement>('#ctrl-force-fallback')!;
   forceLocal.addEventListener('change', () => {
     // The render button reads this on click; no immediate action needed.
   });
 
   // Space-filling toggle
-  const spaceFillingToggle = panel.querySelector<HTMLInputElement>('#ctrl-space-filling')!;
+  const spaceFillingToggle = document.querySelector<HTMLInputElement>('#ctrl-space-filling')!;
   spaceFillingToggle.addEventListener('change', () => {
     ctx.display.spaceFilling = spaceFillingToggle.checked;
     ctx.rerender();
   });
 
   // Auto-rotate toggle
-  const autoRotateToggle = panel.querySelector<HTMLInputElement>('#ctrl-auto-rotate')!;
+  const autoRotateToggle = document.querySelector<HTMLInputElement>('#ctrl-auto-rotate')!;
   autoRotateToggle.addEventListener('change', () => {
     ctx.setAutoRotate(autoRotateToggle.checked);
   });
 
   // π system highlighting toggle
-  const highlightPiToggle = panel.querySelector<HTMLInputElement>('#ctrl-highlight-pi')!;
+  const highlightPiToggle = document.querySelector<HTMLInputElement>('#ctrl-highlight-pi')!;
   highlightPiToggle.addEventListener('change', () => {
     ctx.display.highlightPiSystems = highlightPiToggle.checked;
     ctx.rerender();
   });
 
-  // ── Style tab ──
-
   // Pedagogical view presets (All / σ-only / π-only / LP-only)
-  const viewPresetBtns = panel.querySelectorAll<HTMLButtonElement>('.view-preset-btn');
+  const viewPresetBtns = document.querySelectorAll<HTMLButtonElement>('.view-preset-btn');
   viewPresetBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       viewPresetBtns.forEach((b) => b.classList.remove('active'));
@@ -149,14 +150,14 @@ export function setupControls(ctx: SceneContext) {
 
   // Atom and orbital looks.  Both go through buildScene, which applies the
   // atom lighting before it rebuilds the meshes.
-  const atomStyleSelect = panel.querySelector<HTMLSelectElement>('#ctrl-atom-style')!;
+  const atomStyleSelect = document.querySelector<HTMLSelectElement>('#ctrl-atom-style')!;
   atomStyleSelect.value = ctx.display.atomStyle;
   atomStyleSelect.addEventListener('change', () => {
     ctx.display.atomStyle = atomStyleSelect.value as AtomStyle;
     rerender();
   });
 
-  const orbitalStyleSelect = panel.querySelector<HTMLSelectElement>('#ctrl-orbital-style')!;
+  const orbitalStyleSelect = document.querySelector<HTMLSelectElement>('#ctrl-orbital-style')!;
   orbitalStyleSelect.value = ctx.display.orbitalPreset;
   orbitalStyleSelect.addEventListener('change', () => {
     ctx.display.orbitalPreset = orbitalStyleSelect.value as 'glass' | 'glossy' | 'matte' | 'metallic';
@@ -164,8 +165,8 @@ export function setupControls(ctx: SceneContext) {
   });
 
   // Background presets
-  const bgBtns = panel.querySelectorAll<HTMLButtonElement>('.bg-btn')!;
-  const bgCustom = panel.querySelector<HTMLInputElement>('#ctrl-bg-custom')!;
+  const bgBtns = document.querySelectorAll<HTMLButtonElement>('.bg-btn')!;
+  const bgCustom = document.querySelector<HTMLInputElement>('#ctrl-bg-custom')!;
   const setBg = (hex: string) => {
     ctx.display.bgColor = hex;
     ctx.scene.background = new THREE.Color(hex);
@@ -181,7 +182,7 @@ export function setupControls(ctx: SceneContext) {
 
   // ── Color scheme presets ──
 
-  const csBtns = panel.querySelectorAll<HTMLButtonElement>('.cs-btn')!;
+  const csBtns = document.querySelectorAll<HTMLButtonElement>('.cs-btn')!;
   const csCustom = document.getElementById('cs-custom')!;
   const applyScheme = (scheme: ColorScheme) => {
     ctx.display.colors.scheme = scheme;
@@ -217,7 +218,7 @@ export function setupControls(ctx: SceneContext) {
     picker.addEventListener('input', () => updateColor(idx));
   });
 
-  // ── Export tab ──
+  // ── Export ──
 
   // Export PNG
   const exportBtn = document.getElementById('ctrl-export-png')!;
@@ -256,7 +257,7 @@ export function setupControls(ctx: SceneContext) {
     setTimeout(() => clipboardFeedback.classList.add('hidden'), 2000);
   });
 
-  // ── Measure tab ──
+  // ── Measure ──
   const measureToggle = document.getElementById('ctrl-measure-toggle')!;
   const measurePoints = document.getElementById('measure-points')!;
   const measureResult = document.getElementById('measure-result')!;

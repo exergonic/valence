@@ -617,88 +617,201 @@ button, input, select, textarea { font-family: inherit; }
 }
 #mol-link:hover { text-decoration: underline; }
 
-/* ── Tabbed Controls Panel ── */
+/* ── The inspector: the active model view's controls ──
+   Docked on the right, the mirror of the sketcher on the left. Its sections
+   show by the view (data-view, set in model-views.ts): one shared section, then
+   the section that belongs to the view. It folds to a rail (O). */
 
-#right-dock {
+#inspector {
+  width: 300px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border-left: 1px solid var(--divider);
+  color: var(--text-2);
+  font-size: 12px;
+}
+
+.inspector-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--divider);
+  flex-shrink: 0;
+}
+
+.inspector-eyebrow {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+#inspector-title {
+  margin-top: 3px;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+#inspector-blurb {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+#inspector-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.inspector-section {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--divider);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.inspector-section .ctrl-label { margin: 6px 0 0; }
+.inspector-section .ctrl-label:first-child { margin-top: 0; }
+.inspector-section .ctrl-toggle { font-size: 13px; color: var(--text-2); }
+.inspector-section .label-mode-select { font-size: 12px; padding: 6px 8px; }
+
+/* one view's section at a time */
+.for-vsepr, .for-charge, .for-localized, .for-delocalized { display: none; }
+#inspector[data-view="vsepr"] .for-vsepr,
+#inspector[data-view="charge"] .for-charge,
+#inspector[data-view="localized"] .for-localized,
+#inspector[data-view="delocalized"] .for-delocalized { display: flex; }
+
+/* the ESP colour key, negative to positive: its gradient is set from the
+   surface's own colour function (controls.ts) */
+.esp-scale {
+  height: 8px;
+  border-radius: 4px;
+  margin-top: 2px;
+}
+.esp-scale-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--text-faint);
+}
+
+/* Folded, the inspector is a slim rail: the expand button, the view's name
+   running down it. */
+#inspector-rail {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 6px;
+  padding: 6px 0;
+  background: none;
+  border: 1px dashed var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+#inspector-rail:hover { border-color: var(--accent); color: var(--accent); }
+
+#inspector.collapsed { width: 40px; }
+#inspector.collapsed .inspector-head,
+#inspector.collapsed #inspector-body { display: none; }
+#inspector.collapsed #inspector-rail { display: flex; }
+
+/* ── Settings drawer: everything global ──
+   Slides over the inspector, so the scene stays free to click — measuring
+   works with it open. */
+
+#settings-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 300px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--text-2);
+  font-size: 12px;
+  transition: transform 0.18s ease, visibility 0.18s;
+}
+
+#settings-drawer.hidden {
+  transform: translateX(100%);
+  visibility: hidden;
+}
+
+.drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.drawer-head h2 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px 18px 18px;
+}
+
+.drawer-body .ctrl-group > summary { font-size: 11px; padding: 6px 0; }
+.drawer-body .ctrl-toggle { font-size: 12.5px; }
+.ctrl-label-gap { margin-top: 8px; }
+
+/* the settings button, top right of the scene */
+.canvas-corner-btn {
   position: absolute;
   top: 14px;
   right: 14px;
-  bottom: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
   z-index: 10;
-  /* the gaps between the panels stay click-through to the canvas */
-  pointer-events: none;
-}
-
-#controls-panel {
-  position: relative;
-  width: 210px;
-  /* the MO panel below owns most of the dock: it has to hold one row per
-     orbital, the controls panel scrolls */
-  max-height: 42%;
-  overflow-y: auto;
-  overflow-x: hidden;
-  pointer-events: auto;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 12px;
   box-shadow: var(--bevel);
-  padding: 0;
-  color: var(--text-2);
-  font-size: 12px;
-  user-select: none;
-  backdrop-filter: blur(6px);
-  z-index: 10;
-}
-
-#controls-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--divider);
-  /* the panel scrolls, so the tabs stay pinned while the sections move */
-  position: sticky;
-  top: 0;
-  background: var(--panel-solid);
-  z-index: 1;
-}
-
-.tab-btn {
-  flex: 1;
-  min-width: 0;
-  padding: 9px 1px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  color: var(--text-faint);
-  font-size: 9px;
-  font-weight: 600;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.12s;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  white-space: nowrap;
-  overflow: hidden;
+  backdrop-filter: blur(6px);
 }
+.canvas-corner-btn:hover,
+.canvas-corner-btn.active { color: var(--accent); border-color: var(--accent-soft-border); }
 
-.tab-btn:hover {
-  color: var(--text);
-  background: var(--hover);
-}
-
-.tab-btn.active {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
-}
-
-.tab-content {
-  display: none;
-  padding: 12px;
-}
-
-.tab-content.active {
-  display: block;
+/* Examples, at the top of the sketcher where a newcomer looks first */
+.brand-examples {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 6px 8px;
 }
 
 .ctrl-section {
@@ -767,11 +880,7 @@ button, input, select, textarea { font-family: inherit; }
    (dipole on generic parameters, an ion the type space cannot
    represent, ...). Hidden until a molecule raises a note. */
 
-#panel-info {
-  padding: 10px 12px;
-  border-top: 1px solid var(--divider);
-  font-size: 11px;
-}
+#panel-info { font-size: 11.5px; border-bottom: none; }
 
 #panel-info.hidden { display: none; }
 
@@ -1221,15 +1330,11 @@ button, input, select, textarea { font-family: inherit; }
   position: absolute;
   bottom: 14px;
   left: 14px;
-  right: 58px;
+  right: 60px;
   display: flex;
   justify-content: center;
   pointer-events: none;
   z-index: 10;
-}
-
-#canvas-container:has(#mo-panel:not(.collapsed)) #model-views {
-  right: 404px;
 }
 
 .model-views-bar {
@@ -1553,115 +1658,16 @@ button, input, select, textarea { font-family: inherit; }
 
 #copy-toast.hidden { display: none; }
 
-/* ── MO panel (the extended-Hückel ladder) ── */
+/* ── The orbital list (inside the inspector) ── */
 
-#mo-panel {
-  width: 380px;
-  flex: 1;
-  /* a floor, not a fit: the list scrolls inside, so a short window
-     squeezes the panel instead of pushing it off the dock */
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: var(--bevel);
-  color: var(--text-2);
-  font-size: 12px;
-  backdrop-filter: blur(6px);
-  pointer-events: auto;
-  overflow: hidden;
-}
-
-#mo-panel.collapsed {
-  flex: 0 0 auto;
-  min-height: 0;
-  /* shrink-wrap the rail instead of holding the full panel width */
-  width: auto;
-}
-
-#mo-panel.collapsed #mo-body { display: none; }
-
-/* Collapsed, the panel docks as a slim rail on the right edge: the expand
-   button on top, the title running vertically beneath it. */
-#mo-panel.collapsed .mo-head {
-  flex-direction: column-reverse;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 7px;
-  border-bottom: none;
-}
-
-#mo-panel.collapsed .mo-head .ctrl-label {
-  writing-mode: vertical-rl;
-  margin: 0;
-  font-size: 9px;
-  letter-spacing: 1px;
-}
-
-.mo-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--divider);
-  flex-shrink: 0;
-}
-
-.mo-collapse {
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.mo-collapse:hover { color: var(--text); border-color: var(--border-strong); }
-
-/* The panel's two views — the energy ladder, or the localized orbitals. */
-#mo-views {
-  display: flex;
-  gap: 2px;
-  margin: 8px 12px 0;
-  padding: 3px;
-  border-radius: 9px;
-  background: var(--surface-sunken);
-  border: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-#mo-panel.collapsed #mo-views { display: none; }
-
-.mo-view {
-  flex: 1;
-  padding: 5px 8px;
-  border: none;
-  border-radius: 7px;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.mo-view:hover { color: var(--text); }
-.mo-view.active {
-  background: var(--accent-soft);
-  box-shadow: inset 0 0 0 1px var(--accent-soft-border);
-  color: var(--accent-text);
-}
+#mo-panel.off-stage #mo-body { display: none; }
 
 /* One row per orbital, in both views: the delocalized ladder and the localized
    list are the same molecules' orbitals described two ways, so they are the
    same row — same height, same dot, same selected state. */
 #mo-list {
-  flex: 1;
-  min-height: 240px;
+  flex: 0 0 auto;
+  max-height: 46vh;
   margin-bottom: 6px;
   display: flex;
   flex-direction: column;
@@ -1704,8 +1710,12 @@ button, input, select, textarea { font-family: inherit; }
 
 .orb-type {
   flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: 11px;
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
@@ -1735,12 +1745,15 @@ button, input, select, textarea { font-family: inherit; }
 
 
 #mo-body {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  padding: 8px 12px 12px;
-  overflow-y: auto;
+  gap: 6px;
+}
+
+.mo-level-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .mo-readout {
@@ -1773,3 +1786,18 @@ button, input, select, textarea { font-family: inherit; }
   background: transparent;
   color: var(--text-faint);
 }
+
+/* the inspector's fold button and the drawer's close button */
+.panel-fold-btn {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.panel-fold-btn:hover { color: var(--text); border-color: var(--border-strong); }

@@ -141,8 +141,9 @@ function setupKeyboardShortcuts() {
       // Reset view
       document.getElementById('reset-view-btn')?.click();
     } else if (e.key === 'o' || e.key === 'O') {
-      // Dock/undock the Orbitals panel — it is 380 px wide when open
-      document.getElementById('mo-collapse')?.click();
+      // Fold/unfold the model panel on the right
+      const folded = document.getElementById('inspector')?.classList.contains('collapsed');
+      document.getElementById(folded ? 'inspector-rail' : 'inspector-collapse')?.click();
     } else if (e.key === 'b' || e.key === 'B') {
       // Dock/undock the sketcher panel
       toggleJsmeCollapsed();
@@ -150,6 +151,9 @@ function setupKeyboardShortcuts() {
       // Close any open dialogs
       document.getElementById('cite-dialog')?.classList.add('hidden');
       document.getElementById('help-dialog')?.classList.add('hidden');
+      if (!document.getElementById('settings-drawer')?.classList.contains('hidden')) {
+        document.getElementById('settings-close')?.click();
+      }
     } else if (e.key >= '1' && e.key <= '9') {
       // Jump to example by number
       const idx = parseInt(e.key) - 1;

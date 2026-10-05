@@ -55,12 +55,12 @@ const TOP_CONTRIBUTORS = 6;
 // so a near-miss is not described as a symmetry degeneracy.
 const DEGENERATE_TOLERANCE = DEGENERATE_TOLERANCE_EV;
 
-/** localStorage key for the MO panel's collapsed state (see setupMoPanel). */
-const MO_COLLAPSED_KEY = 'valence:mo-collapsed';
-
-/** What the rest of the UI may ask of the MO panel (the model-view presets). */
+/** What the rest of the UI may ask of the MO panel (the model views, which
+ *  own the inspector it sits in). */
 export interface MoPanel {
-  setCollapsed(collapsed: boolean): void;
+  /** Whether an orbital view is the one on screen. Off stage the list is not
+   *  drawn — a ladder of 30 levels per molecule is work nobody would see. */
+  setOnStage(onStage: boolean): void;
   setView(view: 'delocalized' | 'localized'): void;
   clearSelections(): void;
   selectHomo(): void;
@@ -73,9 +73,6 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   const composition = document.getElementById('mo-composition')!;
   const note = document.getElementById('mo-note')!;
   const clear = document.getElementById('ctrl-mo-clear') as HTMLButtonElement | null;
-  const collapse = document.getElementById('mo-collapse') as HTMLButtonElement | null;
-  const delocalizedTab = document.getElementById('mo-view-delocalized') as HTMLButtonElement | null;
-  const localizedTab = document.getElementById('mo-view-localized') as HTMLButtonElement | null;
 
   const select = (index: number | null) => {
     ctx.display.moIndex = ctx.display.moIndex === index ? null : index;
@@ -105,8 +102,6 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     draw();
     ctx.rerender();
   };
-  delocalizedTab?.addEventListener('click', () => setView('delocalized'));
-  localizedTab?.addEventListener('click', () => setView('localized'));
 
   clear?.addEventListener('click', () => {
     if (ctx.display.orbitalView === 'localized') {
@@ -177,35 +172,13 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       ctx.rerender();
     });
   }
-  const setCollapsed = (collapsed: boolean) => {
-    panel.classList.toggle('collapsed', collapsed);
-    try {
-      localStorage.setItem(MO_COLLAPSED_KEY, collapsed ? '1' : '0');
-    } catch {
-      // private mode or no storage: the panel just won't remember
-    }
-    if (collapse) {
-      collapse.textContent = collapsed ? '+' : '−';
-      collapse.title = collapsed ? 'Expand' : 'Collapse';
-    }
+  const setOnStage = (onStage: boolean) => {
+    panel.classList.toggle('off-stage', !onStage);
     draw();
   };
-  collapse?.addEventListener('click', () => setCollapsed(!panel.classList.contains('collapsed')));
 
-  // A collapsed panel survives reloads — it is a workspace preference,
-  // not a per-molecule state.
-  try {
-    if (localStorage.getItem(MO_COLLAPSED_KEY) === '1' && collapse) {
-      panel.classList.add('collapsed');
-      collapse.textContent = '+';
-      collapse.title = 'Expand';
-    }
-  } catch {
-    // no storage: open every time
-  }
-
-  // The panel is always on screen, so it has to follow the molecule: redraw
-  // when a new scene is built (a new molecule means new orbitals).
+  // The list has to follow the molecule: redraw when a new scene is built (a
+  // new molecule means new orbitals).
   ctx.onSceneBuilt = () => draw();
 
   // The irrep labels cost a symmetry detection (~10 ms), so they are computed
@@ -312,9 +285,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       ? !!ctx.localizedOrbitals && ctx.display.localizedSelection.length > 0
       : result !== null && ctx.display.moIndex !== null;
     for (const control of [smooth, opacity, isovalue]) if (control) control.disabled = !hasSelection;
-    delocalizedTab?.classList.toggle('active', view === 'delocalized');
-    localizedTab?.classList.toggle('active', view === 'localized');
-    if (panel.classList.contains('collapsed')) return;
+    if (panel.classList.contains('off-stage')) return;
 
     if (view === 'localized') {
       drawLocalized();
@@ -473,7 +444,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   draw();
 
   return {
-    setCollapsed,
+    setOnStage,
     setView,
     /** Stop drawing any MO or localized orbital — the VSEPR lobes and the
      *  plain molecule are then what is on stage. */
