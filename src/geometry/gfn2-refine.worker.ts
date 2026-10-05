@@ -543,10 +543,12 @@ export async function optimizeWithGfn2(
   /**
    * One optimisation from `start`. Berny first, on the analytic gradient —
    * fast, and right for most molecules. But OCC's analytic GFN2 gradient is
-   * wrong for polar species (an upstream bug, confirmed against the Fortran
-   * xTB oracle: methanol 2.2e-4, the cyclopropenyl anion 4.7e-4 Eh/bohr, while
-   * xTB's own analytic gradient matches OCC's finite differences to 1e-6), and
-   * Berny believes it: on the anion it reported convergence 4.7 kcal/mol above
+   * wrong for polar species — a known upstream limitation (OCC's README: the
+   * multipole-on gradient misses the AO-multipole integral derivatives, a
+   * ~1 mHa gap; the bindings expose no charge-only switch). Measured against
+   * the Fortran xTB oracle: methanol 2.2e-4, the cyclopropenyl anion 4.7e-4
+   * Eh/bohr, while xTB's own analytic gradient matches OCC's finite
+   * differences to 1e-6. Berny believes it: on the anion it reported convergence 4.7 kcal/mol above
    * the minimum. So a converged point is checked with the exact gradient, and
    * when they disagree Berny goes on from there on the exact gradient. Below
    * 24 atoms — above, the check costs more than it is worth and the analytic

@@ -195,10 +195,11 @@ M  END
   }, 180_000);
 });
 
-describe('Berny and the analytic-gradient bug', () => {
-  // OCC's analytic GFN2 gradient is wrong for polar species (upstream; the
-  // Fortran xTB oracle's gradient matches OCC's finite differences to 1e-6
-  // and its analytic gradient to only 4.7e-4 here). Berny on that gradient
+describe('Berny and the inexact analytic gradient', () => {
+  // OCC's analytic GFN2 gradient is wrong for polar species — a known upstream
+  // limitation (its multipole-on gradient misses the AO-multipole integral
+  // derivatives). The Fortran xTB oracle's gradient matches OCC's finite
+  // differences to 1e-6 and its analytic gradient to only 4.7e-4 here. Berny on that gradient
   // alone reports the cyclopropenyl anion converged at −7.899336 Eh, 4.7
   // kcal/mol above the minimum; the exact-gradient check has to catch it.
   // The start is the user's planar wb97x-D3 geometry (a saddle), as in
