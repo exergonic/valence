@@ -22,10 +22,18 @@
  * displayed structure changes.
  *
  * The frame is deterministic: axes are ordered by moment, signed so their
- * largest component is positive, and completed right-handed. A degenerate
- * moment (a spherical or linear top) makes the choice arbitrary but still
- * consistent, which is all the physics needs — the eigenvalues are the same
- * in any frame, and that invariance is itself a test.
+ * largest component is positive, and completed right-handed. A symmetric top
+ * — two equal moments: benzene, BF₃, NH₃, CH₃Cl — leaves the two equal axes
+ * free to turn about the unique one, and the eigensolver's choice is no
+ * chemistry: on a snapped benzene it put the carbons 22° off the x axis. The
+ * energies do not care, but the degenerate pairs are built against x
+ * (canonicalize-degenerate.ts), so benzene's e1g HOMO came out as a mixture
+ * of the textbook partners — 0.49/0.42/0.07 where the partner with a nodal
+ * plane through two carbons has 0.46 on four and 0 on two — and its lobes
+ * leaned (reported 2026-10-06). So a symmetric top's x axis is put through an
+ * atom (see anchorAtom), which puts a mirror plane of the molecule in xz. A
+ * spherical top (three equal moments: CH₄, SF₆) is still left as the solver
+ * returns it.
  */
 import type { Molecule } from '../../mol-parser';
 import { jacobiSymmetric } from '../../utils/eigen';
@@ -61,6 +69,33 @@ function canonicalSign(v: Vec3): Vec3 {
   return v[index] < 0 ? [-v[0], -v[1], -v[2]] : v;
 }
 
+/** Two principal moments this close (relative to the largest) are equal: a
+ *  snapped geometry is exact to ~1e-12, and an unsnapped near-symmetric one
+ *  is better anchored than left to the eigensolver. */
+const SYMMETRIC_TOP_TOLERANCE = 1e-4;
+
+/**
+ * The direction, perpendicular to a symmetric top's unique axis, through the
+ * heaviest atom off that axis — benzene's first carbon, BF₃'s first fluorine.
+ * Ties go to the atom farther from the axis, then to the lower index, so the
+ * frame is reproducible. Null when every atom is on the axis.
+ */
+function anchorAtom(atoms: Molecule['atoms'], com: Vec3, unique: Vec3): Vec3 | null {
+  let best: { direction: Vec3; mass: number; distance: number } | null = null;
+  for (const a of atoms) {
+    const r: Vec3 = [a.x - com[0], a.y - com[1], a.z - com[2]];
+    const along = dot(r, unique);
+    const off: Vec3 = [r[0] - along * unique[0], r[1] - along * unique[1], r[2] - along * unique[2]];
+    const distance = Math.sqrt(dot(off, off));
+    if (distance < 0.1) continue; // on the axis (Å)
+    const mass = ATOMIC_MASS[a.element] ?? 0;
+    const better = !best || mass > best.mass + 1e-6
+      || (Math.abs(mass - best.mass) <= 1e-6 && distance > best.distance + 1e-6);
+    if (better) best = { direction: [off[0] / distance, off[1] / distance, off[2] / distance], mass, distance };
+  }
+  return best?.direction ?? null;
+}
+
 export function alignToPrincipalAxes(molecule: Molecule): PrincipalFrame {
   const atoms = molecule.atoms;
   if (atoms.length === 0) {
@@ -94,11 +129,23 @@ export function alignToPrincipalAxes(molecule: Molecule): PrincipalFrame {
 
   const { values, vectors } = jacobiSymmetric(inertia);
   // eigenvalues ascending; the LARGEST moment becomes z
-  const order = [2, 1, 0];
-  const zAxis = canonicalSign([vectors[0][order[0]], vectors[1][order[0]], vectors[2][order[0]]] as Vec3);
-  const xAxis = canonicalSign([vectors[0][order[1]], vectors[1][order[1]], vectors[2][order[1]]] as Vec3);
+  const axis = (i: number): Vec3 => [vectors[0][i], vectors[1][i], vectors[2][i]];
+  let zAxis = canonicalSign(axis(2));
+  let xAxis = canonicalSign(axis(1));
+
+  // A symmetric top: x through an atom, turned about the unique axis
+  const equal = (i: number, j: number) => Math.abs(values[i] - values[j]) <= SYMMETRIC_TOP_TOLERANCE * values[2];
+  const oblate = equal(0, 1) && !equal(1, 2); // the unique moment is the largest: the ring's normal
+  const prolate = equal(1, 2) && !equal(0, 1); // the unique moment is the smallest: CH₃Cl's C–Cl
+  if (oblate || prolate) {
+    const unique = axis(oblate ? 2 : 0);
+    const anchor = anchorAtom(atoms, com, unique);
+    if (anchor) {
+      xAxis = anchor;
+      if (prolate) zAxis = canonicalSign(cross(xAxis, unique));
+    }
+  }
   const yAxis = cross(zAxis, xAxis); // right-handed by construction
-  void values;
 
   const axes: PrincipalFrame['axes'] = [xAxis, yAxis, zAxis];
   const framed = atoms.map((a) => {

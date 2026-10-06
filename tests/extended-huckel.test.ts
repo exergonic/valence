@@ -38,6 +38,7 @@ import { MO_SIGNIFICANT } from '../src/render/mo-lobes';
 import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
+import { vecNormalize, crossProduct, vecDot } from '../src/utils/vec3';
 
 interface Fixture {
   provenance: Record<string, unknown>;
@@ -132,7 +133,16 @@ describe('extended Hückel against the YAeHMOP oracle', () => {
       const mol = moleculeOf(fixture.atoms);
       const result = solveExtendedHuckel(mol);
       expect(result).not.toBeNull();
-      const { basis, overlap, hamiltonian, energies, electronCount } = result!;
+      const { basis, energies, electronCount } = result!;
+      // S and H in the oracle's own coordinates, as bind received them. The
+      // solver re-frames a molecule (align-principal-axes.ts), and matrix
+      // elements between p functions depend on which way x points; the
+      // energies do not. Comparing the solver's re-framed matrices would test
+      // our frame convention against the one these fixtures happened to be
+      // made in — it failed when a symmetric top's in-plane x axis was put
+      // through an atom (2026-10-06) — not the integrals against the oracle.
+      const overlap = overlapMatrix(basis, mol.atoms);
+      const hamiltonian = hamiltonianMatrix(basis, overlap);
       // These fixtures are YAeHMOP's own output for coordinates aligned by
       // scripts/eht-fixtures.ts, and they are compared verbatim. For a linear
       // molecule (N₂, ethyne) the two axes perpendicular to the molecular axis
@@ -209,7 +219,9 @@ describe('the 3d basis against the YAeHMOP oracle', () => {
     };
     const result = solveExtendedHuckel(molecule);
     expect(result).not.toBeNull();
-    const { basis, overlap, energies, electronCount } = result!;
+    const { basis, energies, electronCount } = result!;
+    // S in the oracle's own coordinates — see the first oracle block
+    const overlap = overlapMatrix(basis, molecule.atoms);
     const n = fixture.orbitals.length;
     expect(basis.length).toBe(n);
     expect(electronCount).toBe(fixture.electrons);
@@ -273,7 +285,9 @@ describe('the d block against the YAeHMOP oracle', () => {
     const molecule: Molecule = { atoms: fixture.atoms.map((a) => ({ ...a, charge: 0 })), bonds: [] };
     const result = solveExtendedHuckel(molecule);
     expect(result).not.toBeNull();
-    const { basis, overlap, energies, electronCount } = result!;
+    const { basis, energies, electronCount } = result!;
+    // S in the oracle's own coordinates — see the first oracle block
+    const overlap = overlapMatrix(basis, molecule.atoms);
     const n = fixture.orbitals.length;
     expect(basis.length).toBe(n);
     expect(electronCount).toBe(fixture.electrons);
@@ -429,24 +443,48 @@ M  END
     expect(seen.sort()).toEqual(axes);
   });
 
-  it('the canonical e1g pair of benzene is the textbook pair: one member carries the nodal atoms', () => {
-    // the app snaps the geometry to its point group before solving, which is
-    // what makes the pair exactly degenerate (2.3 meV before, 1e-9 meV after)
+  it('the canonical e1g pair of benzene is the textbook pair, however the ring is turned', () => {
+    // The app snaps the geometry to its point group before solving, which is
+    // what makes the pair exactly degenerate (2.3 meV before, 1e-9 meV after).
+    // The pair is then built against the frame's x axis, and a symmetric top
+    // leaves that axis free in the ring plane: until it was put through an
+    // atom, the "nodal" carbons carried 0.056 here and benzene's HOMO leaned
+    // (reported 2026-10-06, 0.47/0.44 where symmetry wants four equal). Now:
+    // one member has a nodal plane through two carbons — exactly zero there,
+    // equal magnitudes on the other four — and turning the ring in its own
+    // plane before solving changes nothing.
     const snapped = symmetrizeMolecule(reporterBenzene);
-    const result = solveExtendedHuckel({ atoms: snapped.atoms, bonds: reporterBenzene.bonds })!;
-    // the pair is MO 14/15 in this ladder; the in-plane frame decides which
-    // member has its nodes through atoms and which through bonds, so assert
-    // the shape of the pair rather than which one is which
-    const pz = result.basis.map((b, i) => (b.label.endsWith('2pz') ? i : -1)).filter((i) => i >= 0);
-    // the drawing's own significance threshold: the reporter's ring is a few
-    // 1e-4 Å off perfect symmetry, so the "nodal" atoms carry 0.056 rather
-    // than exactly 0 — invisible as lobes, visible as a number
-    const counts = [13, 14].map((mo) => {
-      const largest = Math.max(...result.coefficients[mo].map(Math.abs));
-      return pz.filter((i) => Math.abs(result.coefficients[mo][i]) / largest >= MO_SIGNIFICANT).length;
-    });
-    expect(counts.filter((c) => c === 4).length).toBe(1); // nodes through two atoms
-    expect(counts.filter((c) => c === 6).length).toBe(1); // nodes through two bonds
+    const pairOf = (atoms: Molecule['atoms']) => {
+      const result = solveExtendedHuckel({ atoms, bonds: reporterBenzene.bonds })!;
+      const pz = result.basis.map((b, i) => (b.label.endsWith('2pz') ? i : -1)).filter((i) => i >= 0);
+      return [13, 14].map((mo) => pz.map((i) => Math.abs(result.coefficients[mo][i])));
+    };
+    const pair = pairOf(snapped.atoms);
+    const nodal = pair.find((c) => c.filter((v) => v < 1e-6).length === 2);
+    expect(nodal).toBeDefined();
+    const lobes = nodal!.filter((v) => v >= 1e-6);
+    expect(lobes).toHaveLength(4);
+    for (const v of lobes) expect(v).toBeCloseTo(lobes[0], 6);
+
+    // the ring's own plane, from three of its carbons; turn about its normal
+    const [p0, p1, p2] = [0, 1, 2].map((i) => snapped.atoms[i]);
+    const normal = vecNormalize(crossProduct(
+      [p1.x - p0.x, p1.y - p0.y, p1.z - p0.z], [p2.x - p0.x, p2.y - p0.y, p2.z - p0.z]));
+    for (const degrees of [7, 23, 41]) {
+      const t = (degrees * Math.PI) / 180;
+      // Rodrigues: v cos t + (n × v) sin t + n (n · v)(1 − cos t)
+      const turned = snapped.atoms.map((a) => {
+        const v: [number, number, number] = [a.x, a.y, a.z];
+        const nxv = crossProduct(normal, v);
+        const ndv = vecDot(normal, v);
+        const r = [0, 1, 2].map((k) => v[k] * Math.cos(t) + nxv[k] * Math.sin(t) + normal[k] * ndv * (1 - Math.cos(t)));
+        return { ...a, x: r[0], y: r[1], z: r[2] };
+      });
+      const again = pairOf(turned);
+      for (let m = 0; m < 2; m++) {
+        for (let k = 0; k < 6; k++) expect(again[m][k]).toBeCloseTo(pair[m][k], 6);
+      }
+    }
   });
 
   it('canonicalizing twice changes nothing', () => {
