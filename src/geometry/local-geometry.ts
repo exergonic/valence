@@ -22,6 +22,7 @@
 import type { Molecule } from '../mol-parser';
 import { Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, type Gfn2Progress, type Gfn2Result } from './gfn2-refine';
 import { embed3D, finite, honourWedges, type EmbedResult } from './embed';
+import { bondingChange } from './bond-integrity';
 
 export interface LocalGeometry extends EmbedResult {
   /** 'gfn2': a GFN2-xTB optimisation — converged, or the lowest point of a run
@@ -75,5 +76,12 @@ export async function computeLocalGeometry(
 
   // The engine's geometry is the authority — no post-hoc repair; only the
   // drawn wedges are asserted, because the sketch is the specification.
-  return { ...honourWedges(sketch, refined.molecule), engine: 'gfn2', gfn2: refined };
+  const finished = honourWedges(sketch, refined.molecule);
+  // ...but it must still be the molecule drawn. GFN2 moves nuclei, not bonds,
+  // and a bad start once came back "converged" with two H2 molecules in it
+  // (bond-integrity.ts). A result whose bonding is not the sketch's is set
+  // aside, and the start is shown, saying why.
+  const changed = bondingChange(finished.molecule);
+  if (changed) return unrefined(`GFN2-xTB's result no longer had the bonds drawn — ${changed} — so it was set aside`);
+  return { ...finished, engine: 'gfn2', gfn2: refined };
 }

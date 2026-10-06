@@ -1,3 +1,4 @@
+import { bondingChange } from '../geometry/bond-integrity';
 import type { SceneContext } from '../render';
 import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
@@ -404,6 +405,12 @@ export function mountJsmePanel(ctx: SceneContext) {
         const refined = await refineWithGfn2(molecule, trackGfn2Progress());
         if (!refined) {
           showRenderError('GFN2-xTB found no usable geometry from this structure — the geometry is unchanged.');
+          return;
+        }
+        // the same guard as the local pipeline's: not the molecule drawn, not shown
+        const changed = bondingChange(refined.molecule);
+        if (changed) {
+          showRenderError(`GFN2-xTB's result no longer had the bonds drawn (${changed}) — the geometry is unchanged.`);
           return;
         }
         const snapped = snapToSymmetry(refined.molecule);
