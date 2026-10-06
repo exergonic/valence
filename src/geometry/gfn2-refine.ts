@@ -33,17 +33,21 @@ export type { Gfn2Progress, Gfn2Result };
 export const HESSIAN_SADDLE_THRESHOLD = -0.02;
 
 /**
- * The honest label for a GFN2-optimised geometry, shown in the Info log.
- * GFN2-xTB is semiempirical — not an ab initio answer, and for an ordinary
- * organic molecule not uniformly better than a good force field. It is the
- * app's one engine because it treats hypervalent centres, metals and unusual
- * charge states with the same physics as everything else. Say so.
+ * The honest label for a GFN2-optimised geometry, shown in the Info log:
+ * semiempirical, not ab initio, and why it is the app's one engine — one
+ * parameter set for the whole periodic table through radon, so PCl₅ and a
+ * nickel complex get the same physics as ethane. The details are the
+ * method's open-access paper, linked rather than paraphrased.
  */
-export const GFN2_NOTE =
-  'Geometry optimised with GFN2-xTB — a semiempirical extended tight-binding method, not an ab initio '
-  + 'calculation. It handles hypervalent centres (PCl₅, SF₆), metals and unusual charge states with the same '
-  + 'physics as everything else; for an ordinary organic molecule a good force field can match it on bond lengths '
-  + 'and angles (water: 107.2° here against experiment\'s 104.5°).';
+export const GFN2_NOTE = {
+  text: 'Geometry optimised with GFN2-xTB — a semiempirical extended tight-binding method, not an ab initio '
+    + 'calculation. One parameter set covers every element through radon, so PCl₅ and a nickel complex get '
+    + 'the same physics as ethane.',
+  link: {
+    label: 'Bannwarth, Ehlert & Grimme, JCTC 2019',
+    href: 'https://pubs.acs.org/jctcce/article/15/3/1652/975266/GFN2-xTB-An-Accurate-and-Broadly-Parametrized-Self',
+  },
+};
 
 /** Thrown into a run's promise when the user cancels it. */
 export class Gfn2Cancelled extends Error {

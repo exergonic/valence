@@ -3,7 +3,7 @@ import type { SceneContext } from '../render';
 import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
-import type { ExampleNote } from './examples';
+import { writeNote, type InfoNote } from './info-note';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import {
@@ -130,8 +130,8 @@ function composeNotes(
   warnings: string[],
   molecule: Molecule,
   source: 'fetched' | 'local',
-): { warnings: string[]; info: string[] } {
-  const info = source === 'fetched' ? [...parameterGapWarnings(molecule), ...ringPuckerWarnings(molecule)] : [];
+): { warnings: string[]; info: (string | InfoNote)[] } {
+  const info: (string | InfoNote)[] = source === 'fetched' ? [...parameterGapWarnings(molecule), ...ringPuckerWarnings(molecule)] : [];
   return { warnings, info };
 }
 
@@ -192,29 +192,20 @@ function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number
  * there is unreadable). The log exists only while a molecule has notes to
  * show, and every new molecule replaces them.
  */
-export function showInfoLog(notes: (string | ExampleNote)[]) {
+export function showInfoLog(notes: (string | InfoNote)[]) {
   const infoEl = document.getElementById('panel-info')!;
   const itemsEl = document.getElementById('panel-info-items')!;
   itemsEl.replaceChildren();
   for (const note of notes) {
     const item = document.createElement('div');
     item.className = 'panel-info-item';
-    if (typeof note === 'string') {
-      item.textContent = note;
-    } else {
-      const link = document.createElement('a');
-      link.href = note.link.href;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = note.link.label;
-      item.append(`${note.text} `, link);
-    }
+    writeNote(item, note);
     itemsEl.appendChild(item);
   }
   infoEl.classList.toggle('hidden', notes.length === 0);
 }
 
-function updateMoleculeInfo(info: PubChemInfo & { info?: string[] }) {
+function updateMoleculeInfo(info: PubChemInfo & { info?: (string | InfoNote)[] }) {
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
   const nameEl = document.getElementById('mol-name')!;

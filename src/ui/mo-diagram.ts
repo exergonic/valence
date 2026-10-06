@@ -29,6 +29,18 @@ import { MO_PHASE_PAIRS, MO_SIGNIFICANT } from '../render/mo-lobes';
 import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import { SP_ONLY_METALS } from '../chem/extended-huckel/parameters';
 import { ENERGY_UNIT, formatEnergy } from './units';
+import { writeNote } from './info-note';
+
+const PIPEK_MEZEY_NOTE = {
+  text: 'Pipek–Mezey localization of the extended-Hückel orbitals (semiempirical): the delocalized MOs '
+    + 'rearranged into bonds and lone pairs, occupied space and valence-virtual space alike, listed as an energy '
+    + 'ladder — lowest at the bottom. No energies are printed: a localized orbital is not an eigenstate, so the order uses the one-electron '
+    + 'expectation ⟨φ|H|φ⟩ while the numbers themselves would inherit the parameter sensitivity.',
+  link: {
+    label: 'Pipek & Mezey, J. Chem. Phys. 1989',
+    href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
+  },
+};
 
 /** How each localized-orbital class reads in the list — avo_ibo's own tokens,
  *  so our rows can be read beside an ibos.txt. */
@@ -269,7 +281,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     } else {
       readout.textContent = `${orbitals.length} localized orbitals · click one to draw it, another to compare`;
     }
-    note.textContent = 'Pipek–Mezey localization of the extended-Hückel orbitals (semiempirical): the delocalized MOs rearranged into bonds and lone pairs, occupied space and valence-virtual space alike, listed as an energy ladder — lowest at the bottom. Pick one from each section to see a hyperconjugation interaction. No energies are printed: a localized orbital is not an eigenstate, so the order uses the one-electron expectation ⟨φ|H|φ⟩ while the numbers themselves would inherit the parameter sensitivity.';
+    writeNote(note, PIPEK_MEZEY_NOTE);
   }
 
   function draw(): void {

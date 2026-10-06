@@ -1,3 +1,5 @@
+import type { InfoNote } from './info-note';
+
 export interface Example {
   name: string;
   mol: string;
@@ -10,15 +12,10 @@ export interface Example {
   multiplicity?: number;
   /** A fact the structure teaches that a student could mistake for an error,
    *  with where to read more. Shown first in the Info panel. */
-  note?: ExampleNote;
+  note?: InfoNote;
 }
 
-export interface ExampleNote {
-  text: string;
-  link: { label: string; href: string };
-}
-
-const JAHN_TELLER: ExampleNote = {
+const JAHN_TELLER: InfoNote = {
   text: 'Not tetrahedral: the triplet is Jahn–Teller distorted to C3v.',
   link: {
     label: 'Jahn–Teller distortions',
