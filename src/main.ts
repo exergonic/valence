@@ -86,7 +86,8 @@ function setupExamples(ctx: SceneContext) {
     const ex = EXAMPLES[idx];
     if (!ex) return;
 
-    showInfoLog(loadMolecule(ctx, ex.mol, ex.multiplicity ?? 1));
+    const notes = loadMolecule(ctx, ex.mol, ex.multiplicity ?? 1);
+    showInfoLog(ex.note ? [ex.note, ...notes] : notes);
 
     // The valence model has nothing to say about a metal centre, so a complex
     // drawn from it has no orbital lobes to show — and the app's default hides

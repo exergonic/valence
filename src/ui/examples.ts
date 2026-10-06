@@ -8,7 +8,23 @@ export interface Example {
    * without occupancies rather than a closed-shell filling it does not have.
    */
   multiplicity?: number;
+  /** A fact the structure teaches that a student could mistake for an error,
+   *  with where to read more. Shown first in the Info panel. */
+  note?: ExampleNote;
 }
+
+export interface ExampleNote {
+  text: string;
+  link: { label: string; href: string };
+}
+
+const JAHN_TELLER: ExampleNote = {
+  text: 'Not tetrahedral: the triplet is Jahn–Teller distorted to C3v.',
+  link: {
+    label: 'Jahn–Teller distortions',
+    href: 'https://chem.libretexts.org/Bookshelves/Inorganic_Chemistry/Supplemental_Modules_and_Websites_(Inorganic_Chemistry)/Coordination_Chemistry/Structure_and_Nomenclature_of_Coordination_Compounds/Coordination_Numbers_and_Geometry/Jahn-Teller_Distortions',
+  },
+};
 
 const HEADER = 'JME\n\n\n';
 
@@ -379,6 +395,6 @@ export const EXAMPLES: Example[] = [
   { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
   { name: 'Diborane (B₂H₆)', mol: DIBORANE },
   { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2 },
-  { name: 'Tetrachloronickelate(II) ([NiCl₄]²⁻, triplet)', mol: NICL4, multiplicity: 3 },
+  { name: 'Tetrachloronickelate(II) ([NiCl₄]²⁻, triplet)', mol: NICL4, multiplicity: 3, note: JAHN_TELLER },
   { name: 'Tetracyanonickelate(II) ([Ni(CN)₄]²⁻, singlet)', mol: NICN4 },
 ];

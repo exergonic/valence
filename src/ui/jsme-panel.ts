@@ -3,6 +3,7 @@ import type { SceneContext } from '../render';
 import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
+import type { ExampleNote } from './examples';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import {
@@ -191,14 +192,23 @@ function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number
  * there is unreadable). The log exists only while a molecule has notes to
  * show, and every new molecule replaces them.
  */
-export function showInfoLog(notes: string[]) {
+export function showInfoLog(notes: (string | ExampleNote)[]) {
   const infoEl = document.getElementById('panel-info')!;
   const itemsEl = document.getElementById('panel-info-items')!;
   itemsEl.replaceChildren();
   for (const note of notes) {
     const item = document.createElement('div');
     item.className = 'panel-info-item';
-    item.textContent = note;
+    if (typeof note === 'string') {
+      item.textContent = note;
+    } else {
+      const link = document.createElement('a');
+      link.href = note.link.href;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = note.link.label;
+      item.append(`${note.text} `, link);
+    }
     itemsEl.appendChild(item);
   }
   infoEl.classList.toggle('hidden', notes.length === 0);
