@@ -81,6 +81,24 @@ function pointerIsOnStructure(stage: HTMLElement): boolean {
   return !!jsmeParts(stage)?.drawing.querySelector('rect[stroke="blue"]');
 }
 
+/** Where JSME drew the atom of a one-atom sketch: the centre of the first
+ *  letter of its label — the element symbol ("CH4" begins with its C). */
+function loneAtomPoint(stage: HTMLElement): { x: number; y: number } | null {
+  const label = jsmeParts(stage)?.drawing.querySelector('text');
+  const frame = label?.getScreenCTM();
+  if (!label?.textContent || !frame) return null;
+  const letter = label.getExtentOfChar(0);
+  const centre = new DOMPoint(letter.x + letter.width / 2, letter.y + letter.height / 2).matrixTransform(frame);
+  return { x: centre.x, y: centre.y };
+}
+
+/** A pointer move as JSME reads it, at a point on the page. */
+function movePointer(x: number, y: number): void {
+  document.elementFromPoint(x, y)?.dispatchEvent(new MouseEvent('mousemove', {
+    bubbles: true, cancelable: true, view: window, clientX: x, clientY: y,
+  }));
+}
+
 /** A key press as JSME reads it, on the hidden text area that takes its keys. */
 function pressKey(stage: HTMLElement, key: string, ctrlKey = false): void {
   const target = stage.querySelector('textarea');
@@ -149,7 +167,9 @@ export function setupSketcherToolbar(): void {
       swallowRelease = true;
       pressKey(stage, ELEMENT_KEYS[element]);
     } else {
-      placing = true; // JSME places a carbon here; the release below makes it the element
+      // JSME places a carbon only on an empty sketch (beside a structure its
+      // action adds nothing); the release below makes it the element
+      placing = !window.jsmeApplet?.smiles?.();
     }
   }, true);
   stage.addEventListener('mouseup', (event) => {
@@ -164,14 +184,25 @@ export function setupSketcherToolbar(): void {
     if (element === 'C' || !element) return;
     const key = ELEMENT_KEYS[element];
     const { clientX, clientY } = event;
-    // after JSME has placed the carbon: show it the pointer on the new atom,
-    // then press the key
-    setTimeout(() => {
-      document.elementFromPoint(clientX, clientY)?.dispatchEvent(new MouseEvent('mousemove', {
-        bubbles: true, cancelable: true, view: window, clientX, clientY,
-      }));
-      pressKey(stage, key);
-    }, 0);
+    // The new carbon is not always under the pointer: on a fresh page JSME
+    // draws the first atom at the centre of the drawing whatever the click,
+    // and it draws it only on its next pointer event. Typing the key at the
+    // click point found nothing there, and the first atom of every session
+    // stayed CH4 (2026-10-06). So: a move where the click was, so JSME draws
+    // the atom; a move onto the atom where it was drawn; then the key, once
+    // JSME shows the atom under the pointer. A few frames' grace for the
+    // drawing to catch up.
+    const convert = (triesLeft: number) => {
+      movePointer(clientX, clientY);
+      const atom = loneAtomPoint(stage);
+      if (atom) movePointer(atom.x, atom.y);
+      if (pointerIsOnStructure(stage)) {
+        pressKey(stage, key);
+      } else if (triesLeft > 0) {
+        setTimeout(() => convert(triesLeft - 1), 50);
+      }
+    };
+    setTimeout(() => convert(5), 0);
   });
 
   // JSME builds its menus asynchronously after the applet exists; clip them as
