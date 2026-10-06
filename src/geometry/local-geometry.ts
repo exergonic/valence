@@ -45,13 +45,13 @@ export async function computeLocalGeometry(
   onProgress?: (progress: Gfn2Progress) => void,
   refine: Gfn2Refiner = refineWithGfn2,
 ): Promise<LocalGeometry | null> {
-  const { placed, separated } = embed3D(molecule);
+  const { sketch, placed, separated } = embed3D(molecule);
   const start = finite(separated) ? separated : placed;
   // A start that is not even finite has nothing to show: refuse.
   if (!finite(start)) return null;
 
   const unrefined = (reason: string): LocalGeometry => ({
-    ...honourWedges(start, start),
+    ...honourWedges(sketch, start),
     engine: 'unrefined',
     unrefinedReason: reason,
   });
@@ -75,5 +75,5 @@ export async function computeLocalGeometry(
 
   // The engine's geometry is the authority — no post-hoc repair; only the
   // drawn wedges are asserted, because the sketch is the specification.
-  return { ...honourWedges(start, refined.molecule), engine: 'gfn2', gfn2: refined };
+  return { ...honourWedges(sketch, refined.molecule), engine: 'gfn2', gfn2: refined };
 }

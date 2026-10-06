@@ -110,7 +110,7 @@ export function finite(molecule: Molecule): boolean {
  * start, and this is where it comes from — the embedder's idealised VSEPR
  * vectors are themselves a correct starting point, unlike a flat sketch.
  */
-export function embed3D(molecule: Molecule): { placed: Molecule; separated: Molecule } {
+export function embed3D(molecule: Molecule): { sketch: Molecule; placed: Molecule; separated: Molecule } {
   const withH = fillMissingHydrogens(molecule);
   const coords = place3D(withH);
   const placed: Molecule = {
@@ -119,7 +119,9 @@ export function embed3D(molecule: Molecule): { placed: Molecule; separated: Mole
     })),
     bonds: withH.bonds,
   };
-  return { placed, separated: separateOverlaps(placed) };
+  // `sketch` is the drawing with its hydrogens, still in the page's 2D frame:
+  // the wedges are read against it (honourWedges), never against a 3D model.
+  return { sketch: withH, placed, separated: separateOverlaps(placed) };
 }
 
 /**
@@ -128,10 +130,16 @@ export function embed3D(molecule: Molecule): { placed: Molecule; separated: Mole
  * specification, so this runs after the optimisation rather than before — the
  * optimiser walks downhill to the nearest minimum, and for a strained drawn
  * stereoisomer that minimum can belong to a different one.
+ *
+ * `sketch` must be the 2D drawing (with its hydrogens, embed3D's `sketch`):
+ * which side of the page a wedge points to is read from its x,y. Handed the
+ * 3D start instead, the "page" was an arbitrary projection of a model, and a
+ * correct centre was inverted after the optimisation — hexan-2-amine's N moved
+ * 2.3 A, its bonds left behind (2026-10-06).
  */
-function finish(embedded: Molecule, refined: Molecule): EmbedResult {
+function finish(sketch: Molecule, refined: Molecule): EmbedResult {
   const pos = refined.atoms.map((a) => [a.x, a.y, a.z] as [number, number, number]);
-  const warnings = applyWedgeStereo(embedded, pos);
+  const warnings = applyWedgeStereo(sketch, pos);
   return {
     molecule: {
       atoms: refined.atoms.map((a, i) => ({ ...a, x: pos[i][0], y: pos[i][1], z: pos[i][2] })),
@@ -142,7 +150,7 @@ function finish(embedded: Molecule, refined: Molecule): EmbedResult {
 }
 
 /** The sketch's wedges are honoured, or the geometry is left as the engine made it. */
-export function honourWedges(embedded: Molecule, refined: Molecule): EmbedResult {
-  if (!embedded.bonds.some((b) => b.stereo)) return { molecule: refined, warnings: [] };
-  return finish(embedded, refined);
+export function honourWedges(sketch: Molecule, refined: Molecule): EmbedResult {
+  if (!sketch.bonds.some((b) => b.stereo)) return { molecule: refined, warnings: [] };
+  return finish(sketch, refined);
 }

@@ -1,7 +1,6 @@
 import type { Molecule } from '../mol-parser';
-import { optimizeTorsions } from './torsions';
 import { applyWedgeStereo } from './stereo-wedge';
-import { vecDot, crossProduct, vecNormalize, rotateRodrigues } from '../utils/vec3';
+import { vecDot, vecSub, crossProduct, vecNormalize, rotateRodrigues, projectPerpendicular } from '../utils/vec3';
 import { idealVseprVectors } from '../chem/vsepr/ideal-vsepr-vectors';
 import { getCovalentRadius } from '../chem/radii';
 
@@ -44,6 +43,73 @@ function alignVectors(from: [number, number, number], to: [number, number, numbe
 }
 
 
+
+type Vec3 = [number, number, number];
+
+/** The dihedral a–b–c–d (radians), looking down b→c. */
+function dihedral(a: Vec3, b: Vec3, c: Vec3, d: Vec3): number {
+  const axis = vecNormalize(vecSub(c, b));
+  const u = projectPerpendicular(vecSub(a, b), axis);
+  const v = projectPerpendicular(vecSub(d, c), axis);
+  return Math.atan2(vecDot(crossProduct(u, v), axis), vecDot(u, v));
+}
+
+/** Which side of the line p→q the point x lies on, in the sketch's plane. */
+function sideOf(p: { x: number; y: number }, q: { x: number; y: number }, x: { x: number; y: number }): number {
+  return (q.x - p.x) * (x.y - p.y) - (q.y - p.y) * (x.x - p.x);
+}
+
+/**
+ * The torsion about the bond parent–atom, chosen rather than left to chance.
+ * The reference is a neighbour of the parent (heavy if it has one), and the
+ * atom's first heavy child is turned to sit, about a single bond, ANTI to it
+ * (180°: a straight chain becomes the all-anti zigzag, the alkane minimum,
+ * with every other substituent staggered); about a double bond, CIS or TRANS
+ * to it as the sketch draws them (0° or 180°), which is the configuration
+ * the drawing asks for — the walk used to give cis- and trans-but-2-ene the
+ * same 60° twist. The atom's free directions are turned together about the
+ * bond, so their angles to each other are untouched.
+ */
+function setTorsion(
+  molecule: Molecule,
+  pos: Vec3[],
+  adj: number[][],
+  atom: number,
+  parent: number,
+  lead: number,
+  directions: Vec3[],
+): Vec3[] {
+  const heavy = (i: number) => molecule.atoms[i].element !== 'H';
+  const others = adj[parent].filter((nb) => nb !== atom && pos[nb]);
+  const reference = others.find(heavy) ?? others[0];
+  if (reference === undefined || lead === undefined) return directions;
+  const order = molecule.bonds.find((b) =>
+    (b.atom1Index === parent && b.atom2Index === atom) || (b.atom1Index === atom && b.atom2Index === parent))?.order ?? 1;
+  if (order === 3) return directions; // linear: no torsion to set
+
+  let target = Math.PI;
+  if (order === 2 && heavy(reference) && heavy(lead)) {
+    const [p, a, r, l] = [parent, atom, reference, lead].map((i) => molecule.atoms[i]);
+    const sideR = sideOf(p, a, r);
+    const sideL = sideOf(p, a, l);
+    // same side of the double bond in the sketch: cis
+    if (Math.abs(sideR) > 1e-6 && Math.abs(sideL) > 1e-6 && Math.sign(sideR) === Math.sign(sideL)) target = 0;
+  }
+
+  // the free direction nearest the target, and the turn that puts it there
+  const at = pos[atom];
+  const torsionOf = (v: Vec3) => dihedral(pos[reference], pos[parent], at, [at[0] + v[0], at[1] + v[1], at[2] + v[2]]);
+  const gap = (angle: number) => Math.atan2(Math.sin(target - angle), Math.cos(target - angle));
+  const nearest = directions.reduce((best, v) => (Math.abs(gap(torsionOf(v))) < Math.abs(gap(torsionOf(best))) ? v : best));
+  const turn = gap(torsionOf(nearest));
+  const axis = vecNormalize(vecSub(at, pos[parent]));
+  const cosT = Math.cos(turn);
+  const sinT = Math.sin(turn);
+  const turned = directions.map((v) => rotateRodrigues(v, axis, cosT, sinT));
+  // the lead's slot first, so the caller hands it to the lead
+  const leadSlot = directions.indexOf(nearest);
+  return [turned[leadSlot], ...turned.filter((_, i) => i !== leadSlot)];
+}
 
 /**
  * Ring bonds: a bond (a, b) is in a ring when a still reaches b after
@@ -94,7 +160,8 @@ export function hasRingBonds(molecule: Molecule): boolean {
 }
 
 // The 3D embedder: graph-walk placement along ideal hybrid vectors at
-// covalent bond lengths, then staggered-alkane torsion optimization. Its
+// covalent bond lengths, each torsion chosen as the atom is placed (anti about
+// single bonds, the sketch's cis/trans about double bonds — setTorsion). Its
 // output is the GFN2 optimiser's start, and the structure shown when that
 // optimisation cannot run.
 export function place3D(molecule: Molecule): [number, number, number][] {
@@ -114,7 +181,6 @@ export function place3D(molecule: Molecule): [number, number, number][] {
 
   const pos: [number, number, number][] = new Array(n);
   const placed = new Set<number>();
-  const parent: number[] = new Array(n).fill(-1);
 
   // Seed ring atoms from the 2D input: the sketcher's ring is a proper
   // polygon (correct closure, correct angles, no overlaps), while the
@@ -182,7 +248,6 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     const lift = hasPi[i] ? 0 : (k % 2 === 0 ? 1 : -1) * PUCKER;
     pos[i] = [molecule.atoms[i].x * ringScale, molecule.atoms[i].y * ringScale, lift];
     placed.add(i);
-    parent[i] = i;
   });
 
   // Ring H placement: the vector matching cannot know the ring plane,
@@ -250,7 +315,6 @@ export function place3D(molecule: Molecule): [number, number, number][] {
           pos[i][2] + length * slots[k][2],
         ];
         placed.add(h);
-        parent[h] = i;
       }
     }
   }
@@ -279,7 +343,6 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   }
 
   placed.add(root);
-  parent[root] = root;
 
   const queue = [root, ...ringAtoms];
   while (queue.length > 0) {
@@ -330,12 +393,26 @@ export function place3D(molecule: Molecule): [number, number, number][] {
       if (bestIdx >= 0) used.add(bestIdx);
     }
 
-    const available = rotated.filter((_, i) => !used.has(i));
+    let available = rotated.filter((_, i) => !used.has(i));
     if (available.length === 0) continue;
 
-    for (let k = 0; k < unplaced.length; k++) {
+    // Heavy atoms before hydrogens: the first heavy child takes the slot
+    // the torsion below is chosen for.
+    const ordered = [
+      ...unplaced.filter((nb) => molecule.atoms[nb].element !== 'H'),
+      ...unplaced.filter((nb) => molecule.atoms[nb].element === 'H'),
+    ];
+    // An atom grown from one placed neighbour (a chain, a branch, a ring's
+    // substituent) is free to turn about that bond, and the minimal rotation
+    // that aligned its directions left the torsion arbitrary — chains came
+    // out eclipsed and coiled (octane's C3 and C8 0.17 A apart). Set it.
+    if (placedNeighbors.length === 1) {
+      available = setTorsion(molecule, pos, adj, curr, placedNeighbors[0], ordered[0], available);
+    }
+
+    for (let k = 0; k < ordered.length; k++) {
       const vec = available[k % available.length];
-      const nb = unplaced[k];
+      const nb = ordered[k];
       const length = bondLength(curr, nb);
       pos[nb] = [
         pos[curr][0] + length * vec[0],
@@ -343,12 +420,9 @@ export function place3D(molecule: Molecule): [number, number, number][] {
         pos[curr][2] + length * vec[2],
       ];
       placed.add(nb);
-      parent[nb] = curr;
       queue.push(nb);
     }
   }
-
-  optimizeTorsions(molecule, adj, parent, pos);
 
   // The drawn wedge and hash bonds fix each stereocenter's configuration, and
   // the graph walk knows nothing about them. This runs last, after the torsion
