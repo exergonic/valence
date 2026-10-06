@@ -30,6 +30,15 @@ export const TRIG_BIPYRAMIDAL_VECTORS: [number, number, number][] = [
   [-0.5, -Math.sqrt(3) / 2, 0],
 ];
 
+// Four sites in a plane: XeF₄'s shape (AX₄E₂), and a low-spin d⁸ metal's —
+// the embedder's start for [Ni(CN)₄]²⁻ and PtCl₄²⁻ (place3d.ts).
+export const SQUARE_PLANAR_VECTORS: [number, number, number][] = [
+  [1, 0, 0],
+  [0, 1, 0],
+  [-1, 0, 0],
+  [0, -1, 0],
+];
+
 export const OCTAHEDRAL_VECTORS: [number, number, number][] = [
   [1, 0, 0],
   [-1, 0, 0],

@@ -1,7 +1,8 @@
 import type { Molecule } from '../mol-parser';
 import { applyWedgeStereo } from './stereo-wedge';
 import { vecDot, vecSub, crossProduct, vecNormalize, rotateRodrigues, projectPerpendicular } from '../utils/vec3';
-import { idealVseprVectors } from '../chem/vsepr/ideal-vsepr-vectors';
+import { idealVseprVectors, SQUARE_PLANAR_VECTORS } from '../chem/vsepr/ideal-vsepr-vectors';
+import { dElectronCount } from '../chem/d-electron-count';
 import { getCovalentRadius } from '../chem/radii';
 
 /**
@@ -164,6 +165,19 @@ export function hasRingBonds(molecule: Molecule): boolean {
 // single bonds, the sketch's cis/trans about double bonds — setTorsion). Its
 // output is the GFN2 optimiser's start, and the structure shown when that
 // optimisation cannot run.
+/**
+ * A four-coordinate d⁸ metal in a singlet is square planar: in a tetrahedral
+ * field its eight d electrons would put four in the triply degenerate t₂ set,
+ * which no closed shell can hold. Started tetrahedral, [Ni(CN)₄]²⁻ never
+ * converged — GFN2's SCC oscillates there (NOTES.md, 2026-10-06). A triplet
+ * (NiCl₄²⁻, the high-spin partner) keeps the tetrahedral start.
+ */
+function squarePlanarD8(molecule: Molecule, atom: number, coordinationNumber: number): boolean {
+  return coordinationNumber === 4
+    && (molecule.multiplicity ?? 1) === 1
+    && dElectronCount(molecule, atom) === 8;
+}
+
 export function place3D(molecule: Molecule): [number, number, number][] {
   const n = molecule.atoms.length;
   const adj: number[][] = Array.from({ length: n }, () => []);
@@ -348,7 +362,9 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   while (queue.length > 0) {
     const curr = queue.shift()!;
     const coordinationNumber = adj[curr].length;
-    const vectors = idealVseprVectors(coordinationNumber);
+    const vectors = squarePlanarD8(molecule, curr, coordinationNumber)
+      ? SQUARE_PLANAR_VECTORS
+      : idealVseprVectors(coordinationNumber);
 
     const unplaced = adj[curr].filter((ni) => !placed.has(ni));
     if (unplaced.length === 0) continue;
