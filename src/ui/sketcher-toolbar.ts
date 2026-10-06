@@ -123,10 +123,13 @@ export function setupSketcherToolbar(): void {
       } else if (tool === 'undo' || tool === 'redo') {
         pressKey(stage, tool === 'undo' ? 'z' : 'y', true);
       } else if (tool === 'clear') {
-        // After an undo or redo, JSME can ignore its first clear() (measured;
-        // the second always takes), so clear until the sketch is empty.
+        // JSME's clear() empties the molecule but does not redraw, so the old
+        // structure stayed on screen and Clear looked dead. And right after
+        // an undo or redo the first call is ignored (measured; the second
+        // always takes). Clear until empty, then redraw.
         applet.clear();
         if (applet.smiles()) applet.clear();
+        applet.repaint();
       } else if (tool && tool in TOOL_ACTIONS) {
         chooseTool(tool, button);
       }
