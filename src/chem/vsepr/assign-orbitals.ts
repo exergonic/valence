@@ -41,6 +41,34 @@ export function isVseprElement(element: string): boolean {
   return VSEPR_ELEMENTS.has(element);
 }
 
+/**
+ * Each atom's σ neighbours — the bonds that are electron domains. Between two
+ * main-group atoms every bond is one. A bond to a metal is one for the ligand
+ * atom when it is a donor bond: Cl⁻ in NiCl₄²⁻ or the cyanide C in
+ * Ni(CN)₄²⁻ gives the metal a lone pair, and that pair still points somewhere —
+ * at the metal. Dropping the bond left each chloride with four lone pairs and
+ * no bond to orient them by, so none were drawn. A haptic contact is not a
+ * domain: when the metal is also bonded to one of the atom's own neighbours
+ * (a cyclopentadienyl ring, an η² alkene), the atom shares the metal with its
+ * ring rather than donating a pair, and counting it made every ferrocene
+ * carbon read sp³. The metal itself has no neighbours here: the model does
+ * not describe it.
+ */
+export function sigmaNeighbors(molecule: Molecule): number[][] {
+  const { atoms, bonds } = molecule;
+  const bonded: number[][] = atoms.map(() => []);
+  for (const b of bonds) {
+    bonded[b.atom1Index].push(b.atom2Index);
+    bonded[b.atom2Index].push(b.atom1Index);
+  }
+  const described = (i: number) => VSEPR_ELEMENTS.has(atoms[i].element);
+  return bonded.map((list, i) => {
+    if (!described(i)) return [];
+    return list.filter((j) => described(j)
+      || !list.some((k) => k !== j && bonded[j].includes(k)));
+  });
+}
+
 // Takes a molecule with 3D coordinates and assigns the orbitals of every
 // heavy atom.  Returns the same number of entries as molecule.atoms
 // (hydrogen included: one σ bond and no lone pair is steric number 1, which
@@ -48,18 +76,16 @@ export function isVseprElement(element: string): boolean {
 export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
   const atomCount = molecule.atoms.length;
 
-  // Adjacency list + count of π bonds touching each atom.
-  // A double bond = 1 π bond, a triple bond = 2 π bonds.
-  const neighborsOf: number[][] = Array.from({ length: atomCount }, () => []);
+  const neighborsOf = sigmaNeighbors(molecule);
+
+  // Count of π bonds touching each atom: a double bond = 1, a triple = 2.
+  // Only bonds between described atoms — a metal's d-orbital π back-bonding
+  // is not a p orbital this model draws.
   const piBondsPerAtom: number[] = new Array(atomCount).fill(0);
   for (const bond of molecule.bonds) {
-    // a bond to an element the model does not describe is not a domain: the
-    // metallocene's haptic contacts must not inflate the ring carbons' counts
     const a = molecule.atoms[bond.atom1Index].element;
     const b = molecule.atoms[bond.atom2Index].element;
     if (!VSEPR_ELEMENTS.has(a) || !VSEPR_ELEMENTS.has(b)) continue;
-    neighborsOf[bond.atom1Index].push(bond.atom2Index);
-    neighborsOf[bond.atom2Index].push(bond.atom1Index);
     const piCount = Math.max(0, bond.order - 1);
     piBondsPerAtom[bond.atom1Index] += piCount;
     piBondsPerAtom[bond.atom2Index] += piCount;

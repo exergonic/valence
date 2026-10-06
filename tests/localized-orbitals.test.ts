@@ -337,7 +337,7 @@ describe('the topology PM recovers', () => {
     expect(countIn(pcl5, 'lone pair')).toBe(15);
     expect(countIn(pcl5, 'pi')).toBe(0);
     expect(countIn(pcl5, 'delta')).toBe(0);
-  });
+  }, 30_000); // ~1.5 s alone, past the 5 s default when the whole suite runs at once
 });
 
 // PubChem 3D conformers (record_type=3d).

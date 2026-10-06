@@ -156,5 +156,5 @@ export function fillMissingHydrogens(molecule: Molecule): Molecule {
     }
   }
 
-  return { atoms, bonds };
+  return { ...molecule, atoms, bonds }; // the multiplicity rides along
 }

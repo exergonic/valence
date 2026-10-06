@@ -3,7 +3,7 @@ import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
 import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
 import { getElementColor, getCovalentRadius } from './chem-data';
-import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
+import { sigmaNeighbors, type AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import { getLonePairDirections } from '../chem/vsepr/orient-lone-pairs';
 import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
 
@@ -16,13 +16,8 @@ export function renderHybridOrbitals(
 ): void {
   const cached = atomOrbitals ?? [];
   const n = molecule.atoms.length;
-  const adj: number[][] = Array.from({ length: n }, () => []);
-  for (const bond of molecule.bonds) {
-    // only contacts the electron-domain model describes — see assign-orbitals
-    if (cached[bond.atom1Index]?.described === false || cached[bond.atom2Index]?.described === false) continue;
-    adj[bond.atom1Index].push(bond.atom2Index);
-    adj[bond.atom2Index].push(bond.atom1Index);
-  }
+  // only contacts the electron-domain model describes — see assign-orbitals
+  const adj = sigmaNeighbors(molecule);
 
   for (let i = 0; i < n; i++) {
     const atom = molecule.atoms[i];

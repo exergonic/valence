@@ -3,7 +3,7 @@ import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
-import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
+import { assignOrbitals, sigmaNeighbors } from '../src/chem/vsepr/assign-orbitals';
 import { getLonePairDirections } from '../src/chem/vsepr/orient-lone-pairs';
 import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 
@@ -206,6 +206,32 @@ describe('every example is a complete structure', () => {
       if (atom.element === 'C' || atom.element === 'N') expect(`${atom.element}${i + 1} ${assigned[i].hybridization}`).toBe(`${atom.element}${i + 1} sp`);
     });
   });
+});
+
+describe('ligands bonded to a metal', () => {
+  // A ligand's bond to the metal is a donor pair, and a domain: each chloride
+  // of NiCl₄²⁻ is sp³ with three lone pairs, like HCl — not four lone pairs
+  // with nothing to orient them by, which drew none. (A haptic contact is
+  // not a donor bond: ferrocene, in irrep-labels.test.ts.)
+  it('gives each chloride of NiCl₄²⁻ one σ domain and three lone pairs', () => {
+    const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Tetrachloronickelate'))!.mol);
+    const assigned = assignOrbitals(molecule);
+    molecule.atoms.forEach((atom, i) => {
+      if (atom.element === 'Ni') expect(assigned[i].described).toBe(false);
+      if (atom.element === 'Cl') expect(`Cl${i + 1} ${assigned[i].hybridization} ${assigned[i].lonePairs}`).toBe(`Cl${i + 1} sp³ 3`);
+    });
+  });
+
+  it('gives the cyanide C of Ni(CN)₄²⁻ its bond to Ni, and the N its lone pair', () => {
+    const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Tetracyanonickelate'))!.mol);
+    const assigned = assignOrbitals(molecule);
+    const neighbors = sigmaNeighbors(molecule);
+    molecule.atoms.forEach((atom, i) => {
+      if (atom.element === 'C') expect(`C${i + 1} ${neighbors[i].length} σ, ${assigned[i].lonePairs} lp`).toBe(`C${i + 1} 2 σ, 0 lp`);
+      if (atom.element === 'N') expect(`N${i + 1} ${neighbors[i].length} σ, ${assigned[i].lonePairs} lp`).toBe(`N${i + 1} 1 σ, 1 lp`);
+    });
+  });
+
 });
 
 describe('PCl₅ example geometry (the ideal trigonal bipyramid)', () => {

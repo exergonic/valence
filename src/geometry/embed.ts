@@ -32,14 +32,16 @@ function hash(i: number, seed: number): number {
  */
 export function breakSymmetry(molecule: Molecule): Molecule {
   const kick = hasRingBonds(molecule) ? 0.1 : 0.05;
+  // spread the molecule, not just its atoms and bonds: a triplet that lost its
+  // multiplicity here was optimised as a singlet — NiCl₄²⁻ went square planar
   return {
+    ...molecule,
     atoms: molecule.atoms.map((a, i) => ({
       ...a,
       x: a.x + kick * hash(i, 1),
       y: a.y + kick * hash(i, 2),
       z: a.z + kick * hash(i, 3),
     })),
-    bonds: molecule.bonds,
   };
 }
 
@@ -84,7 +86,7 @@ function separateOverlaps(molecule: Molecule): Molecule {
       }
     }
   }
-  return { atoms, bonds: molecule.bonds };
+  return { ...molecule, atoms };
 }
 
 export interface EmbedResult {
@@ -114,10 +116,10 @@ export function embed3D(molecule: Molecule): { sketch: Molecule; placed: Molecul
   const withH = fillMissingHydrogens(molecule);
   const coords = place3D(withH);
   const placed: Molecule = {
+    ...withH,
     atoms: withH.atoms.map((a, i) => ({
       ...a, x: coords[i][0], y: coords[i][1], z: coords[i][2],
     })),
-    bonds: withH.bonds,
   };
   // `sketch` is the drawing with its hydrogens, still in the page's 2D frame:
   // the wedges are read against it (honourWedges), never against a 3D model.
@@ -142,8 +144,8 @@ function finish(sketch: Molecule, refined: Molecule): EmbedResult {
   const warnings = applyWedgeStereo(sketch, pos);
   return {
     molecule: {
+      ...refined,
       atoms: refined.atoms.map((a, i) => ({ ...a, x: pos[i][0], y: pos[i][1], z: pos[i][2] })),
-      bonds: refined.bonds,
     },
     warnings,
   };
