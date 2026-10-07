@@ -1,34 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Valence's mark — the header's hexagon, a central atom and three bonded
+       neighbours — on a dark tile so it reads on light and dark tab bars and
+       taskbars alike. Colours are the Graphite theme's accent and text tokens.
+       The ring is heavier than the header's: at 16 px a hairline vanishes.
+       Also the source of the desktop icons (src-tauri/icon-source.svg). -->
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#1a1a2e"/>
-      <stop offset="100%" stop-color="#111118"/>
-    </linearGradient>
-    <linearGradient id="lobe1" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#4488ff"/>
-      <stop offset="100%" stop-color="#2266dd"/>
-    </linearGradient>
-    <linearGradient id="lobe2" x1="1" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#4488ff"/>
-      <stop offset="100%" stop-color="#2266dd"/>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#181c23"/>
+      <stop offset="1" stop-color="#0b0c0e"/>
     </linearGradient>
   </defs>
-  <!-- Background circle -->
-  <circle cx="512" cy="512" r="480" fill="url(#bg)"/>
-  <!-- Left sigma lobe -->
-  <path d="M280 520 Q200 480 200 380 Q200 280 280 240 Q320 220 370 240 Q480 280 480 420 Q480 520 420 560 Q370 580 340 560 Z" fill="url(#lobe1)" opacity="0.85"/>
-  <!-- Right sigma lobe -->
-  <path d="M680 560 Q760 520 760 620 Q760 720 680 760 Q640 780 590 760 Q480 720 480 580 Q480 480 540 440 Q590 420 620 440 Z" fill="url(#lobe2)" opacity="0.85"/>
-  <!-- Left carbon atom sphere -->
-  <ellipse cx="340" cy="350" rx="80" ry="75" fill="#909090"/>
-  <ellipse cx="330" cy="340" rx="25" ry="20" fill="#b0b0b0" opacity="0.4"/>
-  <!-- Right carbon atom sphere -->
-  <ellipse cx="620" cy="650" rx="80" ry="75" fill="#909090"/>
-  <ellipse cx="610" cy="640" rx="25" ry="20" fill="#b0b0b0" opacity="0.4"/>
-  <!-- Pi orbital lobes (top/bottom) -->
-  <path d="M340 220 Q370 120 420 100 Q460 90 480 110 Q510 140 480 200 Q460 240 420 250 Q370 260 340 220 Z" fill="#4488ff" opacity="0.6"/>
-  <path d="M340 480 Q370 580 420 600 Q460 610 480 590 Q510 560 480 500 Q460 460 420 450 Q370 440 340 480 Z" fill="#4488ff" opacity="0.6"/>
-  <!-- Pi orbital lobes (left/right) -->
-  <path d="M280 400 Q200 430 180 470 Q170 510 190 530 Q220 550 270 520 Q300 500 310 470 Q320 430 280 400 Z" fill="#4488ff" opacity="0.6"/>
-  <path d="M660 600 Q740 570 760 530 Q770 490 750 470 Q720 450 670 480 Q640 500 630 530 Q620 570 660 600 Z" fill="#4488ff" opacity="0.6"/>
+  <rect width="1024" height="1024" rx="224" fill="url(#tile)"/>
+  <g transform="translate(512 512) scale(32) translate(-13 -13)">
+    <polygon points="13,2 23,7.5 23,18.5 13,24 3,18.5 3,7.5" fill="none" stroke="#7aa7ff" stroke-width="2.1" stroke-linejoin="round"/>
+    <circle cx="13" cy="13" r="3.4" fill="#7aa7ff"/>
+    <circle cx="13" cy="2.6" r="2" fill="#e6e8eb"/>
+    <circle cx="22.4" cy="18.2" r="2" fill="#e6e8eb"/>
+    <circle cx="3.6" cy="18.2" r="2" fill="#e6e8eb"/>
+  </g>
 </svg>
