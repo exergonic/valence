@@ -30,6 +30,14 @@ const VENDOR_TYPES: Record<string, string> = {
 export default defineConfig({
   base: process.env.TAURI_ENV_PLATFORM ? '/' : '/valence/',
   build: { target: 'esnext' },
+  server: {
+    watch: {
+      // The Rust build output is not the app's source, and a `tauri build`
+      // holds its files locked: watching them crashed the dev server with
+      // EBUSY on target/release/deps/valence.exe (2026-10-07).
+      ignored: ['**/src-tauri/target/**'],
+    },
+  },
   worker: {
     // The worker is created with `{ type: 'module' }`, and the vendored
     // emscripten glue uses top-level await (its Node-detection branches), which

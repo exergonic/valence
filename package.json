@@ -9,6 +9,7 @@
     "test": "vitest run --config vite.config.ts --typecheck.tsconfig tsconfig.test.json",
     "test:watch": "vitest --config vite.config.ts --typecheck.tsconfig tsconfig.test.json",
     "lint": "echo 'No linter configured yet'",
+    "smoke": "bun scripts/smoke/smoke.ts",
     "build:tauri": "vite build --base=/",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
