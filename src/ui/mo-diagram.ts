@@ -284,9 +284,18 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     writeNote(note, PIPEK_MEZEY_NOTE);
   }
 
+  // The ladder the list was last framed on. Every click redraws the list, and
+  // centring the selected row each time scrolled the levels under the pointer
+  // (reported 2026-10-06: "I thought the MOs were rearranging on me"). So the
+  // frontier is brought into view once, when a ladder first appears; after
+  // that the list keeps the reader's scroll.
+  let framed: { result: unknown; view: string } | null = null;
+
   function draw(): void {
     const result = ctx.ehResult;
     const view = ctx.display.orbitalView;
+    const sameLadder = framed?.result === result && framed?.view === view;
+    const scrolled = list.scrollTop;
     list.innerHTML = '';
     note.textContent = '';
     readout.textContent = '';
@@ -297,9 +306,13 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       ? !!ctx.localizedOrbitals && ctx.display.localizedSelection.length > 0
       : result !== null && ctx.display.moIndex !== null;
     for (const control of [smooth, opacity, isovalue]) if (control) control.disabled = !hasSelection;
-    if (panel.classList.contains('off-stage')) return;
-
+    // the ladder is not on screen, so its scroll is gone: frame it afresh when it is back
+    if (panel.classList.contains('off-stage')) {
+      framed = null;
+      return;
+    }
     if (view === 'localized') {
+      framed = null;
       drawLocalized();
       return;
     }
@@ -388,11 +401,16 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     list.querySelectorAll<HTMLButtonElement>('button.orb-item').forEach((node) => {
       node.addEventListener('click', () => select(Number(node.dataset.index)));
     });
-    // Nothing is clipped away any more, so the frontier is brought into view
-    // instead — the level a chemist starts at, or the one already drawn.
-    const focus = list.querySelector('button.orb-item.selected')
-      ?? Array.from(list.querySelectorAll('button.orb-item')).find((b) => b.querySelector('.orb-tag'));
-    focus?.scrollIntoView({ block: 'center' });
+    // A new ladder opens on the frontier — the level a chemist starts at, or
+    // the one already drawn; a redraw of the same ladder stays where it was.
+    if (sameLadder) {
+      list.scrollTop = scrolled;
+    } else {
+      framed = { result, view };
+      const focus = list.querySelector('button.orb-item.selected')
+        ?? Array.from(list.querySelectorAll('button.orb-item')).find((b) => b.querySelector('.orb-tag'));
+      focus?.scrollIntoView({ block: 'center' });
+    }
 
     // readout + composition of the selected orbital
     if (selected !== null && result.energies[selected] !== undefined) {
