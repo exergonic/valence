@@ -1767,6 +1767,46 @@ button, input, select, textarea { font-family: inherit; }
 
 .context-item:hover { background: var(--accent); color: var(--accent-ink); }
 
+/* ── JSME's right-click menu, made to match the one above ──
+   JSME builds it as a GWT popup on <body>, outside the sketcher, styled by
+   GWT's chrome theme: a white menu whose text inherited the page's light
+   theme text, so a dark theme put pale text on white (reported 2026-10-07).
+   GWT's stylesheet loads after this one, so each rule carries `body` to win. */
+body .gwt-MenuBarPopup {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* the chrome theme's frame: corner and edge images, none of which fit */
+body .gwt-MenuBarPopup [class*="menuPopup"] { background: none; }
+
+body .gwt-MenuBarPopup .gwt-MenuBar-vertical {
+  background: transparent;
+  padding: 3px;
+}
+
+body .gwt-MenuBarPopup .gwt-MenuBar-vertical .gwt-MenuItem {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-2);
+}
+
+body .gwt-MenuBarPopup .gwt-MenuBar .gwt-MenuItem-selected { background: var(--accent); color: var(--accent-ink); }
+
+body .gwt-MenuBarPopup .gwt-MenuBar .gwt-MenuItem-disabled { color: var(--text-faint); }
+
+body .gwt-MenuBarPopup .gwt-MenuBar-vertical .gwt-MenuItemSeparator .menuSeparatorInner {
+  border-top: 1px solid var(--border);
+  background: none;
+}
+
+body .gwt-MenuBarPopup .gwt-MenuBar-vertical .subMenuIcon-selected { background: var(--accent); }
+
 #copy-toast {
   position: fixed;
   z-index: 60;
