@@ -34,6 +34,7 @@ import { alignToPrincipalAxes, type PrincipalFrame } from './align-principal-axe
 import { BOHR_RADIUS } from './slater-overlap';
 import { D_FUNCTIONS } from './assign-basis';
 import { slaterTerms } from './parameters';
+import { marchSignedField } from '../../utils/march-tetrahedra';
 
 /** The coarsest grid spacing (Å) — the caller's preference, used when the
  *  budget does not allow finer. The actual step adapts down from here: see
@@ -341,17 +342,6 @@ export function evaluatePrepared(
   out.gz = gz;
 }
 
-/** The six tetrahedra of a cube, as corner-index quadruples around the
- *  (0,0,0)–(1,1,1) diagonal. The same decomposition in every cube, so
- *  neighbouring cubes agree on their shared faces. */
-const TETRAHEDRA: number[][] = [
-  [0, 5, 1, 6], [0, 1, 2, 6], [0, 2, 3, 6], [0, 3, 7, 6], [0, 7, 4, 6], [0, 4, 5, 6],
-];
-const CORNER: number[][] = [
-  [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
-  [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
-];
-
 /**
  * A molecular orbital evaluated on a uniform grid: the field, the geometry to
  * march it, and the analytic evaluator its normals come from. Cached per
@@ -510,22 +500,6 @@ export function marchMoField(grid: MoFieldData, isovalue: number): MoSurfaceData
 
   const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
 
-  const positions: number[] = [];
-  const normals: number[] = [];
-  const phases: number[] = [];
-
-  // Scratch for one tetrahedron and its crossings, allocated once: the
-  // extraction visits a million of them on a fine grid, and a per-tet object
-  // or closure was most of the cost.
-  const cx = new Float64Array(4);
-  const cy = new Float64Array(4);
-  const cz = new Float64Array(4);
-  const cSigned = new Float64Array(4); // ψ
-  const px = new Float64Array(4);
-  const py = new Float64Array(4);
-  const pz = new Float64Array(4);
-  const pSign = new Float64Array(4);
-
   /** The outward unit normal at a point: the analytic ∇ψ, negated for the
    *  negative sheet. Exact where a grid-interpolated gradient is not — see the
    *  note on the field array above. */
@@ -536,79 +510,11 @@ export function marchMoField(grid: MoFieldData, isovalue: number): MoSurfaceData
     return [(outward * probe.gx) / length, (outward * probe.gy) / length, (outward * probe.gz) / length];
   }
 
-  /** Append one triangle of crossings a, b, c (indices into the scratch). */
-  function emit(a: number, b: number, c: number): void {
-    const abx = px[b] - px[a], aby = py[b] - py[a], abz = pz[b] - pz[a];
-    const acx = px[c] - px[a], acy = py[c] - py[a], acz = pz[c] - pz[a];
-    const gx = aby * acz - abz * acy;
-    const gy = abz * acx - abx * acz;
-    const gz = abx * acy - aby * acx;
-    // all three crossings lie on one sheet, so one sign covers the triangle
-    const mid = outwardAt((px[a] + px[b] + px[c]) / 3, (py[a] + py[b] + py[c]) / 3, (pz[a] + pz[b] + pz[c]) / 3, pSign[a]);
-    const swap = gx * mid[0] + gy * mid[1] + gz * mid[2] < 0;
-    const order = swap ? [a, c, b] : [a, b, c];
-    for (const v of order) {
-      const normal = outwardAt(px[v], py[v], pz[v], pSign[v]);
-      positions.push(px[v], py[v], pz[v]);
-      normals.push(normal[0], normal[1], normal[2]);
-      phases.push(pSign[v]);
-    }
-  }
-
-  const EDGE: number[][] = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]];
-
-  // One pass per phase sheet, on the signed field. Marching |ψ| instead looks
-  // the same until a grid edge straddles the node with both samples above the
-  // contour: |ψ| is then "inside" at both ends, the dip through zero is
-  // invisible, and the two lobes fuse. ψ = +c and ψ = −c each cross that edge
-  // once, and the gap between them stays empty.
-  for (const positive of [true, false]) {
-    const level = positive ? isovalue : -isovalue;
-    for (let gz = 0; gz < nz - 1; gz++) {
-      for (let gy = 0; gy < ny - 1; gy++) {
-        for (let gx = 0; gx < nx - 1; gx++) {
-          for (const tet of TETRAHEDRA) {
-            let mask = 0;
-            for (let c = 0; c < 4; c++) {
-              const corner = tet[c];
-              const index = (gx + CORNER[corner][0]) + (gy + CORNER[corner][1]) * nx + (gz + CORNER[corner][2]) * nx * ny;
-              const signed = field[index];
-              cx[c] = minX + (gx + CORNER[corner][0]) * step;
-              cy[c] = minY + (gy + CORNER[corner][1]) * step;
-              cz[c] = minZ + (gz + CORNER[corner][2]) * step;
-              cSigned[c] = signed;
-              const inside = positive ? signed > isovalue : signed < -isovalue;
-              if (inside) mask |= 1 << c;
-            }
-            if (mask === 0 || mask === 15) continue;
-
-            let crossings = 0;
-            for (const [i, j] of EDGE) {
-              const insideI = (mask >> i) & 1;
-              const insideJ = (mask >> j) & 1;
-              if (insideI === insideJ) continue;
-              const denom = cSigned[j] - cSigned[i];
-              const t = denom === 0 ? 0.5 : (level - cSigned[i]) / denom;
-              px[crossings] = cx[i] + t * (cx[j] - cx[i]);
-              py[crossings] = cy[i] + t * (cy[j] - cy[i]);
-              pz[crossings] = cz[i] + t * (cz[j] - cz[i]);
-              pSign[crossings] = positive ? 1 : -1;
-              crossings++;
-            }
-            if (crossings === 3) {
-              emit(0, 1, 2);
-            } else if (crossings === 4) {
-              // the quad in edge order (a-c, a-d, b-d, b-c for inside a,b)
-              emit(0, 1, 3);
-              emit(0, 3, 2);
-            }
-            // 6 crossings would mean a degenerate tet; the 6-tet decomposition
-            // cannot produce one, and emitting nothing keeps the mesh closed
-          }
-        }
-      }
-    }
-  }
+  const { positions, normals, phases } = marchSignedField(
+    { values: field, origin: [minX, minY, minZ], dimensions: [nx, ny, nz], spacing: step },
+    isovalue,
+    outwardAt,
+  );
 
   // back to the molecule's coordinates: the frame is a rotation about the
   // centre of mass, so undo both

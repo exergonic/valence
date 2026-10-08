@@ -5,7 +5,7 @@ import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
 import { renderLabels, renderChargeLabels, renderHybridizationLabels } from './labels';
 import { renderOrbitalLabels } from './orbital-labels';
-import { renderPiSystems } from './pi-systems';
+import { renderPiSystems, tintPiSystemLobes } from './pi-systems';
 import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
 import { renderMoOrbitals, MO_PHASE_PAIRS } from './mo-lobes';
@@ -248,9 +248,11 @@ export function rebuildDisplay(ctx: SceneContext) {
     document.getElementById('orbital-legend')!.classList.add('hidden');
   }
 
-  // π system highlighting — render translucent tubes connecting parallel p orbitals
+  // π system highlighting: a cloud either side of each system's σ framework,
+  // its member p lobes tinted to match (pi-systems.ts)
   if (ctx.display.highlightPiSystems && ctx.atomOrbitals && !ctx.display.spaceFilling) {
-    renderPiSystems(ctx.piSystemGroup, ctx.currentMolecule, ctx.atomOrbitals);
+    const systems = renderPiSystems(ctx.piSystemGroup, ctx.currentMolecule, ctx.atomOrbitals, ctx.display.orbitalPreset);
+    tintPiSystemLobes(ctx.orbitalGroup, systems);
     ctx.piSystemGroup.visible = true;
   } else {
     ctx.piSystemGroup.visible = false;

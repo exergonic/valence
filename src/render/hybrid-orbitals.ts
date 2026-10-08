@@ -113,12 +113,13 @@ function addPiOrbital(
     normalized[2] /= len;
 
     const positive = createLobeMesh(piLobe(), color, 0.75, preset, atomScale);
-    positive.userData = { atomIndex, element, lobeType: 'pi', label: 'p' };
+    // the direction lets a π-system highlight find this p (pi-systems.ts)
+    positive.userData = { atomIndex, element, lobeType: 'pi', label: 'p', direction: normalized };
     orientLobe(positive, origin, normalized);
     group.add(positive);
 
     const negative = createLobeMesh(piLobe(), color, 0.75, preset, atomScale);
-    negative.userData = { atomIndex, element, lobeType: 'pi', label: 'p' };
+    negative.userData = { atomIndex, element, lobeType: 'pi', label: 'p', direction: normalized };
     orientLobe(negative, origin, [
       -normalized[0],
       -normalized[1],
