@@ -73,8 +73,11 @@ function cumulenePiDirection(
   const turn = (v: [number, number, number], times: number): [number, number, number] =>
     times % 2 === 1 ? vecNormalize(crossProduct(axis, v)) : v;
 
+  // the partner must be cumulated: a second double bond leading on
+  const onFromPartner = adj[partnerIdx].filter((n) => n !== atomIdx);
+  if (onFromPartner.length !== 1 || bondOrder(molecule, partnerIdx, onFromPartner[0]) !== 2) return null;
   let prev = partnerIdx;
-  let here = adj[partnerIdx].find((n) => n !== atomIdx)!;
+  let here = onFromPartner[0];
   let turns = 1;
   for (;;) {
     const onward = adj[here].filter((n) => n !== prev);
@@ -132,6 +135,16 @@ function piDirectionFromNeighbor(
     // two bonds in line fix no plane: the cross product is noise
     if (sinBetween(v1, bd) < LINEAR) return null;
     return vecNormalize(crossProduct(v1, bd));
+  }
+
+  // A terminal neighbour of a cumulated centre (ketene's O, as the central
+  // carbon sees it): the p of their π bond is the terminal's own, anchored to
+  // the plane at the far end of the chain. Taking an arbitrary perpendicular
+  // here left the central carbon's p's out of line with the CH₂ and the O
+  // whenever the O was listed first (PubChem's order) — reported 2026-10-08.
+  if (otherBonds.length === 0 && bondOrder(molecule, atomIdx, neighborIdx) === 2) {
+    const anchored = cumulenePiDirection(neighborIdx, atomIdx, adj, molecule);
+    if (anchored) return anchored;
   }
 
   // Fallback: perpendicular to the bond to the neighbor

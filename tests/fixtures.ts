@@ -336,3 +336,21 @@ export const pubchemCyclobutane: Molecule = parseMolBlock(PUBCHEM_CYCLOBUTANE_SD
 export const drawnBenzene: Molecule = parseMolBlock(DRAWN_BENZENE_MOL);
 export const pubchemBenzene: Molecule = parseMolBlock(PUBCHEM_BENZENE_SDF);
 export const drawnMethylAnion: Molecule = parseMolBlock(DRAWN_METHYL_ANION_MOL);
+
+// Ketene, PubChem CID 10038, record_type=3d — note the atom order: O first,
+// then the CH₂ carbon, the central carbon last.
+export const PUBCHEM_KETENE_SDF = `10038
+  -OEChem-10082611433D
+
+  5  4  0     0  0  0  0  0  0999 V2000
+    1.2165   -0.0001   -0.0001 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.2570   -0.0001   -0.0001 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.0406    0.0002    0.0001 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.8085    0.8029    0.4744 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.8080   -0.8027   -0.4756 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  3  2  0  0  0  0
+  2  3  2  0  0  0  0
+  2  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+M  END
+`;

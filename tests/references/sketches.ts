@@ -192,3 +192,13 @@ export const ISOCYANIC_ACID = HEADER + `  3  2  0  0  0  0  0  0  0  0999 V2000
   3  2  2  0  0  0  0
 M  END
 `;
+
+/** O=C=C (ketene again, sketched oxygen first, as PubChem lists it) */
+export const KETENE_O_FIRST = HEADER + `  3  2  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.4000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.8000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+  2  1  2  0  0  0  0
+  3  2  2  0  0  0  0
+M  END
+`;
