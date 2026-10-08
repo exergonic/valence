@@ -1,5 +1,5 @@
 import type { Molecule } from '../../mol-parser';
-import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../../utils/vec3';
+import { vecNormalize, vecDot, vecSub, crossProduct, findPerpendicular } from '../../utils/vec3';
 
 // Maximum |cos| between a promoted lone-pair p orbital and any single σ
 // bond of the promoting atom.  A real p orbital's node plane contains the
@@ -35,6 +35,69 @@ export function perpendicularToAllBonds(
   return true;
 }
 
+// Two bonds closer to a straight line than this (sin of the angle between
+// them) fix no plane: their cross product is zero, or numerical noise.
+const LINEAR = Math.sin((10 * Math.PI) / 180);
+
+function sinBetween(a: [number, number, number], b: [number, number, number]): number {
+  const c = crossProduct(vecNormalize(a), vecNormalize(b));
+  return Math.hypot(c[0], c[1], c[2]);
+}
+
+function bondOrder(molecule: Molecule, i: number, j: number): number {
+  const bond = molecule.bonds.find(
+    (b) => (b.atom1Index === i && b.atom2Index === j) || (b.atom1Index === j && b.atom2Index === i),
+  );
+  return bond?.order ?? 0;
+}
+
+// The p direction of an atom double-bonded to the sp centre of a cumulene:
+// ketene's O (H₂C=C=O), CO₂'s, the O of an isocyanate R–N=C=O. Each π bond of
+// a cumulene is at right angles to the next, so the atom's p is set by the far
+// end of the chain. Walk along it, through double bonds, to the first atom that
+// ends the chain; if its bonds fix a plane, its p is that plane's normal, turned
+// 90° about the axis for every double bond between there and here. Whether a
+// centre is cumulated is read from the bond orders, not from how straight the
+// chain is: HN=C=O bends 8° and is still a cumulene.
+// A chain with no plane at either end (CO₂) has no preferred direction: the
+// lower-numbered terminal takes a fixed perpendicular, the other end the same
+// one turned for each bond between, so the two π bonds stay at right angles.
+function cumulenePiDirection(
+  atomIdx: number,
+  partnerIdx: number,
+  adj: number[][],
+  molecule: Molecule,
+): [number, number, number] | null {
+  const at = (i: number): [number, number, number] => [molecule.atoms[i].x, molecule.atoms[i].y, molecule.atoms[i].z];
+  const axis = vecNormalize(vecSub(at(partnerIdx), at(atomIdx)));
+  const turn = (v: [number, number, number], times: number): [number, number, number] =>
+    times % 2 === 1 ? vecNormalize(crossProduct(axis, v)) : v;
+
+  let prev = partnerIdx;
+  let here = adj[partnerIdx].find((n) => n !== atomIdx)!;
+  let turns = 1;
+  for (;;) {
+    const onward = adj[here].filter((n) => n !== prev);
+    // the chain goes on through a single further double bond
+    if (onward.length === 1 && bondOrder(molecule, here, onward[0]) === 2) {
+      prev = here;
+      here = onward[0];
+      turns += 1;
+      continue;
+    }
+    if (onward.length === 0) {
+      // the far terminal: no plane anywhere along the chain
+      const fixed = vecNormalize(findPerpendicular(axis));
+      return atomIdx < here ? fixed : turn(fixed, turns);
+    }
+    // the chain ends at an atom with a plane of its own (CH₂, N–H)
+    const toPrev = vecSub(at(prev), at(here));
+    const inPlane = onward.find((n) => sinBetween(vecSub(at(n), at(here)), toPrev) >= LINEAR);
+    if (inPlane === undefined) return null;
+    return turn(vecNormalize(crossProduct(toPrev, vecSub(at(inPlane), at(here)))), turns);
+  }
+}
+
 // Computes the p-orbital direction for an atom by looking at a specific
 // neighbor's σ-bond geometry.  The neighbor's π-plane normal is determined
 // from its σ-bond vectors (cross product of two of its own bonds).
@@ -61,8 +124,14 @@ function piDirectionFromNeighbor(
     const s1 = molecule.atoms[otherBonds[0]];
     const v1: [number, number, number] = [s1.x - nb.x, s1.y - nb.y, s1.z - nb.z];
     const bd: [number, number, number] = [nb.x - atomPos[0], nb.y - atomPos[1], nb.z - atomPos[2]];
-    const nrm = vecNormalize(crossProduct(v1, bd));
-    return (nrm[0] !== 0 || nrm[1] !== 0 || nrm[2] !== 0) ? nrm : null;
+    // the sp centre of a cumulene: its two bonds fix no plane, and this
+    // atom's p is set by the far end of the chain
+    if (bondOrder(molecule, atomIdx, neighborIdx) === 2 && bondOrder(molecule, neighborIdx, otherBonds[0]) === 2) {
+      return cumulenePiDirection(atomIdx, neighborIdx, adj, molecule);
+    }
+    // two bonds in line fix no plane: the cross product is noise
+    if (sinBetween(v1, bd) < LINEAR) return null;
+    return vecNormalize(crossProduct(v1, bd));
   }
 
   // Fallback: perpendicular to the bond to the neighbor
