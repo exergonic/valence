@@ -11,7 +11,7 @@
 [![Windows](https://img.shields.io/badge/Windows-desktop_app-2f6fe0?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/exergonic/valence/releases)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-![Version](https://img.shields.io/badge/version-1.0.0--beta.1-blue)
+![Version](https://img.shields.io/badge/version-1.0.0--beta.2-blue)
 ![No install](https://img.shields.io/badge/install-none-success)
 ![Static site](https://img.shields.io/badge/server-none-success)
 
@@ -210,5 +210,5 @@ sketch (JSME) ─► Kekulé SMILES ─► PubChem ─► CACTUS ─► local: e
 
 If Valence helps your teaching or your students, please cite it:
 
-> **Valence v1.0.0-beta.1 — Valence Bond Visualization (2026).**
+> **Valence v1.0.0-beta.2 — Valence Bond Visualization (2026).**
 > McCann, B. W. https://github.com/exergonic/valence

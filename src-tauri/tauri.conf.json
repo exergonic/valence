@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Valence",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.2",
   "identifier": "com.exergonic.valence",
   "build": {
     "frontendDist": "../dist",
@@ -37,7 +37,7 @@
     "windows": {
       "wix": {
         "language": "en-US",
-        "version": "1.0.0.1"
+        "version": "1.0.0.2"
       }
     }
   }
