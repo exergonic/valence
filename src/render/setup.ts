@@ -90,6 +90,11 @@ export interface DisplaySettings {
   chargeModel: ChargeModel;
   /** ESP surface translucency — 0.05..0.95 (1 − opacity reads as see-through). */
   espOpacity: number;
+  /** Under GFN2, whether the ESP surface and the dipole include each atom's
+   *  own dipole (on: GFN2's fuller picture, the one its density makes) or show
+   *  the point charges alone — the same charges the labels print. The
+   *  difference is the lesson: a charge on a nucleus cannot hold a lone pair. */
+  atomicDipoles: boolean;
   /** Draw a selected MO as one continuous isosurface (default) rather than as
    *  the individual atomic orbitals it is built from. */
   smoothMo: boolean;
@@ -188,6 +193,11 @@ export interface SceneContext {
    *  the charges as much as of the geometry, so a different array (a model
    *  switch, or GFN2 charges arriving) re-extracts it. */
   espSurfaceCharges: number[] | null;
+  /** The atomic dipoles it was built with (null: charges alone). */
+  espSurfaceDipoles: Array<[number, number, number]> | null;
+  /** The atomic dipoles its colour scale was anchored on, so the GFN2 surface
+   *  with and without them share one scale (null: its own). */
+  espSurfaceScale: Array<[number, number, number]> | null;
   /** Extracted isosurfaces, keyed `mo:<index>` / `localized:<index>`. Each
    *  costs ~50 ms to extract, and the same orbital can be picked, dropped and
    *  picked again while comparing orbitals — so they are kept until the
@@ -351,6 +361,7 @@ export function initScene(container: HTMLElement): SceneContext {
       showEsp: false,
       chargeModel: 'gfn2',
       espOpacity: 0.5,
+      atomicDipoles: true,
       smoothMo: true,
       moOpacity: 0.85,
       isoMode: 'percentile',
@@ -369,6 +380,8 @@ export function initScene(container: HTMLElement): SceneContext {
     gfn2SurfaceRequests: new Set(),
     espSurface: null,
     espSurfaceCharges: null,
+    espSurfaceDipoles: null,
+    espSurfaceScale: null,
     moSurfaces: new Map(),
     moFields: new Map(),
     ehResult: null,

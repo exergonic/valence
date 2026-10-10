@@ -187,6 +187,24 @@ describe('GFN2-xTB', () => {
     expect(p!.beta).toBeNull();
   }, 180_000);
 
+  // The atomic dipoles, in the molecule's axes and e·Å, rebuild the full
+  // dipole with the charges, and they make the lone-pair side of water's
+  // surface more negative than its point charges alone do.
+  it("gives each atom's own dipole: with the charges they make the full dipole, and they deepen water's lone-pair side", async () => {
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const { espPotentialAt } = await import('../src/chem/charge-model/esp');
+    const p = (await propertiesAt(water, vendorFile))!;
+    const mu = [0, 1, 2].map((k) => water.atoms.reduce((sum, a, i) =>
+      sum + p.charges[i] * [a.x, a.y, a.z][k] + p.atomicDipoles![i][k], 0));
+    const debye = Math.hypot(mu[0], mu[1], mu[2]) * 4.80320;
+    expect(debye).toBeCloseTo(Math.hypot(...p.dipole!), 2);
+    // 1.6 Å beyond the oxygen, on the side away from the hydrogens
+    const [x, y, z] = [0, 0, water.atoms[0].z + 1.6];
+    const charges = espPotentialAt(x, y, z, water.atoms, p.charges);
+    const full = espPotentialAt(x, y, z, water.atoms, p.charges, p.atomicDipoles);
+    expect(full).toBeLessThan(charges);
+  }, 180_000);
+
   // An odd electron count runs as a doublet, and the spin it carries is one
   // electron's worth, shared out over the atoms (H₃Si–Ni as CIR built it).
   it('runs an odd electron count as a doublet and reports where the spin sits — H₃Si–Ni', async () => {

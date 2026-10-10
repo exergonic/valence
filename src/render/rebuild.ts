@@ -9,7 +9,7 @@ import { renderPiSystems, tintPiSystemLobes } from './pi-systems';
 import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
 import { renderMoOrbitals, MO_PHASE_PAIRS } from './mo-lobes';
-import { computeEspSurface } from '../chem/charge-model/esp';
+import { computeEspSurface, espVmaxUnder } from '../chem/charge-model/esp';
 import { computeMoField, levelForFraction, marchMoField } from '../chem/extended-huckel/mo-surface';
 import { renderMoIsosurface } from './mo-isosurface';
 import { applyAtomStyle } from './atom-styles';
@@ -214,6 +214,14 @@ function syncLabelModeControl(properties: Gfn2Properties | null) {
   option.textContent = properties.spin === null ? 'Spin density (closed shell: none)' : 'Spin density';
 }
 
+/** The atomic-dipole toggle is GFN2's: MMFF94's charges have no atomic dipoles. */
+function syncAtomicDipoleControl(model: ChargeModel) {
+  const toggle = document.getElementById('ctrl-atomic-dipoles') as HTMLInputElement | null;
+  if (!toggle) return;
+  toggle.disabled = model !== 'gfn2';
+  toggle.parentElement?.classList.toggle('disabled', model !== 'gfn2');
+}
+
 /** The header's dipole readout — which model it came from is in the hover. */
 function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model: ChargeModel, pending: boolean, full: boolean) {
   const element = document.getElementById('mol-dipole');
@@ -225,11 +233,11 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
     element.textContent = `Dipole: ${dipole.debye.toFixed(2)} D`;
     element.title = model === 'gfn2'
       ? (full
-        ? 'The full GFN2-xTB dipole: the Mulliken point charges the labels and the ESP show, plus each atom’s '
-          + 'own dipole (the lone pairs’ lopsidedness the point charges cannot hold). Semiempirical: water reads '
-          + '2.28 D against experiment’s 1.85 D. '
-        : 'The dipole of the GFN2-xTB Mulliken point charges — the charges the labels and the ESP show; '
-          + 'not the full GFN2 dipole, which adds atomic dipoles. ') + convention
+        ? 'The full GFN2-xTB dipole: the Mulliken point charges the labels print, plus each atom’s own dipole '
+          + '(the lone pairs’ lopsidedness a point charge cannot hold) — the same picture the ESP surface draws, so '
+          + 'it need not add up from the labels. Semiempirical: water reads 2.28 D against experiment’s 1.85 D. '
+        : 'The dipole of the GFN2-xTB Mulliken point charges alone — what the labels add up to. GFN2’s full '
+          + 'dipole adds each atom’s own dipole: turn on “Include atomic dipoles”. ') + convention
       : 'The dipole of the MMFF94 BCI partial charges (a charge model, not a quantum-mechanical dipole). '
         // The MMFF94 caveats belong to this model only, so they ride on its
         // readout rather than in the Info log, which outlives a model switch.
@@ -359,12 +367,17 @@ function redrawScene(ctx: SceneContext) {
   // untypeable (computeDipole returned null) or the model gives ~0 D.
   // Visibility belongs to the #ctrl-show-dipole checkbox, so a rebuild
   // never flips the user's choice back on (or off).
-  // GFN2's dipole is its full one — the charges plus the atomic dipoles — once
-  // the single point lands; until then (or if it failed) the charges' own.
-  const fullDipole = shown.model === 'gfn2' ? properties?.dipole ?? null : null;
+  // Under GFN2 the dipole and the ESP include each atom's own dipole — GFN2's
+  // fuller picture, its full dipole — unless the toggle asks for the point
+  // charges alone, the picture the labels add up to. Until the single point
+  // lands (or if it failed) the charges' own.
+  const withAtomicDipoles = shown.model === 'gfn2' && ctx.display.atomicDipoles;
+  syncAtomicDipoleControl(shown.model);
+  const atomicDipoles = withAtomicDipoles ? properties?.atomicDipoles ?? null : null;
+  const fullDipole = withAtomicDipoles ? properties?.dipole ?? null : null;
   ctx.dipole = fullDipole
     ? dipoleFromFullGfn2(ctx.currentMolecule, fullDipole)
-    : shown.model === 'gfn2' && !properties && !gfn2ChargesFailed(ctx)
+    : withAtomicDipoles && !properties && !gfn2ChargesFailed(ctx)
       ? null
       : charges ? dipoleFromCharges(ctx.currentMolecule, charges, shown.residual) : null;
   if (ctx.dipole) {
@@ -382,9 +395,20 @@ function redrawScene(ctx: SceneContext) {
     // The surface is a function of the charges as much as of the geometry, so
     // the cache is keyed by both: a charge-model switch re-extracts (tens of
     // ms), an opacity change reuses what is in hand.
-    if (!ctx.espSurface || ctx.espSurfaceCharges !== charges) {
-      ctx.espSurface = computeEspSurface(ctx.currentMolecule, charges);
+    // One colour scale for GFN2's two pictures, anchored on the fuller one:
+    // switched to the point charges alone, the surface reads paler — their
+    // potential IS weaker (water ±40 against ±57 kcal/mol/e) — instead of
+    // being re-stretched to the same reds and blues.
+    const scaleDipoles = shown.model === 'gfn2' ? properties?.atomicDipoles ?? null : null;
+    if (!ctx.espSurface || ctx.espSurfaceCharges !== charges || ctx.espSurfaceDipoles !== atomicDipoles
+      || ctx.espSurfaceScale !== scaleDipoles) {
+      const surface = computeEspSurface(ctx.currentMolecule, charges, atomicDipoles);
+      ctx.espSurface = scaleDipoles && !atomicDipoles
+        ? { ...surface, vmax: espVmaxUnder(surface, ctx.currentMolecule.atoms, charges, scaleDipoles) }
+        : surface;
       ctx.espSurfaceCharges = charges;
+      ctx.espSurfaceDipoles = atomicDipoles;
+      ctx.espSurfaceScale = scaleDipoles;
     }
     renderEsp(ctx.espGroup, ctx.espSurface, ctx.display.espOpacity);
     ctx.espGroup.visible = true;
@@ -506,6 +530,8 @@ export function buildScene(ctx: SceneContext) {
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
   ctx.espSurfaceCharges = null;
+  ctx.espSurfaceDipoles = null;
+  ctx.espSurfaceScale = null;
   ctx.moSurfaces.clear();
   ctx.moFields.clear();
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is

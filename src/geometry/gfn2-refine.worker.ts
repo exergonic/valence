@@ -725,6 +725,11 @@ export interface Gfn2Properties {
   /** The full GFN2 dipole, debye: the point charges plus the atomic dipoles.
    *  Null from an engine build without the dipole binding. */
   dipole: [number, number, number] | null;
+  /** Each atom's own dipole (CAMM), e·Å, in the molecule's axes: how far its
+   *  share of the electrons sits off its nucleus. With the charges they make
+   *  up the full dipole, and they belong in the ESP. Null from an engine build
+   *  without the binding. */
+  atomicDipoles: Array<[number, number, number]> | null;
   /** The molecular orbitals: one set for a closed shell, α and β for an open
    *  one. Their shapes are drawn by `orbitalField`, which needs this run's
    *  calculator, so it is kept alive under `key` until the next run. */
@@ -908,6 +913,20 @@ export async function propertiesAt(
       ) as [number, number, number];
     }
 
+    // Per atom, the same turn back to the molecule's axes (a dipole does
+    // not care about the origin), bohr to Å.
+    let atomicDipoles: Array<[number, number, number]> | null = null;
+    if (typeof calc.atomicDipoles === 'function') {
+      const d = calc.atomicDipoles();
+      if (d.cols() === count) {
+        const [ax, ay, az] = frame.axes;
+        atomicDipoles = molecule.atoms.map((_, a) => {
+          const v = [d.get(0, a), d.get(1, a), d.get(2, a)].map((x) => x * ANGSTROM_PER_BOHR);
+          return [0, 1, 2].map((k) => v[0] * ax[k] + v[1] * ay[k] + v[2] * az[k]) as [number, number, number];
+        });
+      }
+    }
+
     // The AO → atom map comes from the patch too; without it the shares are
     // left empty rather than guessed.
     const aoAtom = typeof calc.aoAtoms === 'function' ? vector(calc.aoAtoms()) : null;
@@ -941,7 +960,7 @@ export async function propertiesAt(
     kept = { key: nextKey++, calc, signs, frame, fields: new Map() };
     keep = true;
     return {
-      charges, bondOrders, spin, multiplicity, dipole, alpha, beta, key: kept.key,
+      charges, bondOrders, spin, multiplicity, dipole, atomicDipoles, alpha, beta, key: kept.key,
       orbitalBasis: described?.basis ?? null,
       frame,
       coefficients: { alpha: flip(alphaC), beta: betaC ? flip(betaC) : null },
