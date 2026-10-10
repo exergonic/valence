@@ -6,6 +6,8 @@
 
 import type { Molecule } from '../../mol-parser';
 import { assignHybridization } from './hybridize';
+import { VALENCE_ELECTRONS } from '../valence-electrons';
+import { showsOnlyValenceS, valenceSOrbital } from '../elements';
 import { computePiDirection, getPiDirectionFromNeighbor, perpendicularToAllBonds } from './orient-pi';
 import { vecDot, crossProduct } from '../../utils/vec3';
 import * as THREE from 'three';
@@ -19,26 +21,29 @@ export interface AtomOrbitals {
   piDirection: [number, number, number] | null;  // primary p-orbital direction
   piDirection2: [number, number, number] | null; // second p-orbital direction (sp only)
   /** False for an element this electron-domain model does not describe — a
-   *  metal centre. Such an atom gets no label, no lobes, and counts as no
-   *  neighbour for the atoms bonded to it: a haptic Fe–C contact is not a
-   *  VSEPR domain, and counting it made every cyclopentadienyl carbon read
-   *  sp³ instead of sp². Degrade loudly, per the house rule. */
+   *  transition metal or an alkali metal. Such an atom gets no hybrids and
+   *  counts as no neighbour for the atoms bonded to it: a haptic Fe–C contact
+   *  is not a VSEPR domain, and counting it made every cyclopentadienyl carbon
+   *  read sp³ instead of sp². */
   described: boolean;
+  /** For an undescribed metal, its valence s orbital ("4s" on Ni) — drawn as
+   *  a sphere and labelled, because a bare atom said less than the truth: the
+   *  metal does have a valence s. Null for every described atom. */
+  valenceS: string | null;
 }
 
 /**
- * The elements the electron-domain model describes: the main group. A metal
- * centre has no σ/π domain count — its bonding is d-based and often haptic —
- * so ferrocene's iron would otherwise be labelled "sp³d²" by clamping ten
- * contacts into the six-domain ceiling.
+ * Does the electron-domain model describe this element? The main group does,
+ * metals and noble gases included — BeCl₂ is linear, SnCl₂ bent, BiCl₃
+ * pyramidal, XeF₄ square planar, all by counting σ pairs and lone pairs. A
+ * transition metal does not: its bonding is d-based and often haptic, so
+ * ferrocene's iron would be labelled "sp³d²" by clamping ten contacts into
+ * the six-domain ceiling; nor does an alkali metal, whose one electron makes
+ * a mostly ionic contact (`showsOnlyValenceS`). An element needs a valence
+ * count to be counted at all.
  */
-const VSEPR_ELEMENTS = new Set([
-  'H', 'B', 'C', 'N', 'O', 'F', 'Si', 'P', 'S', 'Cl', 'Br', 'I',
-]);
-
-/** Does the electron-domain model describe this element? */
 export function isVseprElement(element: string): boolean {
-  return VSEPR_ELEMENTS.has(element);
+  return !showsOnlyValenceS(element) && element in VALENCE_ELECTRONS;
 }
 
 /**
@@ -61,7 +66,7 @@ export function sigmaNeighbors(molecule: Molecule): number[][] {
     bonded[b.atom1Index].push(b.atom2Index);
     bonded[b.atom2Index].push(b.atom1Index);
   }
-  const described = (i: number) => VSEPR_ELEMENTS.has(atoms[i].element);
+  const described = (i: number) => isVseprElement(atoms[i].element);
   return bonded.map((list, i) => {
     if (!described(i)) return [];
     return list.filter((j) => described(j)
@@ -85,7 +90,7 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
   for (const bond of molecule.bonds) {
     const a = molecule.atoms[bond.atom1Index].element;
     const b = molecule.atoms[bond.atom2Index].element;
-    if (!VSEPR_ELEMENTS.has(a) || !VSEPR_ELEMENTS.has(b)) continue;
+    if (!isVseprElement(a) || !isVseprElement(b)) continue;
     const piCount = Math.max(0, bond.order - 1);
     piBondsPerAtom[bond.atom1Index] += piCount;
     piBondsPerAtom[bond.atom2Index] += piCount;
@@ -95,10 +100,11 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
 
   for (let atomIdx = 0; atomIdx < atomCount; atomIdx++) {
     const atom = molecule.atoms[atomIdx];
-    if (!VSEPR_ELEMENTS.has(atom.element)) {
+    if (!isVseprElement(atom.element)) {
       result.push({
         element: atom.element, hybridization: '', lonePairs: 0, hasPi: false,
         piDirection: null, piDirection2: null, described: false,
+        valenceS: showsOnlyValenceS(atom.element) ? valenceSOrbital(atom.element) : null,
       });
       continue;
     }
@@ -222,6 +228,7 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
       piDirection,
       piDirection2,
       described: true,
+      valenceS: null,
     });
   }
 

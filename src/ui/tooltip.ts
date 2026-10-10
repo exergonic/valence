@@ -39,6 +39,8 @@ export function setupTooltip(container: HTMLElement, camera: THREE.Camera, ...gr
 
       if (d.lobeType === '1s') {
         text = `${d.element}${idx} 1s`;
+      } else if (d.lobeType === 'valence_s') {
+        text = `${d.element}${idx} ${d.label}`;
       } else if (d.lobeType === 'sigma') {
         text = `${d.element}${idx} ${d.label}`;
       } else if (d.lobeType === 'pi') {

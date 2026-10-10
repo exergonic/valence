@@ -62,7 +62,8 @@ export function renderChargeLabels(group: THREE.Group, molecule: Molecule, charg
   });
 }
 
-// Hybridization labels on the heavy atoms (sp, sp², sp³, sp³d, sp³d²) — the
+// Hybridization labels on the heavy atoms (sp, sp², sp³, sp³d, sp³d², or a
+// transition metal's valence s, "4s") — the
 // same shadowed atom-center treatment as the element/charge labels (the
 // modes are mutually exclusive); hydrogen keeps no label here.
 export function renderHybridizationLabels(
@@ -73,7 +74,8 @@ export function renderHybridizationLabels(
   placeAtomLabels(group, molecule, (i) => {
     const atom = molecule.atoms[i];
     const info = atomOrbitals[i];
-    if (!info || atom.element === 'H' || !info.described) return null;
+    if (!info || atom.element === 'H') return null;
+    if (!info.described) return info.valenceS; // "4s" on a transition metal
     return info.hybridization;
   });
 }

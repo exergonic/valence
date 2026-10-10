@@ -19,6 +19,10 @@ export const VALENCE_ELECTRONS: Record<string, number> = {
   Na: 1, Mg: 2, Al: 3, Si: 4, P: 5, S: 6, Cl: 7,
   K: 1, Ca: 2, Ga: 3, Ge: 4, As: 5, Se: 6, Br: 7,
   Rb: 1, Sr: 2, In: 3, Sn: 4, Sb: 5, Te: 6, I: 7,
+  Cs: 1, Ba: 2, Tl: 3, Pb: 4, Bi: 5, Po: 6, At: 7,
+  // the noble gases' full s²p⁶ shell, all of it available to bond: XeF₄ is
+  // 8 − 4 = 4 left → two lone pairs → six domains, square planar
+  Ne: 8, Ar: 8, Kr: 8, Xe: 8, Rn: 8,
   // the d block — the elements the parameter table carries d for
   Sc: 3, Ti: 4, V: 5, Cr: 6, Mn: 7, Fe: 8, Co: 9, Ni: 10, Cu: 11,
   Y: 3, Zr: 4, Nb: 5, Mo: 6, Tc: 7, Ru: 8, Rh: 9, Pd: 10,

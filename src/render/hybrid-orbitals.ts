@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
 import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
-import { getElementColor, getCovalentRadius } from './chem-data';
+import { getElementColor, getCovalentRadius, getVdwRadius, VISUAL_RADIUS_SCALE } from './chem-data';
 import { sigmaNeighbors, type AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import { getLonePairDirections } from '../chem/vsepr/orient-lone-pairs';
 import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
@@ -23,19 +23,22 @@ export function renderHybridOrbitals(
     const atom = molecule.atoms[i];
     const atomPos: [number, number, number] = [atom.x, atom.y, atom.z];
     const info = cached[i];
-    if (info && info.described === false) continue; // a metal centre: no model
+    // A transition or alkali metal: no hybrids, only its valence s — the
+    // same sphere as hydrogen's 1s, drawn a quarter ångström outside the atom
+    // ball: a metal's ball is large (Zn's 0.63 Å) and swallowed a smaller one.
+    if (info && info.described === false) {
+      if (info.valenceS) {
+        const radius = VISUAL_RADIUS_SCALE * getVdwRadius(atom.element) + 0.25;
+        const mesh = sOrbitalSphere(radius, colorScheme.lonePair, atomPos);
+        mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'valence_s', label: info.valenceS };
+        group.add(mesh);
+      }
+      continue;
+    }
 
     // Hydrogen: 1s sphere in distinct color
     if (atom.element === 'H') {
-      const geo = new THREE.SphereGeometry(0.28, 16, 16);
-      const mat = new THREE.MeshPhongMaterial({
-        color: colorScheme.lonePair,
-        transparent: true,
-        opacity: 0.55,
-        depthWrite: false,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(atom.x, atom.y, atom.z);
+      const mesh = sOrbitalSphere(0.28, colorScheme.lonePair, atomPos);
       mesh.userData = { atomIndex: i, element: 'H', lobeType: '1s', label: '1s' };
       group.add(mesh);
       continue;
@@ -90,6 +93,16 @@ export function renderHybridOrbitals(
       addPiOrbital(group, atomPos, [info.piDirection], colorScheme.pi, preset, atomScale, i, atom.element);
     }
   }
+}
+
+/** An s orbital: a translucent sphere on the atom. */
+function sOrbitalSphere(radius: number, color: number, at: [number, number, number]): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 24, 24),
+    new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false }),
+  );
+  mesh.position.set(...at);
+  return mesh;
 }
 
 function addPiOrbital(

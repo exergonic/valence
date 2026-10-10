@@ -26,6 +26,12 @@ export function atomicNumber(element: string): number {
   return ELEMENTS.indexOf(element) + 1;
 }
 
+/** The period (row) — also the principal quantum number of the valence s. */
+export function period(element: string): number {
+  const z = atomicNumber(element);
+  return [2, 10, 18, 36, 54, 86, 118].findIndex((last) => z <= last) + 1;
+}
+
 const NOBLE_GASES = new Set(['He', 'Ne', 'Ar', 'Kr', 'Xe', 'Rn']);
 
 /** The three kinds the sketch treats differently: a nonmetal (or semimetal)
@@ -39,6 +45,26 @@ export function elementKind(element: string): 'nonmetal' | 'noble-gas' | 'metal'
 
 export function isMetal(element: string): boolean {
   return elementKind(element) === 'metal';
+}
+
+/**
+ * The elements whose bonding the electron-domain picture does not describe:
+ * the d and f blocks (Sc–Zn, Y–Cd, La–Hg) and the alkali metals. A transition
+ * metal's geometry is the ligand field's, not a count of σ pairs, and an
+ * alkali metal's one valence electron makes a contact that is mostly ionic.
+ * These show their valence s orbital alone (`valenceSOrbital`) — true as far
+ * as it goes, and all a VSEPR picture can honestly say about them.
+ */
+export function showsOnlyValenceS(element: string): boolean {
+  const z = atomicNumber(element);
+  const alkali = [3, 11, 19, 37, 55, 87].includes(z);
+  const dOrFBlock = (z >= 21 && z <= 30) || (z >= 39 && z <= 48) || (z >= 57 && z <= 80) || z >= 89;
+  return alkali || dOrFBlock;
+}
+
+/** The valence s orbital's name, "4s" for nickel. */
+export function valenceSOrbital(element: string): string {
+  return `${period(element)}s`;
 }
 
 /**
