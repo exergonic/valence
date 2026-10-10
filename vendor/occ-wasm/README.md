@@ -101,9 +101,14 @@ knows, for the app's bond orders, spin, dipole and orbital pictures:
   (each basis function's atom and l), and `orbital_values(points_bohr,
   coefficients)` — ψ and ∇ψ (4 × N) at the points through OCC's own
   `gto::evaluate_basis`, in blocks of 4096, so no basis convention reaches
-  JavaScript.
+  JavaScript; `density_values(points)` (ρ = Σ P_μν φ_μ φ_ν, both spins) and
+  `electrostatic_potential(points)` — the exact potential of the SCC's charge
+  distribution: each atom's nucleus-plus-core at Z_A = q_A + its Mulliken
+  population (so no core count is assumed), less the valence density
+  integrated by the engine's `electric_potential_mmd` (fed P/2 as a closed
+  shell: OCC's MolecularOrbitals holds one spin channel).
 - `xtb_bindings.cpp`: `atomicDipoles`, `atomicQuadrupoles`, `dipoleMoment`, `aoAtoms`,
-  `aoAngularMomenta`, `orbitalValues`.
+  `aoAngularMomenta`, `orbitalValues`, `densityValues`, `electrostaticPotential`.
 
 The complete set of source modifications — steps 2–3c — is
 `occ-valence.patch` in this directory (`git diff` of the build tree against
@@ -170,7 +175,7 @@ GFN2 parameters (`share/xtb`), the D4 tables (`share/dftd4`), COSMO/SMD data
 
 | file | raw | gzip |
 |---|---|---|
-| `occjs.wasm` | 2,499 KiB | 828 KiB |
+| `occjs.wasm` | 3,173 KiB | 980 KiB |
 | `occjs.data` | 326 KiB | 70 KiB |
 | `occjs.js` | 122 KiB | 31 KiB |
 
@@ -220,6 +225,15 @@ plus the atomic dipoles' plus Σ `atomicQuadrupoles` reproduces xtb's printed
 "full" molecular quadrupole (about the coordinate origin) to 0.003 e·bohr²
 for water and formaldehyde — which pins the order and the ½(3xᵢxⱼ − r²δᵢⱼ)
 convention.
+
+With the density and the exact potential (2026-10-09; `occjs.wasm` md5
+`2ff3708c837b5628d53a740f1c8fb5d9`, +152 KiB gzip — the potential integrals):
+the density integrates to the valence electron count (water 7.999, pyridine
+and benzene 30.000 on a 0.25-bohr grid), and the exact potential equals the
+charges + atomic dipoles + quadrupoles sum at 8 and 15 Å (water to 4
+decimals in e/Å) while parting from it near the atoms, where the clouds
+overlap (pyridine 2.5 Å past the N: −108 exact against −159 kcal/mol/e from
+the multipoles). 20 000 points: 35 ms for water, 0.6 s for benzene.
 
 ## API notes for callers
 

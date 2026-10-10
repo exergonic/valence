@@ -16,10 +16,10 @@ index 88c56e9bb..267d375ab 100644
  add_subdirectory(src)
  
 diff --git a/include/occ/xtb/xtb_calculator.h b/include/occ/xtb/xtb_calculator.h
-index 83fc6d9e5..59c9ba96c 100644
+index 83fc6d9e5..6d76d4c28 100644
 --- a/include/occ/xtb/xtb_calculator.h
 +++ b/include/occ/xtb/xtb_calculator.h
-@@ -190,6 +190,22 @@ public:
+@@ -190,6 +190,30 @@ public:
    /// calculators only (periodic ones have no molecular shell/AO map).
    Mat bond_orders() const;
  
@@ -38,6 +38,14 @@ index 83fc6d9e5..59c9ba96c 100644
 +  /// value, d/dx, d/dy, d/dz. Evaluated with OCC's own basis evaluator in
 +  /// blocks of points, so no convention of the basis leaks to the caller.
 +  Mat orbital_values(const Mat3N &points_bohr, const Vec &coefficients) const;
++  /// The electron density ρ (e/bohr³) of the last SCC at the points (bohr),
++  /// summed over both spins: Σ_μν P_μν φ_μ φ_ν.
++  Vec density_values(const Mat3N &points_bohr) const;
++  /// The exact electrostatic potential (Eh/e) of the last SCC's charge
++  /// distribution at the points (bohr): each atom's nucleus-plus-core as GFN2
++  /// sees it (charge Z_A = q_A + its Mulliken population, so no core count is
++  /// assumed) minus the integral of the valence density, ∫ρ(r')/|r − r'|.
++  Vec electrostatic_potential(const Mat3N &points_bohr);
 +
    /// Total energy from the most recent SCC (Hartree).
    double total_energy() const { return m_last_result.total_energy; }
@@ -296,7 +304,7 @@ index 85db0e42b..8c3a7a587 100644
  }
 \ No newline at end of file
 diff --git a/src/js/xtb_bindings.cpp b/src/js/xtb_bindings.cpp
-index 1b0cef9db..ffd39418f 100644
+index 1b0cef9db..fc6d89b01 100644
 --- a/src/js/xtb_bindings.cpp
 +++ b/src/js/xtb_bindings.cpp
 @@ -1,10 +1,15 @@
@@ -400,7 +408,7 @@ index 1b0cef9db..ffd39418f 100644
  
        // Run + result access
        .function("singlePoint",
-@@ -159,6 +134,13 @@ void register_xtb_bindings() {
+@@ -159,6 +134,15 @@ void register_xtb_bindings() {
        .function("charges", &XtbCalculator::charges)
        .function("atomicMagnetization", &XtbCalculator::atomic_magnetization)
        .function("bondOrders", &XtbCalculator::bond_orders)
@@ -411,10 +419,12 @@ index 1b0cef9db..ffd39418f 100644
 +      .function("aoAtoms", &XtbCalculator::ao_atoms)
 +      .function("aoAngularMomenta", &XtbCalculator::ao_angular_momenta)
 +      .function("orbitalValues", &XtbCalculator::orbital_values)
++      .function("densityValues", &XtbCalculator::density_values)
++      .function("electrostaticPotential", &XtbCalculator::electrostatic_potential)
        .function("totalEnergy", &XtbCalculator::total_energy)
        .function("sccEnergy", &XtbCalculator::scc_energy)
        .function("repulsionEnergy", &XtbCalculator::repulsion_energy)
-@@ -194,16 +176,15 @@ void register_xtb_bindings() {
+@@ -194,16 +178,15 @@ void register_xtb_bindings() {
                    return c.compute_vibrational_modes(step, project_tr_rot);
                  }))
  
@@ -508,7 +518,7 @@ index 244f922de..5c49b8bff 100644
      result.repulsion_energy = m_e_rep;
      result.dispersion_energy = e_disp;
 diff --git a/src/xtb/xtb_calculator.cpp b/src/xtb/xtb_calculator.cpp
-index 8f5c9aee1..d1ff66d64 100644
+index 8f5c9aee1..f58caae01 100644
 --- a/src/xtb/xtb_calculator.cpp
 +++ b/src/xtb/xtb_calculator.cpp
 @@ -2,6 +2,7 @@
@@ -519,7 +529,7 @@ index 8f5c9aee1..d1ff66d64 100644
  #include <occ/xtb/anisotropic.h>
  #include <occ/xtb/basis.h>
  #include <occ/xtb/camm.h>
-@@ -240,6 +241,63 @@ Mat XtbCalculator::bond_orders() const {
+@@ -240,6 +241,112 @@ Mat XtbCalculator::bond_orders() const {
                                      static_cast<int>(num_atoms()));
  }
  
@@ -578,6 +588,55 @@ index 8f5c9aee1..d1ff66d64 100644
 +    out.block(3, start, 1, count) = (values.phi_z * coefficients).transpose();
 +  }
 +  return out;
++}
++
++Vec XtbCalculator::density_values(const Mat3N &points_bohr) const {
++  if (!m_calc) throw std::runtime_error("XtbCalculator::density_values: molecular only");
++  const Mat &P = m_last_result.density_matrix;
++  const auto &basis = m_calc->basis();
++  if (P.rows() != static_cast<Eigen::Index>(basis.nbf())) {
++    throw std::runtime_error("XtbCalculator::density_values: call single_point_energy() first");
++  }
++  const Eigen::Index n = points_bohr.cols();
++  Vec out(n);
++  constexpr Eigen::Index block = 4096;
++  for (Eigen::Index start = 0; start < n; start += block) {
++    const Eigen::Index count = std::min(block, n - start);
++    const auto values = occ::gto::evaluate_basis(basis, points_bohr.middleCols(start, count), 0);
++    out.segment(start, count) = (values.phi * P).cwiseProduct(values.phi).rowwise().sum();
++  }
++  return out;
++}
++
++Vec XtbCalculator::electrostatic_potential(const Mat3N &points_bohr) {
++  if (!m_calc) throw std::runtime_error("XtbCalculator::electrostatic_potential: molecular only");
++  const Mat &P = m_last_result.density_matrix;
++  const Mat &S = m_last_result.overlap_matrix;
++  const Vec &q = m_last_result.atomic_charges;
++  const int n_atoms = num_atoms();
++  if (q.size() != n_atoms || P.rows() != S.rows()) {
++    throw std::runtime_error("XtbCalculator::electrostatic_potential: call single_point_energy() first");
++  }
++  // each atom's nucleus-plus-core charge: what its population is measured from
++  const Mat PS = P * S;
++  const auto &bf_to_atom = m_calc->bf_to_atom();
++  Vec z = q;
++  for (Eigen::Index mu = 0; mu < PS.rows(); ++mu) z(bf_to_atom[mu]) += PS(mu, mu);
++  Vec v = Vec::Zero(points_bohr.cols());
++  for (Eigen::Index i = 0; i < points_bohr.cols(); ++i) {
++    for (int a = 0; a < n_atoms; ++a) {
++      const double r = (points_bohr.col(i) - m_positions_bohr.col(a)).norm();
++      v(i) += z(a) / std::max(r, 1e-8);
++    }
++  }
++  // the valence electrons: OCC's MolecularOrbitals holds one spin channel's
++  // density, so the spin-summed P goes in as a closed shell of P/2
++  occ::qm::MolecularOrbitals mo;
++  mo.kind = occ::qm::SpinorbitalKind::Restricted;
++  mo.n_ao = P.rows();
++  mo.D = 0.5 * P;
++  v += m_calc->engine().electric_potential_mmd(mo, points_bohr);
++  return v;
 +}
 +
  void XtbCalculator::set_charge(double c) { m_charge = c; }

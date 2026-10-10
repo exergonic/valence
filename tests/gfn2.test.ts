@@ -225,6 +225,70 @@ describe('GFN2-xTB', () => {
     [-1.249, 0, 1.405, 0, 0, -0.156].forEach((oracle, c) => expect(Math.abs(total[c] - oracle)).toBeLessThan(0.01));
   }, 180_000);
 
+  // The exact potential and the density, straight from the engine: the density
+  // holds water's eight valence electrons, and far from the molecule the exact
+  // potential is GFN2's multipole sum (charges, dipoles, quadrupoles) — the two
+  // can only part where the electron clouds still overlap.
+  it("integrates water's density to its 8 valence electrons, and matches the multipoles far away", async () => {
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const { espPotentialAt } = await import('../src/chem/charge-model/esp');
+    const createOccModule = (await import('../vendor/occ-wasm/occjs.js')).default as any;
+    const M = await createOccModule({ locateFile: vendorFile });
+    const p = (await propertiesAt(water, vendorFile))!;
+    const positions = M.Mat3N.create(3);
+    water.atoms.forEach((a, i) => { positions.set(0, i, a.x); positions.set(1, i, a.y); positions.set(2, i, a.z); });
+    const calc = M.XtbCalculator.fromMolecule(new M.Molecule(M.IVec.fromArray([8, 1, 1]), positions));
+    calc.singlePointEnergy();
+    const BOHR = 0.529177210903;
+    const h = 0.25, reach = 8;
+    const grid: number[] = [];
+    for (let x = -reach; x <= reach; x += h) for (let y = -reach; y <= reach; y += h) for (let z = -reach; z <= reach; z += h) grid.push(x, y, z);
+    const points = M.Mat3N.create(grid.length / 3);
+    for (let i = 0; i < grid.length / 3; i++) for (let c = 0; c < 3; c++) points.set(c, i, grid[3 * i + c]);
+    const rho = calc.densityValues(points);
+    let electrons = 0;
+    for (let i = 0; i < grid.length / 3; i++) electrons += rho.get(i) * h ** 3;
+    expect(electrons).toBeCloseTo(8, 2);
+    // 8 Å out along each axis
+    const far = [[8, 0, 0], [0, 8, 0], [0, 0, 8], [0, 0, -8]];
+    const at = M.Mat3N.create(far.length);
+    far.forEach((pt, i) => pt.forEach((v, c) => at.set(c, i, v / BOHR)));
+    const exact = calc.electrostaticPotential(at);
+    far.forEach((pt, i) => {
+      const multipoles = espPotentialAt(pt[0], pt[1], pt[2], water.atoms, p.charges,
+        { dipoles: p.atomicDipoles!, quadrupoles: p.atomicQuadrupoles });
+      expect(exact.get(i) / BOHR).toBeCloseTo(multipoles, 4);
+    });
+  }, 180_000);
+
+  // The ESP as the app draws it under GFN2: water's 0.001 au density surface,
+  // coloured by the exact potential — most negative over the lone pairs, most
+  // positive over the hydrogens.
+  it("draws water's ESP on its 0.001 au density surface, negative over the lone pairs", async () => {
+    const { propertiesAt, espSurface } = await import('../src/geometry/gfn2-refine.worker');
+    const p = (await propertiesAt(water, vendorFile))!;
+    const surface = (await espSurface(p.key))!;
+    expect(surface.vertexCount).toBeGreaterThan(1000);
+    // every vertex sits a van der Waals-like distance from the nearest nucleus
+    for (let v = 0; v < surface.vertexCount; v += 97) {
+      const d = Math.min(...water.atoms.map((a) => Math.hypot(
+        surface.positions[3 * v] - a.x, surface.positions[3 * v + 1] - a.y, surface.positions[3 * v + 2] - a.z)));
+      expect(d).toBeGreaterThan(0.8);
+      expect(d).toBeLessThan(3);
+    }
+    let lowest = 0, highest = 0;
+    for (let v = 1; v < surface.vertexCount; v++) {
+      if (surface.potentials[v] < surface.potentials[lowest]) lowest = v;
+      if (surface.potentials[v] > surface.potentials[highest]) highest = v;
+    }
+    // the lowest point is on the oxygen's far side (+z, away from the
+    // hydrogens at −z); the highest beyond a hydrogen
+    expect(surface.positions[3 * lowest + 2]).toBeGreaterThan(water.atoms[0].z);
+    expect(surface.positions[3 * highest + 2]).toBeLessThan(water.atoms[0].z);
+    expect(surface.potentials[lowest]).toBeLessThan(0);
+    expect(surface.potentials[highest]).toBeGreaterThan(0);
+  }, 180_000);
+
   // An odd electron count runs as a doublet, and the spin it carries is one
   // electron's worth, shared out over the atoms (H₃Si–Ni as CIR built it).
   it('runs an odd electron count as a doublet and reports where the spin sits — H₃Si–Ni', async () => {

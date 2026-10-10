@@ -11,23 +11,25 @@
  * individual-sphere vertices (a vertex of one sphere can sit inside a
  * neighbor).
  *
+ * Under GFN2-xTB the app draws a better surface than this one: GFN2's own
+ * 0.001 au density isosurface, coloured by the exact potential of its charge
+ * distribution, both built in the engine's worker (gfn2-refine.worker.ts,
+ * `espSurface`). This file is the surface for everything else — the MMFF94
+ * charge model, or an engine that cannot build it — and the point-charge
+ * potential the "full electron density" toggle compares against.
+ *
  * Potential: the electric potential of the molecule's point charges at a
- * surface vertex, V(r) = Σ qᵢ/|r − rᵢ|, plus — for GFN2-xTB, when they are
- * asked for — each atom's own dipole and quadrupole, the next two terms of
- * the same multipole expansion of its electron cloud:
+ * surface vertex, V(r) = Σ qᵢ/|r − rᵢ|. `espPotentialAt` also takes GFN2's
+ * atomic dipoles and quadrupoles — GFN2's own multipole model of its density,
  *
  *   V(r) = Σ qᵢ/R + Σ pᵢ·R/R³ + Σ Θᵢ:RR/R⁵,   R = r − rᵢ
  *
- * A point charge sits on its nucleus. An atomic dipole says how far that
- * atom's share of the electrons sits off it (water's lone pairs, bulging away
- * from the hydrogens); an atomic quadrupole, its shape beyond that (a π
- * cloud's two lobes above and below a ring). GFN2's own energy uses both, so
- * the surface with them is the fuller picture of its density, and the one its
- * full dipole arrow agrees with. Θ is traceless, Buckingham's ½(3xᵢxⱼ − r²δ)
- * — the convention xtb prints and the formula above assumes. Units: e/Å,
- * dipoles e·Å, quadrupoles e·Å² (× 332.06 for kcal/mol per unit charge);
- * only the colour reads it, so the unit never shows. Still a model potential
- * at the surface, not one integrated from a density.
+ * with Θ traceless in Buckingham's ½(3xᵢxⱼ − r²δ), the convention xtb prints —
+ * which the tests hold the exact potential to far from the molecule, where the
+ * two must agree (on the surface they part: the clouds overlap there, which a
+ * multipole sum cannot see). Units: e/Å, dipoles e·Å, quadrupoles e·Å²
+ * (× 332.06 for kcal/mol per unit charge); only the colour reads it, so the
+ * unit never shows.
  *
  * Color: the textbook diverging map — negative red, neutral green, positive
  * blue — mapped onto a symmetric scale. The scale is percentile-clipped on
@@ -49,7 +51,8 @@ export const ESP_GRID_MARGIN = 2.0;
 
 /** Each atom's own dipole (e·Å, physics convention − → +) and traceless
  *  quadrupole (e·Å², [xx, xy, yy, xz, yz, zz], Buckingham's convention): the
- *  terms of GFN2's multipole expansion beyond the charges. */
+ *  terms of GFN2's multipole expansion beyond the charges, for checking the
+ *  exact potential at long range (see the header). */
 export interface AtomicMultipoles {
   dipoles: Array<[number, number, number]>;
   quadrupoles: Array<[number, number, number, number, number, number]> | null;
@@ -127,22 +130,6 @@ export function unionVdwField(x: number, y: number, z: number, atoms: Molecule['
   return min;
 }
 
-/** The colour-scale bound a surface WOULD have under another model (other
- *  charges, other atomic multipoles): the same vertices, re-probed. Lets two
- *  pictures of one molecule share a scale, so a weaker potential reads paler
- *  rather than re-stretched to the same colours. */
-export function espVmaxUnder(
-  surface: EspSurfaceData,
-  atoms: Molecule['atoms'],
-  charges: number[],
-  multipoles: AtomicMultipoles | null,
-): number {
-  const p = surface.positions;
-  const potentials: number[] = [];
-  for (let i = 0; i < p.length; i += 3) potentials.push(espPotentialAt(p[i], p[i + 1], p[i + 2], atoms, charges, multipoles));
-  return espVmax(potentials);
-}
-
 /** The fused ESP surface: per-vertex soup of positions (Å), outward unit
  *  normals, and the surface value V (e/Å) at each vertex. `vmax` anchors the
  *  color scale; `vertexCount` = number of vertices (3 per emitted triangle). */
@@ -180,7 +167,6 @@ const FACES = [
 export function computeEspSurface(
   molecule: Molecule,
   charges: number[],
-  multipoles: AtomicMultipoles | null = null,
   spacing = ESP_GRID_SPACING,
   margin = ESP_GRID_MARGIN,
 ): EspSurfaceData {
@@ -277,7 +263,7 @@ export function computeEspSurface(
       const [nxv, nyv, nzv] = outwardNormal(p[0], p[1], p[2]);
       positions.push(p[0], p[1], p[2]);
       normals.push(nxv, nyv, nzv);
-      potentials.push(espPotentialAt(p[0], p[1], p[2], atoms, charges, multipoles));
+      potentials.push(espPotentialAt(p[0], p[1], p[2], atoms, charges));
     }
   };
 

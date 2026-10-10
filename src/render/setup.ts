@@ -7,7 +7,7 @@ import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import type { Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
-import type { EspSurfaceData, AtomicMultipoles } from '../chem/charge-model/esp';
+import type { EspSurfaceData } from '../chem/charge-model/esp';
 import {
   LOCALIZED_ISOVALUE, LOCALIZED_PERCENTILE, MO_SURFACE_ISOVALUE, MO_SURFACE_PERCENTILE,
   type MoFieldData, type MoSurfaceData,
@@ -90,12 +90,12 @@ export interface DisplaySettings {
   chargeModel: ChargeModel;
   /** ESP surface translucency — 0.05..0.95 (1 − opacity reads as see-through). */
   espOpacity: number;
-  /** Under GFN2, whether the ESP surface and the dipole include each atom's
-   *  own dipole and quadrupole (on: GFN2's fuller picture, the one its density
-   *  makes) or show the point charges alone — the same charges the labels
-   *  print. The difference is the lesson: a charge on a nucleus cannot hold a
-   *  lone pair or a π cloud. */
-  atomicMultipoles: boolean;
+  /** Under GFN2, whether the ESP and the dipole come from the full electron
+   *  density (on: the exact potential on GFN2's 0.001 au density surface, and
+   *  the full dipole) or from the point charges alone — the same charges the
+   *  labels print — on the same surface and colour scale. The difference is
+   *  the lesson: a charge on a nucleus cannot hold a lone pair or a π cloud. */
+  fullDensity: boolean;
   /** Draw a selected MO as one continuous isosurface (default) rather than as
    *  the individual atomic orbitals it is built from. */
   smoothMo: boolean;
@@ -194,11 +194,13 @@ export interface SceneContext {
    *  the charges as much as of the geometry, so a different array (a model
    *  switch, or GFN2 charges arriving) re-extracts it. */
   espSurfaceCharges: number[] | null;
-  /** The atomic multipoles it was built with (null: charges alone). */
-  espSurfaceMultipoles: AtomicMultipoles | null;
-  /** The atomic multipoles its colour scale was anchored on, so the GFN2
-   *  surface with and without them share one scale (null: its own). */
-  espSurfaceScale: AtomicMultipoles | null;
+  /** GFN2's ESP for the single point `key` names: the exact potential on its
+   *  density surface, and — built when first asked for — the same surface
+   *  coloured by the point charges alone, on the exact one's colour scale. */
+  gfn2Esp: { key: number; exact: EspSurfaceData; pointCharges: { charges: number[]; surface: EspSurfaceData } | null } | null;
+  /** That surface, asked of the worker: the key it was asked for, and whether
+   *  it failed (then the van der Waals surface stands in). */
+  gfn2EspRequest: { key: number; failed: boolean } | null;
   /** Extracted isosurfaces, keyed `mo:<index>` / `localized:<index>`. Each
    *  costs ~50 ms to extract, and the same orbital can be picked, dropped and
    *  picked again while comparing orbitals — so they are kept until the
@@ -362,7 +364,7 @@ export function initScene(container: HTMLElement): SceneContext {
       showEsp: false,
       chargeModel: 'gfn2',
       espOpacity: 0.5,
-      atomicMultipoles: true,
+      fullDensity: true,
       smoothMo: true,
       moOpacity: 0.85,
       isoMode: 'percentile',
@@ -381,8 +383,8 @@ export function initScene(container: HTMLElement): SceneContext {
     gfn2SurfaceRequests: new Set(),
     espSurface: null,
     espSurfaceCharges: null,
-    espSurfaceMultipoles: null,
-    espSurfaceScale: null,
+    gfn2Esp: null,
+    gfn2EspRequest: null,
     moSurfaces: new Map(),
     moFields: new Map(),
     ehResult: null,

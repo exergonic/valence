@@ -213,14 +213,14 @@
               <option value="gfn2">GFN2-xTB (Mulliken)</option>
               <option value="mmff94">MMFF94 (BCI)</option>
             </select>
-            <label class="ctrl-toggle" title="GFN2-xTB only. A point charge sits on its nucleus. An atomic dipole says how far that atom's share of the electrons sits off it (water's lone pairs bulge away from the hydrogens); an atomic quadrupole, its shape beyond that (a π cloud above and below a ring). On: the ESP surface includes both and the dipole is GFN2's full one (water 2.28 D). Off: both show the point charges alone, the same charges the labels print (water 1.59 D) — on the same colour scale, so the difference shows.">
-              <input type="checkbox" id="ctrl-atomic-multipoles" checked />
-              <span>Include atomic dipoles &amp; quadrupoles</span>
+            <label class="ctrl-toggle" title="GFN2-xTB only. On: the ESP is drawn on GFN2's own 0.001 au electron-density surface — the textbook convention, so it bulges over lone pairs and π clouds — and coloured by the exact potential of its charge distribution; the dipole is the full density's (water 2.28 D). Off: the same surface, coloured by the point charges alone, and their dipole (water 1.59 D) — the charges the labels print, on the same colour scale, so the difference shows.">
+              <input type="checkbox" id="ctrl-full-density" checked />
+              <span>Full electron density (not just point charges)</span>
             </label>
             <p class="measure-hint" id="charge-model-hint">
-              The labels print point charges. With atomic dipoles and quadrupoles
-              on, the ESP surface and the dipole add how each atom's electrons sit
-              around its nucleus, so they need not add up from the labels.
+              The labels print point charges. The ESP surface and the dipole come
+              from GFN2's full electron density, which a point charge on each
+              nucleus cannot hold — so they need not add up from the labels.
             </p>
             <label class="ctrl-toggle">
               <input type="checkbox" id="ctrl-show-esp" />

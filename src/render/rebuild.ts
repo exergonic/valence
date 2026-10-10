@@ -9,7 +9,7 @@ import { renderPiSystems, tintPiSystemLobes } from './pi-systems';
 import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
 import { renderMoOrbitals, MO_PHASE_PAIRS } from './mo-lobes';
-import { computeEspSurface, espVmaxUnder, type AtomicMultipoles } from '../chem/charge-model/esp';
+import { computeEspSurface, espPotentialAt, espVmax, type EspSurfaceData } from '../chem/charge-model/esp';
 import { computeMoField, levelForFraction, marchMoField } from '../chem/extended-huckel/mo-surface';
 import { renderMoIsosurface } from './mo-isosurface';
 import { applyAtomStyle } from './atom-styles';
@@ -19,7 +19,7 @@ import {
   dipoleFromCharges, dipoleFromFullGfn2, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE, type DipoleResult,
 } from '../chem/charge-model/dipole';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
-import { gfn2PropertiesAt, gfn2OrbitalSurface } from '../geometry/gfn2-refine';
+import { gfn2PropertiesAt, gfn2OrbitalSurface, gfn2EspSurface, type Gfn2EspSurface } from '../geometry/gfn2-refine';
 import { gfn2Ladders, type Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import { syncVibration } from './vibration';
 import type { ChargeModel } from './setup';
@@ -214,21 +214,50 @@ function syncLabelModeControl(properties: Gfn2Properties | null) {
   option.textContent = properties.spin === null ? 'Spin density (closed shell: none)' : 'Spin density';
 }
 
-/** GFN2's atomic dipoles and quadrupoles as the ESP reads them — one object
- *  per single point, so the surface cache can key on it. */
-const multipoleCache = new WeakMap<Gfn2Properties, AtomicMultipoles | null>();
-function multipolesOf(properties: Gfn2Properties): AtomicMultipoles | null {
-  if (!multipoleCache.has(properties)) {
-    multipoleCache.set(properties, properties.atomicDipoles
-      ? { dipoles: properties.atomicDipoles, quadrupoles: properties.atomicQuadrupoles }
-      : null);
-  }
-  return multipoleCache.get(properties) ?? null;
+/**
+ * GFN2's ESP surface for the single point on screen, or null while the worker
+ * builds it (or when it could not) — asking for it if nobody has yet.
+ */
+function gfn2EspOnScreen(ctx: SceneContext, properties: Gfn2Properties): SceneContext['gfn2Esp'] {
+  if (ctx.gfn2Esp?.key === properties.key) return ctx.gfn2Esp;
+  if (ctx.gfn2EspRequest?.key === properties.key) return null;
+  ctx.gfn2EspRequest = { key: properties.key, failed: false };
+  const molecule = ctx.currentMolecule;
+  const settle = (surface: Gfn2EspSurface | null) => {
+    if (ctx.currentMolecule !== molecule || ctx.gfn2EspRequest?.key !== properties.key) return;
+    if (surface) {
+      const potentials = surface.potentials;
+      ctx.gfn2Esp = {
+        key: properties.key,
+        exact: { ...surface, vmax: espVmax(Array.from(potentials)) },
+        pointCharges: null,
+      };
+    } else {
+      ctx.gfn2EspRequest = { key: properties.key, failed: true };
+    }
+    ctx.rerender();
+  };
+  gfn2EspSurface(properties.key).then(settle, () => settle(null));
+  return null;
 }
 
-/** The atomic-multipole toggle is GFN2's: MMFF94's charges have no atomic multipoles. */
-function syncAtomicMultipoleControl(model: ChargeModel) {
-  const toggle = document.getElementById('ctrl-atomic-multipoles') as HTMLInputElement | null;
+/** The same density surface coloured by the point charges alone — what the
+ *  labels add up to — on the exact surface's colour scale, so it reads paler
+ *  where the point charges' potential is weaker rather than re-stretched. */
+function pointChargeEsp(ctx: SceneContext, esp: NonNullable<SceneContext['gfn2Esp']>, charges: number[]): EspSurfaceData {
+  if (esp.pointCharges?.charges === charges) return esp.pointCharges.surface;
+  const atoms = ctx.currentMolecule!.atoms;
+  const p = esp.exact.positions;
+  const potentials = new Float32Array(esp.exact.vertexCount);
+  for (let v = 0; v < potentials.length; v++) potentials[v] = espPotentialAt(p[3 * v], p[3 * v + 1], p[3 * v + 2], atoms, charges);
+  const surface = { ...esp.exact, potentials };
+  esp.pointCharges = { charges, surface };
+  return surface;
+}
+
+/** The full-density toggle is GFN2's: MMFF94 has charges and nothing more. */
+function syncFullDensityControl(model: ChargeModel) {
+  const toggle = document.getElementById('ctrl-full-density') as HTMLInputElement | null;
   if (!toggle) return;
   toggle.disabled = model !== 'gfn2';
   toggle.parentElement?.classList.toggle('disabled', model !== 'gfn2');
@@ -379,18 +408,16 @@ function redrawScene(ctx: SceneContext) {
   // untypeable (computeDipole returned null) or the model gives ~0 D.
   // Visibility belongs to the #ctrl-show-dipole checkbox, so a rebuild
   // never flips the user's choice back on (or off).
-  // Under GFN2 the ESP includes each atom's own dipole and quadrupole, and the
-  // dipole is the full one (charges + atomic dipoles; a quadrupole adds no
-  // dipole) — GFN2's fuller picture — unless the toggle asks for the point
+  // Under GFN2 the dipole is the full density's (the charges plus the atomic
+  // dipoles, which add up to it exactly) unless the toggle asks for the point
   // charges alone, the picture the labels add up to. Until the single point
   // lands (or if it failed) the charges' own.
-  const withMultipoles = shown.model === 'gfn2' && ctx.display.atomicMultipoles;
-  syncAtomicMultipoleControl(shown.model);
-  const multipoles = withMultipoles && properties ? multipolesOf(properties) : null;
-  const fullDipole = withMultipoles ? properties?.dipole ?? null : null;
+  const fullDensity = shown.model === 'gfn2' && ctx.display.fullDensity;
+  syncFullDensityControl(shown.model);
+  const fullDipole = fullDensity ? properties?.dipole ?? null : null;
   ctx.dipole = fullDipole
     ? dipoleFromFullGfn2(ctx.currentMolecule, fullDipole)
-    : withMultipoles && !properties && !gfn2ChargesFailed(ctx)
+    : fullDensity && !properties && !gfn2ChargesFailed(ctx)
       ? null
       : charges ? dipoleFromCharges(ctx.currentMolecule, charges, shown.residual) : null;
   if (ctx.dipole) {
@@ -398,33 +425,32 @@ function redrawScene(ctx: SceneContext) {
   }
   showDipoleReadout(ctx, ctx.dipole, shown.model, ctx.dipole === null && shown.model === 'gfn2' && !gfn2ChargesFailed(ctx), fullDipole !== null);
 
-  // Charge-model ESP surface — a translucent overlay of the FUSED (united)
-// vdW molecular surface, colored by the potential probed at the fused
-// boundary (see chem/charge-model/esp.ts). Only when the charges exist (untypeable
-// molecules get no surface, like no dipole) and the toggle asks for it. The
-// surface mesh is cached per molecule and extracted lazily on first render —
-// opacity changes reuse it.
+  // The ESP. Under GFN2: its own 0.001 au density surface, built in the
+  // worker, coloured by the exact potential of its charge distribution — or,
+  // toggle off, the same surface coloured by the point charges alone on the
+  // same colour scale (pyridine's nitrogen −57 against −23 kcal/mol/e at the
+  // vdW surface: the point charges' potential IS weaker). Nothing is drawn the
+  // moment it is being built. Under MMFF94, or when the engine cannot build
+  // it, the fused van der Waals surface coloured by the charges (see
+  // chem/charge-model/esp.ts), cached by charges since a model switch changes
+  // them.
   if (ctx.display.showEsp && charges) {
-    // The surface is a function of the charges as much as of the geometry, so
-    // the cache is keyed by both: a charge-model switch re-extracts (tens of
-    // ms), an opacity change reuses what is in hand.
-    // One colour scale for GFN2's two pictures, anchored on the fuller one:
-    // switched to the point charges alone, the surface reads paler — their
-    // potential IS weaker (water −40…+32 against −55…+51 kcal/mol/e) — instead of
-    // being re-stretched to the same reds and blues.
-    const scale = shown.model === 'gfn2' && properties ? multipolesOf(properties) : null;
-    if (!ctx.espSurface || ctx.espSurfaceCharges !== charges || ctx.espSurfaceMultipoles !== multipoles
-      || ctx.espSurfaceScale !== scale) {
-      const surface = computeEspSurface(ctx.currentMolecule, charges, multipoles);
-      ctx.espSurface = scale && !multipoles
-        ? { ...surface, vmax: espVmaxUnder(surface, ctx.currentMolecule.atoms, charges, scale) }
-        : surface;
-      ctx.espSurfaceCharges = charges;
-      ctx.espSurfaceMultipoles = multipoles;
-      ctx.espSurfaceScale = scale;
+    const gfn2 = shown.model === 'gfn2' && properties;
+    const esp = gfn2 ? gfn2EspOnScreen(ctx, properties) : null;
+    const building = gfn2 && !esp && !ctx.gfn2EspRequest?.failed;
+    if (esp) {
+      renderEsp(ctx.espGroup, fullDensity ? esp.exact : pointChargeEsp(ctx, esp, charges), ctx.display.espOpacity);
+      ctx.espGroup.visible = true;
+    } else if (building) {
+      ctx.espGroup.visible = false;
+    } else {
+      if (!ctx.espSurface || ctx.espSurfaceCharges !== charges) {
+        ctx.espSurface = computeEspSurface(ctx.currentMolecule, charges);
+        ctx.espSurfaceCharges = charges;
+      }
+      renderEsp(ctx.espGroup, ctx.espSurface, ctx.display.espOpacity);
+      ctx.espGroup.visible = true;
     }
-    renderEsp(ctx.espGroup, ctx.espSurface, ctx.display.espOpacity);
-    ctx.espGroup.visible = true;
   } else {
     ctx.espGroup.visible = false;
   }
@@ -543,8 +569,8 @@ export function buildScene(ctx: SceneContext) {
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
   ctx.espSurfaceCharges = null;
-  ctx.espSurfaceMultipoles = null;
-  ctx.espSurfaceScale = null;
+  ctx.gfn2Esp = null;
+  ctx.gfn2EspRequest = null;
   ctx.moSurfaces.clear();
   ctx.moFields.clear();
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is

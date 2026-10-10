@@ -18,9 +18,9 @@
  */
 import type { Molecule } from '../mol-parser';
 import { breakSymmetry } from './embed';
-import type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest } from './gfn2-refine.worker';
+import type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface } from './gfn2-refine.worker';
 
-export type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest };
+export type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface };
 
 /**
  * Below this lowest Hessian eigenvalue (Eh/bohr²) a converged geometry is a
@@ -167,6 +167,23 @@ export function gfn2OrbitalSurface(request: OrbitalSurfaceRequest): Promise<Orbi
   const id = nextId++;
   pending.set(id, { resolvers });
   w.postMessage({ id, task: 'surface', surface: request });
+  return resolvers.promise;
+}
+
+/**
+ * The ESP of the properties run `key` names, as the textbook draws it: GFN2's
+ * own 0.001 au density surface, coloured by the exact potential of its charge
+ * distribution. Built in the worker (both need the engine). Null when that run
+ * is no longer the worker's latest, or the engine build has no density
+ * binding.
+ */
+export function gfn2EspSurface(key: number): Promise<Gfn2EspSurface | null> {
+  const w = ensureWorker();
+  if (!w) return Promise.reject(new Gfn2Unavailable());
+  const resolvers = Promise.withResolvers<Gfn2EspSurface | null>();
+  const id = nextId++;
+  pending.set(id, { resolvers });
+  w.postMessage({ id, task: 'esp', key });
   return resolvers.promise;
 }
 

@@ -11,7 +11,6 @@ import {
   espVmax,
   unionVdwField,
   computeEspSurface,
-  espVmaxUnder,
   ESP_CUTOFF,
 } from '../src/chem/charge-model/esp';
 import type { Molecule } from '../src/mol-parser';
@@ -365,19 +364,6 @@ describe('espPotentialAt with atomic dipoles', () => {
   });
   it('is the charges alone without them', () => {
     expect(espPotentialAt(0, 0, 2, atom, [0.5], null)).toBeCloseTo(0.25, 9);
-  });
-});
-
-describe('espVmaxUnder', () => {
-  it("re-probes a surface's own vertices: the same model gives the same scale, a stronger one a wider scale", () => {
-    const mol = { atoms: [{ element: 'O', x: 0, y: 0, z: 0 }, { element: 'H', x: 0.96, y: 0, z: 0 }], bonds: [] };
-    const charges = [-0.3, 0.3];
-    const surface = computeEspSurface(mol, charges);
-    expect(espVmaxUnder(surface, mol.atoms, charges, null)).toBeCloseTo(surface.vmax, 6); // the surface stores float32
-    // an atomic dipole on O pointing along the bond, toward H: the same
-    // sense as the charges' own dipole, so the potential grows
-    const stronger = espVmaxUnder(surface, mol.atoms, charges, { dipoles: [[0.2, 0, 0], [0, 0, 0]], quadrupoles: null });
-    expect(stronger).toBeGreaterThan(surface.vmax);
   });
 });
 
