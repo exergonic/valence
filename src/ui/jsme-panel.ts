@@ -5,6 +5,7 @@ import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
 import { writeNote, type InfoNote } from './info-note';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
+import { isMetal, lowestMultiplicity } from '../chem/elements';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import {
   cancelGfn2, Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, GFN2_NOTE, HESSIAN_SADDLE_THRESHOLD, type Gfn2Progress, type Gfn2Result,
@@ -108,7 +109,7 @@ export function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: 
   const snapped = symmetrizeMolecule(molecule);
   if (snapped.order <= 1) return { molecule, info: [] };
   return {
-    molecule: { atoms: snapped.atoms, bonds: molecule.bonds },
+    molecule: { ...molecule, atoms: snapped.atoms }, // the spin, if any, rides along
     info: [
       `Symmetry: ${snapped.symbol} — the geometry was snapped to the point group it nearly has `
       + `(atoms moved at most ${(snapped.maxShift * 1000).toFixed(2)} mÅ). Turn off "Snap to point group" to see it raw.`,
@@ -118,21 +119,45 @@ export function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: 
 
 /**
  * The structural warnings and the model caveats for a displayed structure.
- * `source` is where the GEOMETRY came from. A fetched structure (PubChem, CIR)
- * is a force-field conformer — PubChem's are MMFF94 — so the parameter-gap
- * report ("geometry approximate") and the 3-ring pucker check
- * (ring-pucker.ts: MMFF94's reference-angle artifact, reported, never
- * repaired) apply to it. A local structure is GFN2's or the unoptimised start,
- * and neither is MMFF94's. The dipole's caveats depend on which charge model
- * is on screen, so the dipole readout carries them (render/rebuild.ts).
+ * `source` is where the GEOMETRY came from. Only PubChem's structures are
+ * MMFF94 conformers, so only they get the MMFF94 caveats: the parameter-gap
+ * report ("geometry approximate") and the 3-ring pucker check (ring-pucker.ts:
+ * MMFF94's reference-angle artifact, reported, never repaired). CIR builds its
+ * 3D by rule (CORINA) and MMFF94 never touches it — "Ni has no MMFF94 type" on
+ * a CIR structure left the reader asking what MMFF94 had to do with anything.
+ * A local structure is GFN2's or the unoptimised start, neither MMFF94's. The
+ * dipole's caveats depend on which charge model is on screen, so the dipole
+ * readout carries them (render/rebuild.ts).
  */
 function composeNotes(
   warnings: string[],
   molecule: Molecule,
-  source: 'fetched' | 'local',
+  source: 'pubchem' | 'cir' | 'local',
 ): { warnings: string[]; info: (string | InfoNote)[] } {
-  const info: (string | InfoNote)[] = source === 'fetched' ? [...parameterGapWarnings(molecule), ...ringPuckerWarnings(molecule)] : [];
+  const info: (string | InfoNote)[] = source === 'pubchem' ? [...parameterGapWarnings(molecule), ...ringPuckerWarnings(molecule)] : [];
   return { warnings, info };
+}
+
+const SPIN_NAMES = ['', 'singlet', 'doublet', 'triplet', 'quartet', 'quintet', 'sextet'];
+
+/** The spin control under Refine: back to the lowest allowed spin, for a new
+ *  structure — a triplet chosen for one molecule says nothing of the next. */
+export function resetGfn2Spin(): void {
+  const spin = document.getElementById('ctrl-gfn2-spin') as HTMLSelectElement | null;
+  if (spin) spin.value = 'auto';
+}
+
+/** Said whenever a run was not a singlet, so an open-shell structure is
+ *  never silently one: which spin, and why that one. */
+function gfn2SpinNote(run: Gfn2Result, molecule: Molecule, chosen: boolean): string[] {
+  if (run.multiplicity === 1) return [];
+  const name = SPIN_NAMES[run.multiplicity] ?? `multiplicity ${run.multiplicity}`;
+  if (chosen) return [`GFN2-xTB ran as a ${name}, the spin chosen under Refine.`];
+  if (run.multiplicity === lowestMultiplicity(molecule.atoms)) {
+    return [`GFN2-xTB ran as a ${name}: the electron count is odd, so a singlet is impossible and a doublet `
+      + 'is the lowest spin it allows. A different spin can be chosen under Refine.'];
+  }
+  return [`GFN2-xTB ran as a ${name}, this structure's own spin.`];
 }
 
 /**
@@ -290,6 +315,7 @@ export function mountJsmePanel(ctx: SceneContext) {
 
     renderBtn.textContent = 'Loading...';
     renderBtn.disabled = true;
+    resetGfn2Spin();
     hideRenderError();
     showLoading('Rendering...');
 
@@ -310,7 +336,11 @@ export function mountJsmePanel(ctx: SceneContext) {
       if (molecule.atoms.length === 0) return;
 
       const forceLocal = (document.getElementById('ctrl-force-fallback') as HTMLInputElement | null)?.checked ?? false;
-      const result = forceLocal ? null : await fetch3D(smiles, molecule);
+      // A metal compound goes straight to GFN2: PubChem computes no 3D for
+      // most of them, and CIR's are built by rule — H₃Si–Ni came back with a
+      // 2.59 Å Si–Ni bond where GFN2 finds 2.17 Å, in a fifth of a second.
+      const metal = molecule.atoms.find((a) => isMetal(a.element))?.element ?? null;
+      const result = forceLocal || metal ? null : await fetch3D(smiles, molecule);
       const t3 = performance.now();
       if (result) {
         // fetch3D validates the returned structure against the sketch and
@@ -319,7 +349,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-        const notes = composeNotes(result.info.warnings ?? [], molecule, 'fetched');
+        const notes = composeNotes(result.info.warnings ?? [], molecule, result.info.source === 'pubchem' ? 'pubchem' : 'cir');
         notes.info.push(...snapped.info);
         updateMoleculeInfo({
           ...result.info,
@@ -352,7 +382,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         const notes = composeNotes(local.warnings, molecule, 'local');
         if (local.engine === 'gfn2' && local.gfn2) {
           if (!local.gfn2.converged) notes.warnings.unshift('GFN2-xTB structure, not fully converged.');
-          notes.info.push(GFN2_NOTE, ...gfn2RunNotes(local.gfn2));
+          notes.info.push(GFN2_NOTE, ...gfn2RunNotes(local.gfn2), ...gfn2SpinNote(local.gfn2, local.molecule, false));
         } else {
           // Said in the header, not just the log: the structure on screen is a
           // starting guess, and bond lengths and angles read off it mean little.
@@ -361,6 +391,10 @@ export function mountJsmePanel(ctx: SceneContext) {
             'The structure shown is the embedder\'s starting guess: ideal VSEPR directions and typical bond '
             + 'lengths, not an energy minimum. Read its shape, not its numbers.',
           );
+        }
+        if (metal && !forceLocal) {
+          notes.info.push(`Built locally, without asking PubChem or CIR: the sketch contains a metal (${metal}). `
+            + 'PubChem has no 3D structure for most metal compounds, and CIR builds them by rule, roughly.');
         }
         notes.info.push(...snapped.info);
         updateMoleculeInfo({
@@ -396,8 +430,19 @@ export function mountJsmePanel(ctx: SceneContext) {
   const gfn2Btn = document.getElementById('ctrl-gfn2-refine') as HTMLButtonElement | null;
   if (gfn2Btn) {
     gfn2Btn.onclick = async () => {
-      const molecule = ctx.currentMolecule;
-      if (!molecule) return;
+      const current = ctx.currentMolecule;
+      if (!current) return;
+      // A chosen spin must fit the electron count: an even count pairs into
+      // singlets, triplets, quintets; an odd one into doublets, quartets, sextets.
+      const spinChoice = (document.getElementById('ctrl-gfn2-spin') as HTMLSelectElement | null)?.value ?? 'auto';
+      const chosenSpin = spinChoice === 'auto' ? null : Number(spinChoice);
+      if (chosenSpin !== null && chosenSpin % 2 !== lowestMultiplicity(current.atoms) % 2) {
+        const odd = lowestMultiplicity(current.atoms) === 2;
+        showRenderError(`A ${SPIN_NAMES[chosenSpin]} needs an ${odd ? 'even' : 'odd'} number of electrons, and this `
+          + `structure has an ${odd ? 'odd' : 'even'} number — choose ${odd ? 'a doublet, quartet or sextet' : 'a singlet, triplet or quintet'}.`);
+        return;
+      }
+      const molecule = chosenSpin === null ? current : { ...current, multiplicity: chosenSpin };
       gfn2Btn.textContent = 'Refining...';
       gfn2Btn.disabled = true;
       hideRenderError();
@@ -421,7 +466,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
         // the geometry no longer comes from MMFF94, so calling it "approximate"
         // would be stale.
-        const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...snapped.info];
+        const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info];
         updateMoleculeInfo({ source: 'gfn2', formula, weight: `${weight}`, warnings: refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'], info });
       } catch (error) {
         showRenderError(error instanceof Gfn2Cancelled

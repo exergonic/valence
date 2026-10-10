@@ -36,3 +36,21 @@ export function elementKind(element: string): 'nonmetal' | 'noble-gas' | 'metal'
   if (NOBLE_GASES.has(element)) return 'noble-gas';
   return 'metal';
 }
+
+export function isMetal(element: string): boolean {
+  return elementKind(element) === 'metal';
+}
+
+/**
+ * The lowest spin multiplicity the electron count allows: a singlet when the
+ * count is even, a doublet when it is odd. Only the parity matters, and a
+ * core is always an even number of electrons, so the count of all electrons
+ * (Σ Z less the net charge) has the parity of the valence count. A sketch
+ * carries no spin, so this is the default an unpaired electron needs: H₃Si–Ni
+ * has 17 valence electrons and cannot be a singlet.
+ */
+export function lowestMultiplicity(atoms: Array<{ element: string; charge?: number }>): number {
+  let electrons = 0;
+  for (const a of atoms) electrons += atomicNumber(a.element) - (a.charge ?? 0);
+  return electrons % 2 === 0 ? 1 : 2;
+}

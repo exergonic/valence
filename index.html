@@ -304,6 +304,16 @@
               <button id="ctrl-gfn2-refine" title="Re-optimise this structure with GFN2-xTB — a semiempirical extended tight-binding method, and the engine the local pipeline already uses. Useful for re-running on a fetched structure.">
                 Refine with GFN2-xTB
               </button>
+              <span class="ctrl-label ctrl-label-gap">Spin for the refinement</span>
+              <select id="ctrl-gfn2-spin" class="ctrl-select" title="The spin multiplicity GFN2-xTB runs at. Lowest allowed: a singlet for an even electron count, a doublet for an odd one (or an example's own spin). Choose another — a high-spin metal centre, say — and press Refine. A new structure goes back to the lowest allowed.">
+                <option value="auto">Lowest allowed</option>
+                <option value="1">Singlet</option>
+                <option value="2">Doublet</option>
+                <option value="3">Triplet</option>
+                <option value="4">Quartet</option>
+                <option value="5">Quintet</option>
+                <option value="6">Sextet</option>
+              </select>
               <label class="ctrl-toggle">
                 <input type="checkbox" id="ctrl-force-fallback" />
                 <span>Skip PubChem: build locally</span>

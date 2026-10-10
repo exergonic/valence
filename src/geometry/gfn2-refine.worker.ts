@@ -24,6 +24,7 @@
  *   - the preloaded share/ tree is mounted at '/'.
  */
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
+import { atomicNumber, lowestMultiplicity } from '../chem/elements';
 import { jacobiSymmetric } from '../utils/eigen';
 import {
   optimize_lbfgs,
@@ -180,6 +181,9 @@ export interface Gfn2Result {
   lowestHessianMode: number | null;
   /** How many times the run was pushed off a saddle and re-optimised. */
   saddleEscapes: number;
+  /** The spin multiplicity the run used: the molecule's own, or the lowest
+   *  its electron count allows (singlet if even, doublet if odd). */
+  multiplicity: number;
 }
 
 let modulePromise: Promise<any> | null = null;
@@ -220,26 +224,8 @@ function loadGfn2(
   return modulePromise;
 }
 
-/** Element symbol → atomic number, the whole periodic table: the engine's
- * parameter table decides what it can actually treat, so this must not be the
- * narrower of the two or a supported element gets refused. */
-const ELEMENTS = [
-  'H','He','Li','Be','B','C','N','O','F','Ne',
-  'Na','Mg','Al','Si','P','S','Cl','Ar','K','Ca',
-  'Sc','Ti','V','Cr','Mn','Fe','Co','Ni','Cu','Zn',
-  'Ga','Ge','As','Se','Br','Kr','Rb','Sr','Y','Zr',
-  'Nb','Mo','Tc','Ru','Rh','Pd','Ag','Cd','In','Sn',
-  'Sb','Te','I','Xe','Cs','Ba','La','Ce','Pr','Nd',
-  'Pm','Sm','Eu','Gd','Tb','Dy','Ho','Er','Tm','Yb',
-  'Lu','Hf','Ta','W','Re','Os','Ir','Pt','Au','Hg',
-  'Tl','Pb','Bi','Po','At','Rn','Fr','Ra','Ac','Th',
-  'Pa','U','Np','Pu','Am','Cm','Bk','Cf','Es','Fm',
-  'Md','No','Lr','Rf','Db','Sg','Bh','Hs','Mt','Ds',
-  'Rg','Cn','Nh','Fl','Mc','Lv','Ts','Og',
-];
-
 function elementToZ(element: string): number {
-  const z = ELEMENTS.indexOf(element) + 1;
+  const z = atomicNumber(element);
   if (!z) throw new Error(`GFN2: no atomic number for element ${element}`);
   return z;
 }
@@ -291,7 +277,11 @@ export async function optimizeWithGfn2(
 
   const M = await (locateFile ? loadGfn2(locateFile) : loadGfn2());
   const totalCharge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
-  const unpaired = Math.max(0, (molecule.multiplicity ?? 1) - 1);
+  // A sketch carries no spin: unless one was chosen (or an example sets it),
+  // run at the lowest the electron count allows — an odd count cannot be a
+  // singlet, and the engine fails outright if asked for one.
+  const multiplicity = molecule.multiplicity ?? lowestMultiplicity(molecule.atoms);
+  const unpaired = multiplicity - 1;
 
   // Angstrom in, for the constructor only.
   const startAngstrom = molecule.atoms.flatMap((a) => [a.x, a.y, a.z]);
@@ -665,7 +655,9 @@ export async function optimizeWithGfn2(
   }
   release(best.calc);
   return {
-    molecule: best.geometry,
+    // the spin rides along, so the views that read it (the MO filling) know
+    molecule: multiplicity > 1 ? { ...best.geometry, multiplicity } : best.geometry,
+    multiplicity,
     energyHartree: best.energy,
     iterations,
     converged: best.converged,
@@ -705,7 +697,7 @@ export async function chargesAt(
   );
   try {
     calc.charge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
-    calc.numUnpairedElectrons = Math.max(0, (molecule.multiplicity ?? 1) - 1);
+    calc.numUnpairedElectrons = (molecule.multiplicity ?? lowestMultiplicity(molecule.atoms)) - 1;
     const energy = calc.singlePointEnergy();
     if (!Number.isFinite(energy) || calc.lastResult()?.converged === false) return null;
     const q = calc.charges();

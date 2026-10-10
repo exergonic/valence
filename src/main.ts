@@ -9,7 +9,7 @@ import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
 import type { SceneContext } from './render';
 import { initScene, buildScene, ATOM_LAYER } from './render';
-import { mountJsmePanel, toggleJsmeCollapsed, setJsmeCollapsed, snapToSymmetry, showInfoLog } from './ui/jsme-panel';
+import { mountJsmePanel, toggleJsmeCollapsed, setJsmeCollapsed, snapToSymmetry, showInfoLog, resetGfn2Spin } from './ui/jsme-panel';
 import { setupControls } from './ui/controls';
 import { setupTooltip } from './ui/tooltip';
 import { setupContextMenu } from './ui/context-menu';
@@ -86,6 +86,7 @@ function setupExamples(ctx: SceneContext) {
     const ex = EXAMPLES[idx];
     if (!ex) return;
 
+    resetGfn2Spin();
     const notes = loadMolecule(ctx, ex.mol, ex.multiplicity ?? 1);
     showInfoLog(ex.note ? [ex.note, ...notes] : notes);
 
