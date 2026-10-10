@@ -112,6 +112,13 @@ export function setupControls(ctx: SceneContext) {
   });
 
   // Force local lookup
+  // A vibration of the GFN2 minimum on screen, played until switched off.
+  const vibration = document.querySelector<HTMLSelectElement>('#ctrl-vibration');
+  vibration?.addEventListener('change', () => {
+    ctx.display.vibrationIndex = vibration.value === '' ? null : Number(vibration.value);
+    ctx.rerender();
+  });
+
   const forceLocal = document.querySelector<HTMLInputElement>('#ctrl-force-fallback')!;
   forceLocal.addEventListener('change', () => {
     // The render button reads this on click; no immediate action needed.

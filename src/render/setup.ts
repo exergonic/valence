@@ -6,6 +6,7 @@ import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import type { Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
+import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
 import {
   LOCALIZED_ISOVALUE, LOCALIZED_PERCENTILE, MO_SURFACE_ISOVALUE, MO_SURFACE_PERCENTILE,
@@ -70,6 +71,8 @@ export interface DisplaySettings {
   moMethod: 'eh' | 'gfn2';
   /** For an open-shell GFN2 ladder, which spin channel is listed. */
   moSpin: 'alpha' | 'beta';
+  /** Which vibration is animated (an index into ctx.vibrations), or null. */
+  vibrationIndex: number | null;
   /** Which localized orbitals are drawn over the molecule, in the order they
    *  were picked (empty = none). More than one is the hyperconjugation
    *  picture: a filled orbital and the empty one it reaches into, each with
@@ -203,6 +206,12 @@ export interface SceneContext {
    *  or there is nothing occupied — no list rather than a wrong one. */
   localizedOrbitals: LocalizedOrbital[] | null;
   rerender: () => void;
+  /** GFN2-xTB's harmonic vibrations for the structure on screen — only when
+   *  that structure is GFN2's own minimum (a fetched conformer is not one, so
+   *  its "frequencies" would be meaningless). Paired with its molecule. */
+  vibrations: { molecule: Molecule; modes: NormalMode[] } | null;
+  /** Called on every animation frame (the vibration drives it), or null. */
+  frame: { onFrame: ((now: number) => void) | null };
   /** Called at the end of buildScene, i.e. when a new molecule is in the
    *  scene — panels that read per-molecule data (the MO ladder) redraw here
    *  rather than polling or guessing. */
@@ -286,9 +295,11 @@ export function initScene(container: HTMLElement): SceneContext {
   scene.add(espGroup);
 
   let autoRotate = false;
+  const frame: SceneContext['frame'] = { onFrame: null };
 
   function animate() {
     requestAnimationFrame(animate);
+    frame.onFrame?.(performance.now());
     if (autoRotate) {
       moleculeGroup.rotation.y += 0.005;
       orbitalGroup.rotation.y += 0.005;
@@ -334,6 +345,7 @@ export function initScene(container: HTMLElement): SceneContext {
       orbitalView: 'delocalized',
       moMethod: 'eh',
       moSpin: 'alpha',
+      vibrationIndex: null,
       localizedSelection: [],
       showOrbitals: true,
       showEsp: false,
@@ -362,6 +374,8 @@ export function initScene(container: HTMLElement): SceneContext {
     ehResult: null,
     localizedOrbitals: null,
     rerender: () => {},
+    vibrations: null,
+    frame,
     onSceneBuilt: () => {},
     teardown,
     get autoRotate() { return autoRotate; },

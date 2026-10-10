@@ -6,6 +6,7 @@ import type { Molecule } from '../mol-parser';
 import { writeNote, type InfoNote } from './info-note';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { isMetal, lowestMultiplicity } from '../chem/elements';
+import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import {
   cancelGfn2, Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, GFN2_NOTE, HESSIAN_SADDLE_THRESHOLD, type Gfn2Progress, type Gfn2Result,
@@ -204,10 +205,13 @@ function gfn2RunNotes(run: Gfn2Result): string[] {
  * tier produced this structure — they belong to exactly this atom list, and
  * buildScene drops the pairing if it is ever broken.
  */
-function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number[] | null) {
+function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number[] | null, vibrations: NormalMode[] | null = null) {
   ctx.currentMolecule = molecule;
   ctx.gfn2Charges =
     gfn2Charges && gfn2Charges.length === molecule.atoms.length ? { molecule, charges: gfn2Charges } : null;
+  // the snap moved atoms by under a milliångström, so the minimum's modes still describe it
+  ctx.vibrations = vibrations && vibrations.length > 0 ? { molecule, modes: vibrations } : null;
+  ctx.display.vibrationIndex = null;
   buildScene(ctx);
 }
 
@@ -332,6 +336,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       // The GFN2 tier hands back its own charges with the geometry; the fetch
       // and MMFF94 paths have none to offer.
       let gfn2Charges: number[] | null = null;
+      let vibrations: NormalMode[] | null = null;
       const t2 = performance.now();
       if (molecule.atoms.length === 0) return;
 
@@ -376,6 +381,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         }
         molecule = local.molecule;
         gfn2Charges = local.gfn2?.charges ?? null;
+        vibrations = local.gfn2?.vibrations ?? null;
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
         const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
@@ -415,7 +421,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         });
       }
 
-      showMolecule(ctx, molecule, gfn2Charges);
+      showMolecule(ctx, molecule, gfn2Charges, vibrations);
     } finally {
       renderBtn.textContent = 'Build 3D model';
       renderBtn.disabled = false;
@@ -461,7 +467,7 @@ export function mountJsmePanel(ctx: SceneContext) {
         }
         const snapped = snapToSymmetry(refined.molecule);
         const next = snapped.molecule;
-        showMolecule(ctx, next, refined.charges);
+        showMolecule(ctx, next, refined.charges, refined.vibrations);
         const { formula, weight } = computeFormula(next.atoms.map(a => a.element));
         // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
         // the geometry no longer comes from MMFF94, so calling it "approximate"

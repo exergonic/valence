@@ -25,6 +25,7 @@
  */
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { atomicNumber, lowestMultiplicity } from '../chem/elements';
+import { normalModes, type NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { alignToPrincipalAxes, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
 import { levelForFraction } from '../chem/extended-huckel/mo-surface';
 import { marchSignedField } from '../utils/march-tetrahedra';
@@ -187,6 +188,10 @@ export interface Gfn2Result {
   /** The spin multiplicity the run used: the molecule's own, or the lowest
    *  its electron count allows (singlet if even, doublet if odd). */
   multiplicity: number;
+  /** The harmonic vibrations at the returned minimum, lowest first, indexed
+   *  like `molecule.atoms`; null when the Hessian check did not run (above
+   *  the size gate, not converged) or the point is a saddle. */
+  vibrations: NormalMode[] | null;
 }
 
 let modulePromise: Promise<any> | null = null;
@@ -586,7 +591,7 @@ export async function optimizeWithGfn2(
       }
       const { values, vectors } = jacobiSymmetric(matrix);
       const mode = molecule.atoms.map((_, a) => [vectors[3 * a][0], vectors[3 * a + 1][0], vectors[3 * a + 2][0]]);
-      return { value: values[0], mode };
+      return { value: values[0], mode, matrix };
     } catch {
       return null; // no verdict rather than a wrong one
     }
@@ -668,6 +673,9 @@ export async function optimizeWithGfn2(
     charges,
     lowestHessianMode: lowest?.value ?? null,
     saddleEscapes,
+    // the vibrations come free with the curvature check: the same Hessian,
+    // mass-weighted — and only mean something at a minimum
+    vibrations: lowest && lowest.value >= SADDLE_THRESHOLD ? normalModes(best.geometry.atoms, lowest.matrix) : null,
   };
 }
 

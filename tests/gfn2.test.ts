@@ -150,6 +150,21 @@ describe('GFN2-xTB', () => {
     expect(charges!.reduce((sum, q) => sum + q, 0)).toBeCloseTo(-2, 6);
   }, 180_000);
 
+  // The vibrations that come with the Hessian check, against the oracle at
+  // its own minimum (xtb 6.7.1 --gfn 2 --ohess): 1540.8, 3637.3, 3645.4 cm⁻¹ —
+  // the bend, then the symmetric and antisymmetric O–H stretches.
+  it("gives water's three vibrations — bend and two stretches — against the oracle", async () => {
+    const result = await refine(water);
+    const modes = result!.vibrations!;
+    expect(modes.map((m) => m.frequency).length).toBe(3);
+    // within 10 cm⁻¹: our minimum and finite-difference step are not xtb's
+    // to the last digit (measured 2026-10-09: 5.3 cm⁻¹ on the symmetric stretch)
+    [1540.8, 3637.3, 3645.4].forEach((oracle, i) => expect(Math.abs(modes[i].frequency - oracle)).toBeLessThan(10));
+    // the bend moves the hydrogens most, the oxygen little
+    const [o, h1] = modes[0].displacements.map((d) => Math.hypot(...d));
+    expect(h1).toBeGreaterThan(o * 4);
+  }, 180_000);
+
   // What one single point knows beyond the charges, pinned against the
   // Fortran xTB oracle at the same water geometry (xtb 6.7.1 --gfn 2):
   // full dipole 2.278 D (point charges alone 1.59 D), Wiberg O–H 0.920,

@@ -21,6 +21,7 @@ import {
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { gfn2PropertiesAt, gfn2OrbitalSurface } from '../geometry/gfn2-refine';
 import { gfn2Ladders, type Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
+import { syncVibration } from './vibration';
 import type { ChargeModel } from './setup';
 import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
@@ -247,6 +248,12 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
 // Rebuild all molecule meshes from ctx.currentMolecule without touching the
 // camera. Used for display settings (atom size, orbital style, colors).
 export function rebuildDisplay(ctx: SceneContext) {
+  redrawScene(ctx);
+  // last: the groups are new, so a playing vibration takes up the new meshes
+  syncVibration(ctx);
+}
+
+function redrawScene(ctx: SceneContext) {
   // Before the molecule guard: with no molecule on screen the GFN2 option has
   // nothing to describe either, and the control must not offer it.
   syncChargeModelControl(ctx);
