@@ -88,6 +88,27 @@ What remains is Berny (`BernyOptimizer`, `ConvergenceCriteria`,
 `OptimizationState`, `OptPoint`), the internal coordinates and the core
 vibrational helpers: +55 KB gzip over the build without it.
 
+**3c. Valence's property patch (2026-10-09).** Expose what one SCC already
+knows, for the app's bond orders, spin, dipole and orbital pictures:
+
+- `xtb_result.h`: `Mat3N atomic_dipoles` — the CAMM atomic dipoles at
+  convergence (e·bohr), which `gfn2_engine.cpp` computed every cycle and
+  dropped; the engine now stores them (`result.atomic_dipoles =
+  fresh.multipoles.dipm` when multipoles are on).
+- `xtb_calculator.h/.cpp`: `dipole_moment()` (Σ q_A R_A + Σ dipm_A — xtb's
+  "full" dipole), `atomic_dipoles()`, `ao_atoms()` and `ao_angular_momenta()`
+  (each basis function's atom and l), and `orbital_values(points_bohr,
+  coefficients)` — ψ and ∇ψ (4 × N) at the points through OCC's own
+  `gto::evaluate_basis`, in blocks of 4096, so no basis convention reaches
+  JavaScript.
+- `xtb_bindings.cpp`: `atomicDipoles`, `dipoleMoment`, `aoAtoms`,
+  `aoAngularMomenta`, `orbitalValues`.
+
+The complete set of source modifications — steps 2–3c — is
+`occ-valence.patch` in this directory (`git diff` of the build tree against
+the pinned commit, `share/` excluded): `git apply occ-valence.patch` on a
+fresh clone reproduces the tree, then steps 4–5.
+
 **4. Move aside the unread `share/` data** (the `--preload-file share@/` link
 packs the whole tree, so absent files simply don't ship): `share/basis`
 (HF/DFT basis sets, 7.4 MB), `share/dftd3` (read only by the D3 loader — GFN2
@@ -148,8 +169,8 @@ GFN2 parameters (`share/xtb`), the D4 tables (`share/dftd4`), COSMO/SMD data
 
 | file | raw | gzip |
 |---|---|---|
-| `occjs.wasm` | 2,375 KiB | 796 KiB |
-| `occjs.data` | 326 KiB | 68 KiB |
+| `occjs.wasm` | 2,499 KiB | 828 KiB |
+| `occjs.data` | 326 KiB | 70 KiB |
 | `occjs.js` | 122 KiB | 31 KiB |
 
 About **0.5 MiB brotli** in total (estimated from the gzip ratio), lazily loaded,
@@ -176,6 +197,21 @@ identical inputs is expected bit-identical too — confirm a fresh build with
 The Berny-enabled build (2026-10-05; `occjs.wasm` md5
 `f84f0dd331d69f4e3fd6ad7ca8e2a421`) adds bindings only — the GFN2 engine is
 the same code, and the oracle-pinned tests pass unchanged on it.
+
+The property build (2026-10-09, step 3c; `occjs.wasm` md5
+`6f7539346123a0b8374e8e518acaab3f`), against the oracle on identical
+geometries:
+
+| | this build | oracle |
+|---|---|---|
+| water full dipole | 2.279 D (z −0.897 e·bohr) | 2.278 D (−0.896) |
+| formaldehyde full dipole | 2.415 D | 2.411 D |
+| formaldehyde Wiberg C=O / C–H | 2.012 / 0.945 | 2.012 / 0.945 |
+| formaldehyde HOMO / LUMO | −11.560 / −8.056 eV | −11.572 / −8.066 eV |
+
+`orbitalValues` of the formaldehyde HOMO integrates to 1.0000 on a 0.2-bohr
+grid (216 000 points, ~40 ms), and its analytic gradient matches a finite
+difference to 1e-5.
 
 ## API notes for callers
 

@@ -1,0 +1,575 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 88c56e9bb..267d375ab 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -218,6 +218,12 @@ if(BUILD_UNIFIED_LIB)
+ else()
+     add_subdirectory(3rdparty EXCLUDE_FROM_ALL)
+ endif()
++
++# Valence: spdlog links Threads::Threads, whose -pthread forces shared
++# wasm memory (COOP-COEP, undeployable on static hosts). The log calls need
++# no threads here; keep only fmt. The occ.wasm CLI carries its own -pthread,
++# so it is unaffected.
++set_property(TARGET spdlog PROPERTY INTERFACE_LINK_LIBRARIES "fmt::fmt")
+ add_subdirectory(include)
+ add_subdirectory(src)
+ 
+diff --git a/include/occ/xtb/xtb_calculator.h b/include/occ/xtb/xtb_calculator.h
+index 83fc6d9e5..7397f5096 100644
+--- a/include/occ/xtb/xtb_calculator.h
++++ b/include/occ/xtb/xtb_calculator.h
+@@ -190,6 +190,20 @@ public:
+   /// calculators only (periodic ones have no molecular shell/AO map).
+   Mat bond_orders() const;
+ 
++  // --- [Valence patch] post-SCC properties for a molecular calculator ---
++  /// CAMM atomic dipoles (3 × N, e·bohr) from the most recent SCC.
++  Mat3N atomic_dipoles() const { return m_last_result.atomic_dipoles; }
++  /// The full GFN2 molecular dipole (e·bohr): Σ_A q_A R_A + Σ_A dipm_A —
++  /// the point charges plus the atomic dipoles, xtb's "full" dipole.
++  Vec3 dipole_moment() const;
++  /// The atom each basis function sits on, and its angular momentum.
++  IVec ao_atoms() const;
++  IVec ao_angular_momenta() const;
++  /// ψ = Σ_μ c_μ φ_μ and ∇ψ at the given points (bohr): a 4 × N matrix of
++  /// value, d/dx, d/dy, d/dz. Evaluated with OCC's own basis evaluator in
++  /// blocks of points, so no convention of the basis leaks to the caller.
++  Mat orbital_values(const Mat3N &points_bohr, const Vec &coefficients) const;
++
+   /// Total energy from the most recent SCC (Hartree).
+   double total_energy() const { return m_last_result.total_energy; }
+   /// Electronic + isotropic-Coulomb + (multipole AES if on) energy (Hartree).
+diff --git a/include/occ/xtb/xtb_result.h b/include/occ/xtb/xtb_result.h
+index 422102964..c08c7b6c4 100644
+--- a/include/occ/xtb/xtb_result.h
++++ b/include/occ/xtb/xtb_result.h
+@@ -53,6 +53,10 @@ struct XtbResult {
+   Vec shell_magnetization;
+   /// Per-atom spin populations; sums to Nα − Nβ.
+   Vec atomic_magnetization;
++  /// Cumulative atomic dipole moments (CAMM) at convergence, 3 × N_atoms,
++  /// e·bohr, molecular convention: the molecular dipole is
++  /// Σ_A (q_A R_A + dipm_A). Empty when multipoles were off. [Valence patch]
++  Mat3N atomic_dipoles;
+   /// Spin-resolved densities; `density_matrix` is their sum.
+   Mat density_matrix_alpha;
+   Mat density_matrix_beta;
+diff --git a/src/3rdparty/CMakeLists.txt b/src/3rdparty/CMakeLists.txt
+index 5fa22a76c..5d855e3fd 100644
+--- a/src/3rdparty/CMakeLists.txt
++++ b/src/3rdparty/CMakeLists.txt
+@@ -12,8 +12,7 @@ add_library(_subprocess
+ )
+ 
+ target_link_libraries(_subprocess
+-    PUBLIC 
+-    Threads::Threads
++    PRIVATE 
+ )
+ 
+ # Disable Unity Build for ONLY this target
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 1216c26bb..ebb089f1b 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -87,21 +87,9 @@ endif()
+ if(ENABLE_JS_BINDINGS)
+ 
+ set(JS_BINDING_SOURCES
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/cg_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/solvent_bindings.cpp"
+     "${CMAKE_CURRENT_SOURCE_DIR}/js/core_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/correlation_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/qm_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/dft_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/opt_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/isosurface_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/cube_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/crystal_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/descriptors_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/dma_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/volume_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/mults_bindings.cpp"
+     "${CMAKE_CURRENT_SOURCE_DIR}/js/xtb_bindings.cpp"
++    "${CMAKE_CURRENT_SOURCE_DIR}/js/opt_bindings.cpp"
+     "${CMAKE_CURRENT_SOURCE_DIR}/occjs.cpp"
+ )
+ 
+@@ -113,7 +101,7 @@ target_include_directories(occjs PRIVATE
+ 
+ target_compile_definitions(occjs PRIVATE VERSION_INFO=${PROJECT_VERSION})
+ target_compile_features(occjs PUBLIC cxx_std_20)
+-target_compile_options(occjs PRIVATE -fexceptions -pthread)
++target_compile_options(occjs PRIVATE -fexceptions)
+ 
+ # Link against the core OCC libraries
+ target_link_libraries(occjs PUBLIC
+@@ -138,7 +126,7 @@ target_link_libraries(occjs PUBLIC
+ # serialises the threaded grid code -- urea B3LYP/6-31G(d,p) went 4.1 s -> 1.8 s
+ # at 4 threads (1 thread unchanged, energy to 6e-10 Ha, +0.5% wasm size).
+ set_target_properties(occjs PROPERTIES
+-    LINK_FLAGS "-s MODULARIZE=1 -s EXPORT_NAME='createOccModule' -s EXPORT_ES6=1 -s ENVIRONMENT='web,worker,node' -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s STACK_SIZE=8MB -s MALLOC=mimalloc -s DISABLE_EXCEPTION_CATCHING=0 -s EXPORT_EXCEPTION_HANDLING_HELPERS=1 -fexceptions -pthread --bind -s EXPORTED_RUNTIME_METHODS=['FS'] --preload-file ${CMAKE_SOURCE_DIR}/share@/"
++    LINK_FLAGS "-s MODULARIZE=1 -s EXPORT_NAME=\"createOccModule\" -s EXPORT_ES6=1 -s ENVIRONMENT=\"web,worker,node\" -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s STACK_SIZE=8MB -s DISABLE_EXCEPTION_CATCHING=0 -s EXPORT_EXCEPTION_HANDLING_HELPERS=1 -fexceptions --bind -s EXPORTED_RUNTIME_METHODS=['FS'] --preload-file ${CMAKE_SOURCE_DIR}/share@/"
+ )
+ 
+ # Set output file extension
+@@ -167,7 +155,7 @@ target_link_libraries(occ.wasm PUBLIC
+ # (works identically in node, browser and workers — no global `Module` injection).
+ # -lnodefs.js lets the node CLI wrapper mount the real filesystem.
+ set_target_properties(occ.wasm PROPERTIES
+-    LINK_FLAGS "-O3 -DNDEBUG -flto -s MODULARIZE=1 -s EXPORT_NAME='createOccCliModule' -s EXPORT_ES6=1 -s ENVIRONMENT='web,worker,node' -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s STACK_SIZE=8MB -s MALLOC=mimalloc -s DISABLE_EXCEPTION_CATCHING=0 -fexceptions -pthread -s EXIT_RUNTIME=1 -s PROXY_TO_PTHREAD=1 -s INVOKE_RUN=0 -s FORCE_FILESYSTEM=1 -s EXPORTED_RUNTIME_METHODS=['callMain','FS','ENV'] -lnodefs.js --preload-file ${CMAKE_SOURCE_DIR}/share@/ --post-js ${CMAKE_CURRENT_SOURCE_DIR}/main/occ_wasm_post.js -s ASSERTIONS=0"
++    LINK_FLAGS "-O3 -DNDEBUG -flto -s MODULARIZE=1 -s EXPORT_NAME=\"createOccCliModule\" -s EXPORT_ES6=1 -s ENVIRONMENT=\"web,worker,node\" -s ALLOW_MEMORY_GROWTH=1 -s MAXIMUM_MEMORY=4GB -s STACK_SIZE=8MB -s DISABLE_EXCEPTION_CATCHING=0 -fexceptions -pthread -s EXIT_RUNTIME=1 -s PROXY_TO_PTHREAD=1 -s INVOKE_RUN=0 -s FORCE_FILESYSTEM=1 -s EXPORTED_RUNTIME_METHODS=['callMain','FS','ENV'] -lnodefs.js --preload-file ${CMAKE_SOURCE_DIR}/share@/ --post-js ${CMAKE_CURRENT_SOURCE_DIR}/main/occ_wasm_post.js -s ASSERTIONS=0"
+ )
+ 
+ set_property(TARGET occ.wasm APPEND PROPERTY LINK_DEPENDS
+diff --git a/src/core/CMakeLists.txt b/src/core/CMakeLists.txt
+index 435642b74..a73b35791 100644
+--- a/src/core/CMakeLists.txt
++++ b/src/core/CMakeLists.txt
+@@ -45,7 +45,10 @@ if("${USE_OPENMP}")
+     target_link_libraries(occ_core_obj PUBLIC OpenMP::OpenMP_CXX)
+ endif()
+ 
+-target_link_libraries(occ_core_obj PUBLIC TBB::tbb)
++# TBB by archive path, not TBB::tbb: that target propagates Threads::Threads,
++# whose -pthread forces shared wasm memory (COOP-COEP, undeployable). Includes stay.
++target_link_libraries(occ_core_obj PUBLIC $<TARGET_FILE:TBB::tbb>)
++target_include_directories(occ_core_obj PUBLIC $<TARGET_PROPERTY:TBB::tbb,INTERFACE_INCLUDE_DIRECTORIES>)
+ 
+ if(NOT ENABLE_HOST_OPT)
+     target_compile_definitions(occ_core_obj PUBLIC OCC_DISABLE_SIMD)
+@@ -59,7 +62,6 @@ target_link_libraries(
+         LBFGSpp::LBFGSpp
+         scn::scn
+         spdlog::spdlog
+-        Threads::Threads
+         unordered_dense::unordered_dense
+         libecpint_static
+         _subprocess
+@@ -79,7 +81,10 @@ if("${USE_OPENMP}")
+     target_link_libraries(occ_core PUBLIC OpenMP::OpenMP_CXX)
+ endif()
+ 
+-target_link_libraries(occ_core PUBLIC TBB::tbb)
++# TBB by archive path, not TBB::tbb: that target propagates Threads::Threads,
++# whose -pthread forces shared wasm memory (COOP-COEP, undeployable). Includes stay.
++target_link_libraries(occ_core PUBLIC $<TARGET_FILE:TBB::tbb>)
++target_include_directories(occ_core PUBLIC $<TARGET_PROPERTY:TBB::tbb,INTERFACE_INCLUDE_DIRECTORIES>)
+ 
+ if(NOT ENABLE_HOST_OPT)
+     target_compile_definitions(occ_core PUBLIC OCC_DISABLE_SIMD)
+@@ -94,7 +99,6 @@ target_link_libraries(
+         LBFGSpp::LBFGSpp
+         scn::scn
+         spdlog::spdlog
+-        Threads::Threads
+         unordered_dense::unordered_dense
+         _subprocess
+ )
+diff --git a/src/isosurface/CMakeLists.txt b/src/isosurface/CMakeLists.txt
+index 1c06dd533..93faedafc 100644
+--- a/src/isosurface/CMakeLists.txt
++++ b/src/isosurface/CMakeLists.txt
+@@ -32,7 +32,6 @@ target_link_libraries(
+         occ_geometry
+         occ_gto
+         occ_io
+-        Threads::Threads
+         nlohmann_json::nlohmann_json
+         unordered_dense::unordered_dense
+ )
+@@ -48,7 +47,6 @@ target_link_libraries(
+         occ_geometry
+         occ_gto
+         occ_io
+-        Threads::Threads
+         nlohmann_json::nlohmann_json
+         unordered_dense::unordered_dense
+ )
+diff --git a/src/js/core_bindings.cpp b/src/js/core_bindings.cpp
+index 6cc31c206..a7d2c7dbf 100644
+--- a/src/js/core_bindings.cpp
++++ b/src/js/core_bindings.cpp
+@@ -314,16 +314,6 @@ void register_core_bindings() {
+                   }
+                   return mol.translated(-center);
+                 }))
+-      .class_function("fromXyzFile",
+-                      optional_override([](const std::string &filename) {
+-                        return occ::io::molecule_from_xyz_file(filename);
+-                      }))
+-      .class_function(
+-          "fromXyzString",
+-          optional_override([](const emscripten::val &contents_val) {
+-            std::string contents = contents_val.as<std::string>();
+-            return occ::io::molecule_from_xyz_string(contents);
+-          }))
+       .function("translationalFreeEnergy", &Molecule::translational_free_energy)
+       .function("rotationalFreeEnergy", &Molecule::rotational_free_energy)
+       .function("toString", optional_override([](const Molecule &mol) {
+diff --git a/src/js/opt_bindings.cpp b/src/js/opt_bindings.cpp
+index 85db0e42b..8c3a7a587 100644
+--- a/src/js/opt_bindings.cpp
++++ b/src/js/opt_bindings.cpp
+@@ -9,20 +9,18 @@
+ #include <occ/opt/dihedral_coordinate.h>
+ #include <occ/opt/internal_coordinates.h>
+ #include <occ/opt/optimization_state.h>
+-#include <occ/qm/hessians.h>
+-#include <occ/qm/hf.h>
+-#include <occ/dft/dft.h>
+-#include <occ/io/xyz.h>
+ 
+ using namespace emscripten;
+ using namespace occ::opt;
+ using namespace occ::core;
+-using namespace occ::qm;
+-using namespace occ::dft;
+ using occ::Mat;
+ using occ::Vec;
+ using occ::Mat3N;
+ 
++// Valence trim: Berny, its coordinates and convergence criteria, and the core
++// vibrational helpers only. Upstream also registers HessianEvaluator<HartreeFock>
++// and <DFT> and the XYZ writer, which anchor the HF/DFT/integral code and took
++// the wasm from 2.3 MB to 14 MB.
+ void register_opt_bindings() {
+   // Bond coordinate type enum
+   enum_<BondCoordinate::Type>("BondCoordinateType")
+@@ -160,34 +158,6 @@ void register_opt_bindings() {
+                          ", converged=" + (opt.is_converged() ? "true" : "false") + ">";
+                 }));
+ 
+-  // Hessian evaluator for HartreeFock  
+-  class_<HessianEvaluator<HartreeFock>>("HessianEvaluatorHF")
+-      .constructor<HartreeFock &>()
+-      .function("setStepSize", &HessianEvaluator<HartreeFock>::set_step_size)
+-      .function("setUseAcousticSumRule", &HessianEvaluator<HartreeFock>::set_use_acoustic_sum_rule)
+-      .function("stepSize", &HessianEvaluator<HartreeFock>::step_size)
+-      .function("useAcousticSumRule", &HessianEvaluator<HartreeFock>::use_acoustic_sum_rule)
+-      .function("nuclearRepulsion", &HessianEvaluator<HartreeFock>::nuclear_repulsion)
+-      .function("compute", &HessianEvaluator<HartreeFock>::operator())
+-      .function("toString", optional_override([](const HessianEvaluator<HartreeFock> &hess) {
+-                  return std::string("<HessianEvaluatorHF step_size=") + std::to_string(hess.step_size()) + 
+-                         " acoustic_sum_rule=" + (hess.use_acoustic_sum_rule() ? "true" : "false") + ">";
+-                }));
+-
+-  // Hessian evaluator for DFT
+-  class_<HessianEvaluator<DFT>>("HessianEvaluatorDFT")
+-      .constructor<DFT &>()
+-      .function("setStepSize", &HessianEvaluator<DFT>::set_step_size)
+-      .function("setUseAcousticSumRule", &HessianEvaluator<DFT>::set_use_acoustic_sum_rule)
+-      .function("stepSize", &HessianEvaluator<DFT>::step_size)
+-      .function("useAcousticSumRule", &HessianEvaluator<DFT>::use_acoustic_sum_rule)
+-      .function("nuclearRepulsion", &HessianEvaluator<DFT>::nuclear_repulsion)
+-      .function("compute", &HessianEvaluator<DFT>::operator())
+-      .function("toString", optional_override([](const HessianEvaluator<DFT> &hess) {
+-                  return std::string("<HessianEvaluatorDFT step_size=") + std::to_string(hess.step_size()) + 
+-                         " acoustic_sum_rule=" + (hess.use_acoustic_sum_rule() ? "true" : "false") + ">";
+-                }));
+-
+   // Vibrational modes structure
+   class_<VibrationalModes>("VibrationalModes")
+       .property("frequenciesCm", &VibrationalModes::frequencies_cm)
+@@ -230,15 +200,6 @@ void register_opt_bindings() {
+   function("eigenvaluesToFrequenciesCm", &occ::core::eigenvalues_to_frequencies_cm);
+   function("frequenciesCmToHartree", &occ::core::frequencies_cm_to_hartree);
+ 
+-  // XYZ file export functionality
+-  function("moleculeToXYZ", optional_override([](const Molecule &mol) {
+-             return occ::io::to_xyz_string(mol);
+-           }));
+-
+-  function("moleculeToXYZWithComment", optional_override([](const Molecule &mol, const std::string &comment) {
+-             return occ::io::to_xyz_string(mol, comment);
+-           }));
+-
+   // Utility function to transform step from internal to Cartesian coordinates
+   function("transformStepToCartesian", &occ::opt::transform_step_to_cartesian);
+ }
+\ No newline at end of file
+diff --git a/src/js/xtb_bindings.cpp b/src/js/xtb_bindings.cpp
+index 1b0cef9db..f485ada28 100644
+--- a/src/js/xtb_bindings.cpp
++++ b/src/js/xtb_bindings.cpp
+@@ -1,10 +1,15 @@
++// PATCHED FOR VALENCE (see vendor/occ-wasm/README.md in the Valence repo).
++// Differences from upstream: nine bindings that name Crystal, Dimer,
++// Wavefunction or periodicity are removed (this app is molecular only, and
++// those names were the last things keeping libocc_crystal and libocc_qm
++// reachable), along with the three headers they required. Nothing else is
++// changed. `fromMolecule`, the configuration properties, the geometry update,
++// the single point / gradient / Hessian entry points and the conversions to
++// Molecule are untouched.
+ #include "xtb_bindings.h"
+ #include <emscripten/bind.h>
+ #include <emscripten/val.h>
+-#include <occ/core/dimer.h>
+ #include <occ/core/molecule.h>
+-#include <occ/crystal/crystal.h>
+-#include <occ/qm/wavefunction.h>
+ #include <occ/xtb/xtb_calculator.h>
+ #include <occ/xtb/xtb_result.h>
+ 
+@@ -61,36 +66,24 @@ void register_xtb_bindings() {
+   // takes a single value, otherwise as `.function` getter/setter pairs.
+   class_<XtbCalculator>("XtbCalculator")
+       // Embind can't overload constructors by argument *type* — only by arity.
+-      // Expose explicit factories instead so JS callers say
+-      // `XtbCalculator.fromMolecule(mol)`, `XtbCalculator.fromCrystal(c)`,
+-      // `XtbCalculator.fromDimer(d)`.
++      // Expose an explicit factory instead, so JS callers say
++      // `XtbCalculator.fromMolecule(mol)`. (`fromDimer` and `fromCrystal` are
++      // dropped here: a crystal calculation is what keeps the periodic
++      // machinery reachable, and this app is molecular only.)
+       // XtbCalculator is move-only (owns a unique_ptr<Gfn2Engine>); embind
+-      // can't return move-only types by value, so factories return raw
+-      // pointers and JS takes ownership.
++      // can't return move-only types by value, so the factory returns a raw
++      // pointer and JS takes ownership.
+       .class_function(
+           "fromMolecule",
+           optional_override([](const occ::core::Molecule &mol) {
+             return new XtbCalculator(mol);
+           }),
+           allow_raw_pointers())
+-      .class_function(
+-          "fromDimer",
+-          optional_override([](const occ::core::Dimer &dimer) {
+-            return new XtbCalculator(dimer);
+-          }),
+-          allow_raw_pointers())
+-      .class_function(
+-          "fromCrystal",
+-          optional_override([](const occ::crystal::Crystal &crystal) {
+-            return new XtbCalculator(crystal);
+-          }),
+-          allow_raw_pointers())
+ 
+       // Identity / topology
+       .function("method", &XtbCalculator::method)
+       .function("methodName", &XtbCalculator::method_name)
+       .function("backendName", &XtbCalculator::backend_name)
+-      .function("isPeriodic", &XtbCalculator::is_periodic)
+       .function("numAtoms", &XtbCalculator::num_atoms)
+       .function("atomicNumbers", optional_override([](const XtbCalculator &c) {
+                   return c.atomic_numbers();
+@@ -98,9 +91,6 @@ void register_xtb_bindings() {
+       .function("positions", optional_override([](const XtbCalculator &c) {
+                   return c.positions();
+                 }))
+-      .function("lattice", optional_override([](const XtbCalculator &c) {
+-                  return c.lattice();
+-                }))
+ 
+       // Configuration (getter / setter pairs)
+       .property("charge", &XtbCalculator::charge, &XtbCalculator::set_charge)
+@@ -120,16 +110,6 @@ void register_xtb_bindings() {
+                 &XtbCalculator::set_include_multipoles)
+       .property("includeDispersion", &XtbCalculator::include_dispersion,
+                 &XtbCalculator::set_include_dispersion)
+-      .function("setKpoints", &XtbCalculator::set_kpoints)
+-      .function("kpoints", optional_override([](const XtbCalculator &c) {
+-                  auto k = c.kpoints();
+-                  // Return as a plain JS array for ergonomics.
+-                  emscripten::val arr = emscripten::val::array();
+-                  arr.call<void>("push", k[0]);
+-                  arr.call<void>("push", k[1]);
+-                  arr.call<void>("push", k[2]);
+-                  return arr;
+-                }))
+       .function("setSolvent", &XtbCalculator::set_solvent)
+ 
+       // Geometry update
+@@ -137,11 +117,6 @@ void register_xtb_bindings() {
+                 optional_override([](XtbCalculator &c, const occ::Mat3N &p) {
+                   c.update_structure(p);
+                 }))
+-      .function("updateStructureWithLattice",
+-                optional_override([](XtbCalculator &c, const occ::Mat3N &p,
+-                                      const occ::Mat3 &lat) {
+-                  c.update_structure(p, lat);
+-                }))
+ 
+       // Run + result access
+       .function("singlePoint",
+@@ -159,6 +134,12 @@ void register_xtb_bindings() {
+       .function("charges", &XtbCalculator::charges)
+       .function("atomicMagnetization", &XtbCalculator::atomic_magnetization)
+       .function("bondOrders", &XtbCalculator::bond_orders)
++      // [Valence patch] the full dipole, the AO map, orbital values on points
++      .function("atomicDipoles", &XtbCalculator::atomic_dipoles)
++      .function("dipoleMoment", &XtbCalculator::dipole_moment)
++      .function("aoAtoms", &XtbCalculator::ao_atoms)
++      .function("aoAngularMomenta", &XtbCalculator::ao_angular_momenta)
++      .function("orbitalValues", &XtbCalculator::orbital_values)
+       .function("totalEnergy", &XtbCalculator::total_energy)
+       .function("sccEnergy", &XtbCalculator::scc_energy)
+       .function("repulsionEnergy", &XtbCalculator::repulsion_energy)
+@@ -194,16 +175,15 @@ void register_xtb_bindings() {
+                   return c.compute_vibrational_modes(step, project_tr_rot);
+                 }))
+ 
+-      // Conversion
++      // Conversion (`toCrystal` and `toWavefunction` are dropped here: they
++      // name the crystal and wavefunction types, which is what made the whole
++      // of libocc_crystal and libocc_qm reachable.)
+       .function("toMolecule", &XtbCalculator::to_molecule)
+-      .function("toCrystal", &XtbCalculator::to_crystal)
+-      .function("toWavefunction", &XtbCalculator::to_wavefunction)
+ 
+       .function("printSummary", &XtbCalculator::print_summary)
+       .function("toString", optional_override([](const XtbCalculator &c) {
+                   return std::string("<XtbCalculator method=") +
+                          c.method_name() + " backend=" + c.backend_name() +
+-                         " atoms=" + std::to_string(c.num_atoms()) +
+-                         (c.is_periodic() ? " periodic>" : ">");
++                         " atoms=" + std::to_string(c.num_atoms()) + ">";
+                 }));
+ }
+diff --git a/src/occjs.cpp b/src/occjs.cpp
+index 299a2e571..784439626 100644
+--- a/src/occjs.cpp
++++ b/src/occjs.cpp
+@@ -1,3 +1,8 @@
++// PATCHED FOR VALENCE (see vendor/occ-wasm/README.md in the Valence repo).
++// The only change from upstream is the EMSCRIPTEN_BINDINGS block below: thirteen
++// module registrations are commented out, because a registered binding is
++// reachable code and the linker cannot drop what it pulls in. Nothing else in
++// this file, or in the library, is modified.
+ #include "js/cg_bindings.h"
+ #include "js/core_bindings.h"
+ #include "js/correlation_bindings.h"
+@@ -22,22 +27,27 @@
+ using namespace emscripten;
+ 
+ EMSCRIPTEN_BINDINGS(occ) {
+-    // Register all binding modules
+-    register_core_bindings();
+-    register_qm_bindings();
+-    register_correlation_bindings();
+-    register_dft_bindings();
+-    register_opt_bindings();
+-    register_isosurface_bindings();
+-    register_cube_bindings();
+-    register_crystal_bindings();
+-    register_descriptors_bindings();
+-    register_dma_bindings();
+-    register_mults_bindings();
+-    register_volume_bindings();
+-    register_solvent_bindings();
+-    register_xtb_bindings();
+-    register_cg_bindings();
++    // Valence: only the modules the browser app actually uses are registered.
++    // A registered binding is *reachable code*, so the linker cannot drop what
++    // it pulls in — registering the rest cost roughly 9 MB of the 21 MB wasm
++    // (libxc alone is 9 MB, libocc_qm 17 MB, coupled cluster 4.3 MB, the driver
++    // 4.5 MB) for code this app never calls. Uncomment a line to bring that
++    // capability back; nothing else needs to change.
++    register_core_bindings();      // Molecule, Mat3N, IVec, logging, threading
++    register_xtb_bindings();       // GFN2-xTB — the geometry engine
++    // register_solvent_bindings(); // R2 DROPPED - COSMO-RS driver anchors ~12MB, see README
++    // register_qm_bindings();
++    // register_correlation_bindings();
++    // register_dft_bindings();
++    register_opt_bindings();       // Berny internal-coordinate optimiser (measured for Valence)
++    // register_isosurface_bindings();
++    // register_cube_bindings();
++    // register_crystal_bindings();
++    // register_descriptors_bindings();
++    // register_dma_bindings();
++    // register_mults_bindings();
++    // register_volume_bindings();
++    // register_cg_bindings();
+ 
+     // Global utility functions
+     // Note: LogLevel enum and logging functions are now registered in core_bindings.cpp
+diff --git a/src/xtb/gfn2_engine.cpp b/src/xtb/gfn2_engine.cpp
+index 244f922de..3719b46bf 100644
+--- a/src/xtb/gfn2_engine.cpp
++++ b/src/xtb/gfn2_engine.cpp
+@@ -457,6 +457,7 @@ SccResult Gfn2Engine::single_point(const SccOptions &opts,
+         m_solvation->update(atom_q_new);
+       }
+     }
++    if (include_multipoles) result.atomic_dipoles = fresh.multipoles.dipm;
+     result.scc_energy = scc_energy;
+     result.repulsion_energy = m_e_rep;
+     result.dispersion_energy = e_disp;
+diff --git a/src/xtb/xtb_calculator.cpp b/src/xtb/xtb_calculator.cpp
+index 8f5c9aee1..d1ff66d64 100644
+--- a/src/xtb/xtb_calculator.cpp
++++ b/src/xtb/xtb_calculator.cpp
+@@ -2,6 +2,7 @@
+ #include <occ/core/units.h>
+ #include <occ/crystal/crystal.h>
+ #include <occ/disp/d4.h>
++#include <occ/gto/gto.h>
+ #include <occ/xtb/anisotropic.h>
+ #include <occ/xtb/basis.h>
+ #include <occ/xtb/camm.h>
+@@ -240,6 +241,63 @@ Mat XtbCalculator::bond_orders() const {
+                                     static_cast<int>(num_atoms()));
+ }
+ 
++Vec3 XtbCalculator::dipole_moment() const {
++  if (m_periodic || !m_calc) {
++    throw std::runtime_error("XtbCalculator::dipole_moment: molecular only");
++  }
++  const Vec &q = m_last_result.atomic_charges;
++  if (q.size() != num_atoms()) {
++    throw std::runtime_error(
++        "XtbCalculator::dipole_moment: call single_point_energy() first");
++  }
++  Vec3 mu = m_positions_bohr * q;
++  if (m_last_result.atomic_dipoles.cols() == num_atoms()) {
++    mu += m_last_result.atomic_dipoles.rowwise().sum();
++  }
++  return mu;
++}
++
++IVec XtbCalculator::ao_atoms() const {
++  if (!m_calc) throw std::runtime_error("XtbCalculator::ao_atoms: molecular only");
++  const auto &map = m_calc->bf_to_atom();
++  IVec out(map.size());
++  for (size_t i = 0; i < map.size(); ++i) out(i) = map[i];
++  return out;
++}
++
++IVec XtbCalculator::ao_angular_momenta() const {
++  if (!m_calc) throw std::runtime_error("XtbCalculator::ao_angular_momenta: molecular only");
++  const auto &basis = m_calc->basis();
++  IVec out(basis.nbf());
++  int bf = 0;
++  for (const auto &shell : basis.shells()) {
++    for (size_t k = 0; k < shell.size(); ++k) out(bf++) = shell.l;
++  }
++  return out;
++}
++
++Mat XtbCalculator::orbital_values(const Mat3N &points_bohr,
++                                  const Vec &coefficients) const {
++  if (!m_calc) throw std::runtime_error("XtbCalculator::orbital_values: molecular only");
++  const auto &basis = m_calc->basis();
++  if (coefficients.size() != static_cast<Eigen::Index>(basis.nbf())) {
++    throw std::runtime_error("XtbCalculator::orbital_values: coefficient count");
++  }
++  const Eigen::Index n = points_bohr.cols();
++  Mat out(4, n);
++  constexpr Eigen::Index block = 4096;
++  for (Eigen::Index start = 0; start < n; start += block) {
++    const Eigen::Index count = std::min(block, n - start);
++    const auto values =
++        occ::gto::evaluate_basis(basis, points_bohr.middleCols(start, count), 1);
++    out.block(0, start, 1, count) = (values.phi * coefficients).transpose();
++    out.block(1, start, 1, count) = (values.phi_x * coefficients).transpose();
++    out.block(2, start, 1, count) = (values.phi_y * coefficients).transpose();
++    out.block(3, start, 1, count) = (values.phi_z * coefficients).transpose();
++  }
++  return out;
++}
++
+ void XtbCalculator::set_charge(double c) { m_charge = c; }
+ void XtbCalculator::set_max_iterations(int n) {
+   m_opts.max_iterations = n;
