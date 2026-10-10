@@ -201,8 +201,28 @@ describe('GFN2-xTB', () => {
     // 1.6 Å beyond the oxygen, on the side away from the hydrogens
     const [x, y, z] = [0, 0, water.atoms[0].z + 1.6];
     const charges = espPotentialAt(x, y, z, water.atoms, p.charges);
-    const full = espPotentialAt(x, y, z, water.atoms, p.charges, p.atomicDipoles);
+    const full = espPotentialAt(x, y, z, water.atoms, p.charges, { dipoles: p.atomicDipoles!, quadrupoles: null });
     expect(full).toBeLessThan(charges);
+  }, 180_000);
+
+  // The atomic quadrupoles, turned back from the principal-axis frame: with
+  // the charges' quadrupole and the atomic dipoles' they rebuild the oracle's
+  // "full" molecular quadrupole (xtb prints it about the coordinate origin, in
+  // e·bohr², Buckingham's ½(3xᵢxⱼ − r²δ)): −1.249, 0, 1.405, 0, 0, −0.156.
+  it("gives each atom's quadrupole: with the rest they rebuild water's full molecular quadrupole, against the oracle", async () => {
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const p = (await propertiesAt(water, vendorFile))!;
+    const order: Array<[number, number]> = [[0, 0], [0, 1], [1, 1], [0, 2], [1, 2], [2, 2]];
+    const toBohr2 = 1 / 0.529177210903 ** 2;
+    const total = order.map(([i, j], c) => water.atoms.reduce((sum, a, n) => {
+      const r = [a.x, a.y, a.z];
+      const mu = p.atomicDipoles![n];
+      const r2 = r[0] ** 2 + r[1] ** 2 + r[2] ** 2;
+      const charge = p.charges[n] * (1.5 * r[i] * r[j] - (i === j ? 0.5 * r2 : 0));
+      const dipole = 1.5 * (r[i] * mu[j] + r[j] * mu[i]) - (i === j ? r[0] * mu[0] + r[1] * mu[1] + r[2] * mu[2] : 0);
+      return sum + charge + dipole + p.atomicQuadrupoles![n][c];
+    }, 0) * toBohr2);
+    [-1.249, 0, 1.405, 0, 0, -0.156].forEach((oracle, c) => expect(Math.abs(total[c] - oracle)).toBeLessThan(0.01));
   }, 180_000);
 
   // An odd electron count runs as a doublet, and the spin it carries is one

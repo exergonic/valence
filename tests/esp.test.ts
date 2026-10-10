@@ -356,7 +356,7 @@ describe('espPotentialAt with atomic dipoles', () => {
   // a unit dipole (e·Å) at the origin along +z: p·r/r³ — positive ahead of it,
   // negative behind, nothing side-on
   const atom = [{ element: 'O', x: 0, y: 0, z: 0 }];
-  const p: Array<[number, number, number]> = [[0, 0, 1]];
+  const p = { dipoles: [[0, 0, 1]] as Array<[number, number, number]>, quadrupoles: null };
   it('adds p·r/r³ to the charges', () => {
     expect(espPotentialAt(0, 0, 2, atom, [0], p)).toBeCloseTo(0.25, 9);
     expect(espPotentialAt(0, 0, -2, atom, [0], p)).toBeCloseTo(-0.25, 9);
@@ -376,7 +376,25 @@ describe('espVmaxUnder', () => {
     expect(espVmaxUnder(surface, mol.atoms, charges, null)).toBeCloseTo(surface.vmax, 6); // the surface stores float32
     // an atomic dipole on O pointing along the bond, toward H: the same
     // sense as the charges' own dipole, so the potential grows
-    const stronger = espVmaxUnder(surface, mol.atoms, charges, [[0.2, 0, 0], [0, 0, 0]]);
+    const stronger = espVmaxUnder(surface, mol.atoms, charges, { dipoles: [[0.2, 0, 0], [0, 0, 0]], quadrupoles: null });
     expect(stronger).toBeGreaterThan(surface.vmax);
+  });
+});
+
+describe('espPotentialAt with atomic quadrupoles', () => {
+  // an axial quadrupole at the origin (Buckingham, traceless): Θzz = 1,
+  // Θxx = Θyy = −½ — Θ:RR/R⁵ is 2× stronger along z than side-on, and the
+  // opposite sign
+  const atom = [{ element: 'C', x: 0, y: 0, z: 0 }];
+  const theta = {
+    dipoles: [[0, 0, 0]] as Array<[number, number, number]>,
+    quadrupoles: [[-0.5, 0, -0.5, 0, 0, 1]] as Array<[number, number, number, number, number, number]>,
+  };
+  it('adds Θ:RR/R⁵ — positive along the axis, half as large and negative side-on', () => {
+    expect(espPotentialAt(0, 0, 2, atom, [0], theta)).toBeCloseTo(1 * 4 / 32, 9);
+    expect(espPotentialAt(2, 0, 0, atom, [0], theta)).toBeCloseTo(-0.5 * 4 / 32, 9);
+    // averaged over a sphere a traceless quadrupole is nothing
+    const r = 2 / Math.sqrt(3);
+    expect(espPotentialAt(r, r, r, atom, [0], theta)).toBeCloseTo(0, 9);
   });
 });

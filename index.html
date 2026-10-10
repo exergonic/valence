@@ -213,14 +213,14 @@
               <option value="gfn2">GFN2-xTB (Mulliken)</option>
               <option value="mmff94">MMFF94 (BCI)</option>
             </select>
-            <label class="ctrl-toggle" title="GFN2-xTB only. A point charge sits on its nucleus; an atomic dipole says how far that atom's share of the electrons sits off it — water's lone pairs bulge away from the hydrogens. On: the ESP surface and the dipole include them, GFN2's fuller picture (water 2.28 D). Off: both show the point charges alone, the same charges the labels print (water 1.59 D).">
-              <input type="checkbox" id="ctrl-atomic-dipoles" checked />
-              <span>Include atomic dipoles</span>
+            <label class="ctrl-toggle" title="GFN2-xTB only. A point charge sits on its nucleus. An atomic dipole says how far that atom's share of the electrons sits off it (water's lone pairs bulge away from the hydrogens); an atomic quadrupole, its shape beyond that (a π cloud above and below a ring). On: the ESP surface includes both and the dipole is GFN2's full one (water 2.28 D). Off: both show the point charges alone, the same charges the labels print (water 1.59 D) — on the same colour scale, so the difference shows.">
+              <input type="checkbox" id="ctrl-atomic-multipoles" checked />
+              <span>Include atomic dipoles &amp; quadrupoles</span>
             </label>
             <p class="measure-hint" id="charge-model-hint">
-              The labels print point charges. With atomic dipoles on, the ESP
-              surface and the dipole add how far each atom's electrons sit off its
-              nucleus, so they need not add up from the labels.
+              The labels print point charges. With atomic dipoles and quadrupoles
+              on, the ESP surface and the dipole add how each atom's electrons sit
+              around its nucleus, so they need not add up from the labels.
             </p>
             <label class="ctrl-toggle">
               <input type="checkbox" id="ctrl-show-esp" />

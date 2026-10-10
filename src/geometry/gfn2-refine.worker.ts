@@ -730,6 +730,11 @@ export interface Gfn2Properties {
    *  up the full dipole, and they belong in the ESP. Null from an engine build
    *  without the binding. */
   atomicDipoles: Array<[number, number, number]> | null;
+  /** Each atom's own traceless quadrupole (CAMM), e·Å², in the molecule's
+   *  axes, as [xx, xy, yy, xz, yz, zz] in Buckingham's ½(3xᵢxⱼ − r²δᵢⱼ): the
+   *  next term of the same expansion — the shape of each atom's electron
+   *  cloud beyond its offset (a π cloud's two lobes). For the ESP. */
+  atomicQuadrupoles: Array<[number, number, number, number, number, number]> | null;
   /** The molecular orbitals: one set for a closed shell, α and β for an open
    *  one. Their shapes are drawn by `orbitalField`, which needs this run's
    *  calculator, so it is kept alive under `key` until the next run. */
@@ -927,6 +932,27 @@ export async function propertiesAt(
       }
     }
 
+    // A rank-2 tensor turns twice: Θ_mol = R Θ R^T, R's columns the frame's
+    // axes in the molecule's coordinates; bohr² to Å².
+    let atomicQuadrupoles: Gfn2Properties['atomicQuadrupoles'] = null;
+    if (typeof calc.atomicQuadrupoles === 'function') {
+      const qp = calc.atomicQuadrupoles();
+      if (qp.cols() === count) {
+        const R = [0, 1, 2].map((i) => frame.axes.map((axis) => axis[i])); // R[i][k] = axes[k][i]
+        const order: Array<[number, number]> = [[0, 0], [0, 1], [1, 1], [0, 2], [1, 2], [2, 2]];
+        atomicQuadrupoles = molecule.atoms.map((_, a) => {
+          const t = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+          order.forEach(([i, j], c) => { t[i][j] = t[j][i] = qp.get(c, a) * ANGSTROM_PER_BOHR ** 2; });
+          const turned = (i: number, j: number) => {
+            let sum = 0;
+            for (let k = 0; k < 3; k++) for (let l = 0; l < 3; l++) sum += R[i][k] * t[k][l] * R[j][l];
+            return sum;
+          };
+          return order.map(([i, j]) => turned(i, j)) as [number, number, number, number, number, number];
+        });
+      }
+    }
+
     // The AO → atom map comes from the patch too; without it the shares are
     // left empty rather than guessed.
     const aoAtom = typeof calc.aoAtoms === 'function' ? vector(calc.aoAtoms()) : null;
@@ -960,7 +986,7 @@ export async function propertiesAt(
     kept = { key: nextKey++, calc, signs, frame, fields: new Map() };
     keep = true;
     return {
-      charges, bondOrders, spin, multiplicity, dipole, atomicDipoles, alpha, beta, key: kept.key,
+      charges, bondOrders, spin, multiplicity, dipole, atomicDipoles, atomicQuadrupoles, alpha, beta, key: kept.key,
       orbitalBasis: described?.basis ?? null,
       frame,
       coefficients: { alpha: flip(alphaC), beta: betaC ? flip(betaC) : null },

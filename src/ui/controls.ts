@@ -67,13 +67,14 @@ export function setupControls(ctx: SceneContext) {
   // so the two cannot disagree (the ramp is linear in RGB between its stops).
   const espKey = document.querySelector<HTMLElement>('.esp-scale');
   if (espKey) espKey.style.background = `linear-gradient(90deg, ${[-1, 0, 1].map((t) => `rgb(${espColor(t).join(', ')})`).join(', ')})`;
-  // Atomic dipoles in the ESP and the dipole (GFN2): on, GFN2's fuller
-  // picture; off, the point charges' own — what the labels add up to.
-  const atomicDipoles = document.querySelector<HTMLInputElement>('#ctrl-atomic-dipoles');
-  if (atomicDipoles) {
-    atomicDipoles.checked = ctx.display.atomicDipoles;
-    atomicDipoles.addEventListener('change', () => {
-      ctx.display.atomicDipoles = atomicDipoles.checked;
+  // Atomic dipoles and quadrupoles in the ESP and the dipole (GFN2): on,
+  // GFN2's fuller picture; off, the point charges' own — what the labels add
+  // up to.
+  const atomicMultipoles = document.querySelector<HTMLInputElement>('#ctrl-atomic-multipoles');
+  if (atomicMultipoles) {
+    atomicMultipoles.checked = ctx.display.atomicMultipoles;
+    atomicMultipoles.addEventListener('change', () => {
+      ctx.display.atomicMultipoles = atomicMultipoles.checked;
       rerender();
     });
   }

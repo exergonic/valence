@@ -91,17 +91,18 @@ vibrational helpers: +55 KB gzip over the build without it.
 **3c. Valence's property patch (2026-10-09).** Expose what one SCC already
 knows, for the app's bond orders, spin, dipole and orbital pictures:
 
-- `xtb_result.h`: `Mat3N atomic_dipoles` — the CAMM atomic dipoles at
-  convergence (e·bohr), which `gfn2_engine.cpp` computed every cycle and
-  dropped; the engine now stores them (`result.atomic_dipoles =
-  fresh.multipoles.dipm` when multipoles are on).
+- `xtb_result.h`: `Mat3N atomic_dipoles` and `Mat atomic_quadrupoles` — the
+  CAMM atomic dipoles (e·bohr) and traceless quadrupoles (e·bohr², 6 × N,
+  `[xx xy yy xz yz zz]`, Buckingham's ½(3xᵢxⱼ − r²δᵢⱼ)) at convergence, which
+  `gfn2_engine.cpp` computed every cycle and dropped; the engine now stores
+  them when multipoles are on.
 - `xtb_calculator.h/.cpp`: `dipole_moment()` (Σ q_A R_A + Σ dipm_A — xtb's
-  "full" dipole), `atomic_dipoles()`, `ao_atoms()` and `ao_angular_momenta()`
+  "full" dipole), `atomic_dipoles()`, `atomic_quadrupoles()`, `ao_atoms()` and `ao_angular_momenta()`
   (each basis function's atom and l), and `orbital_values(points_bohr,
   coefficients)` — ψ and ∇ψ (4 × N) at the points through OCC's own
   `gto::evaluate_basis`, in blocks of 4096, so no basis convention reaches
   JavaScript.
-- `xtb_bindings.cpp`: `atomicDipoles`, `dipoleMoment`, `aoAtoms`,
+- `xtb_bindings.cpp`: `atomicDipoles`, `atomicQuadrupoles`, `dipoleMoment`, `aoAtoms`,
   `aoAngularMomenta`, `orbitalValues`.
 
 The complete set of source modifications — steps 2–3c — is
@@ -212,6 +213,13 @@ geometries:
 `orbitalValues` of the formaldehyde HOMO integrates to 1.0000 on a 0.2-bohr
 grid (216 000 points, ~40 ms), and its analytic gradient matches a finite
 difference to 1e-5.
+
+With the quadrupoles (2026-10-09; `occjs.wasm` md5
+`cabaf1c2d977f26d89f7763e1a95e633`, +59 bytes gzip): the charges' quadrupole
+plus the atomic dipoles' plus Σ `atomicQuadrupoles` reproduces xtb's printed
+"full" molecular quadrupole (about the coordinate origin) to 0.003 e·bohr²
+for water and formaldehyde — which pins the order and the ½(3xᵢxⱼ − r²δᵢⱼ)
+convention.
 
 ## API notes for callers
 

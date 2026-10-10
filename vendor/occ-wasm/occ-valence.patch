@@ -16,16 +16,18 @@ index 88c56e9bb..267d375ab 100644
  add_subdirectory(src)
  
 diff --git a/include/occ/xtb/xtb_calculator.h b/include/occ/xtb/xtb_calculator.h
-index 83fc6d9e5..7397f5096 100644
+index 83fc6d9e5..59c9ba96c 100644
 --- a/include/occ/xtb/xtb_calculator.h
 +++ b/include/occ/xtb/xtb_calculator.h
-@@ -190,6 +190,20 @@ public:
+@@ -190,6 +190,22 @@ public:
    /// calculators only (periodic ones have no molecular shell/AO map).
    Mat bond_orders() const;
  
 +  // --- [Valence patch] post-SCC properties for a molecular calculator ---
 +  /// CAMM atomic dipoles (3 × N, e·bohr) from the most recent SCC.
 +  Mat3N atomic_dipoles() const { return m_last_result.atomic_dipoles; }
++  /// CAMM traceless atomic quadrupoles (6 × N, e·bohr², [xx xy yy xz yz zz]).
++  Mat atomic_quadrupoles() const { return m_last_result.atomic_quadrupoles; }
 +  /// The full GFN2 molecular dipole (e·bohr): Σ_A q_A R_A + Σ_A dipm_A —
 +  /// the point charges plus the atomic dipoles, xtb's "full" dipole.
 +  Vec3 dipole_moment() const;
@@ -41,10 +43,10 @@ index 83fc6d9e5..7397f5096 100644
    double total_energy() const { return m_last_result.total_energy; }
    /// Electronic + isotropic-Coulomb + (multipole AES if on) energy (Hartree).
 diff --git a/include/occ/xtb/xtb_result.h b/include/occ/xtb/xtb_result.h
-index 422102964..c08c7b6c4 100644
+index 422102964..c8cef8b89 100644
 --- a/include/occ/xtb/xtb_result.h
 +++ b/include/occ/xtb/xtb_result.h
-@@ -53,6 +53,10 @@ struct XtbResult {
+@@ -53,6 +53,14 @@ struct XtbResult {
    Vec shell_magnetization;
    /// Per-atom spin populations; sums to Nα − Nβ.
    Vec atomic_magnetization;
@@ -52,6 +54,10 @@ index 422102964..c08c7b6c4 100644
 +  /// e·bohr, molecular convention: the molecular dipole is
 +  /// Σ_A (q_A R_A + dipm_A). Empty when multipoles were off. [Valence patch]
 +  Mat3N atomic_dipoles;
++  /// Traceless Cartesian CAMM atomic quadrupoles at convergence, 6 × N_atoms,
++  /// e·bohr², xtb's aespot order [xx, xy, yy, xz, yz, zz]. Empty when
++  /// multipoles were off. [Valence patch]
++  Mat atomic_quadrupoles;
    /// Spin-resolved densities; `density_matrix` is their sum.
    Mat density_matrix_alpha;
    Mat density_matrix_beta;
@@ -290,7 +296,7 @@ index 85db0e42b..8c3a7a587 100644
  }
 \ No newline at end of file
 diff --git a/src/js/xtb_bindings.cpp b/src/js/xtb_bindings.cpp
-index 1b0cef9db..f485ada28 100644
+index 1b0cef9db..ffd39418f 100644
 --- a/src/js/xtb_bindings.cpp
 +++ b/src/js/xtb_bindings.cpp
 @@ -1,10 +1,15 @@
@@ -394,12 +400,13 @@ index 1b0cef9db..f485ada28 100644
  
        // Run + result access
        .function("singlePoint",
-@@ -159,6 +134,12 @@ void register_xtb_bindings() {
+@@ -159,6 +134,13 @@ void register_xtb_bindings() {
        .function("charges", &XtbCalculator::charges)
        .function("atomicMagnetization", &XtbCalculator::atomic_magnetization)
        .function("bondOrders", &XtbCalculator::bond_orders)
 +      // [Valence patch] the full dipole, the AO map, orbital values on points
 +      .function("atomicDipoles", &XtbCalculator::atomic_dipoles)
++      .function("atomicQuadrupoles", &XtbCalculator::atomic_quadrupoles)
 +      .function("dipoleMoment", &XtbCalculator::dipole_moment)
 +      .function("aoAtoms", &XtbCalculator::ao_atoms)
 +      .function("aoAngularMomenta", &XtbCalculator::ao_angular_momenta)
@@ -407,7 +414,7 @@ index 1b0cef9db..f485ada28 100644
        .function("totalEnergy", &XtbCalculator::total_energy)
        .function("sccEnergy", &XtbCalculator::scc_energy)
        .function("repulsionEnergy", &XtbCalculator::repulsion_energy)
-@@ -194,16 +175,15 @@ void register_xtb_bindings() {
+@@ -194,16 +176,15 @@ void register_xtb_bindings() {
                    return c.compute_vibrational_modes(step, project_tr_rot);
                  }))
  
@@ -486,14 +493,17 @@ index 299a2e571..784439626 100644
      // Global utility functions
      // Note: LogLevel enum and logging functions are now registered in core_bindings.cpp
 diff --git a/src/xtb/gfn2_engine.cpp b/src/xtb/gfn2_engine.cpp
-index 244f922de..3719b46bf 100644
+index 244f922de..5c49b8bff 100644
 --- a/src/xtb/gfn2_engine.cpp
 +++ b/src/xtb/gfn2_engine.cpp
-@@ -457,6 +457,7 @@ SccResult Gfn2Engine::single_point(const SccOptions &opts,
+@@ -457,6 +457,10 @@ SccResult Gfn2Engine::single_point(const SccOptions &opts,
          m_solvation->update(atom_q_new);
        }
      }
-+    if (include_multipoles) result.atomic_dipoles = fresh.multipoles.dipm;
++    if (include_multipoles) {
++      result.atomic_dipoles = fresh.multipoles.dipm;
++      result.atomic_quadrupoles = fresh.multipoles.qp;
++    }
      result.scc_energy = scc_energy;
      result.repulsion_energy = m_e_rep;
      result.dispersion_energy = e_disp;
