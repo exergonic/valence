@@ -1,5 +1,6 @@
 import type { Molecule } from '../mol-parser';
 import { chargeModelResult } from '../chem/charge-model/bci-charges';
+import { implicitHydrogenCounts } from '../chem/fill-hydrogens';
 
 /**
  * Heavy-atom structural fingerprint used to guard fetched 3D structures.
@@ -11,19 +12,26 @@ import { chargeModelResult } from '../chem/charge-model/bci-charges';
  * ring (cyclobutane, CID 9250). Without a check the app renders the wrong
  * molecule while reporting "PubChem 3D".
  *
- * The fingerprint deliberately ignores hydrogens (the sketcher leaves them
- * implicit while PubChem returns explicit H) and atom numbering (PubChem
- * reorders atoms freely). It compares the heavy-atom element multiset, the
- * heavy-heavy bond multiset (element pair + order) and, since charges are
- * part of a species' identity, the NET formal charge — a charged sketch
- * resolving to a neutral (or differently charged) record is a different
- * compound (the sketched methyl anion must never be served methane).
+ * The fingerprint ignores atom numbering (PubChem reorders atoms freely).
+ * It compares each heavy atom with its hydrogen count, the heavy-heavy bond
+ * multiset (element pair + order) and, since charges are part of a species'
+ * identity, the NET formal charge — a charged sketch resolving to a neutral
+ * (or differently charged) record is a different compound (the sketched
+ * methyl anion must never be served methane).
+ *
+ * Hydrogens: the fetched record's are explicit; the sketch's are those drawn
+ * plus the ones the local pipeline would fill (`implicitHydrogenCounts`).
+ * The query is JSME's SMILES, whose hydrogens are JSME's own: it gives Ge,
+ * As, Sb and Te none (`C[Ge]`, where the local pipeline makes GeH₃), and a
+ * metal none. Without the count, a record of the hydrogen-poor radical
+ * passed as "PubChem 3D" for a sketch the local pipeline builds saturated.
+ * A mismatch falls through to that local pipeline.
  */
-export function structuresMatch(a: Molecule, b: Molecule): boolean {
+export function structuresMatch(fetched: Molecule, sketch: Molecule): boolean {
   return (
-    arraysEqual(heavyElements(a), heavyElements(b)) &&
-    arraysEqual(heavyBonds(a), heavyBonds(b)) &&
-    netFormalCharge(a) === netFormalCharge(b)
+    arraysEqual(heavyAtomsWithHydrogens(fetched, false), heavyAtomsWithHydrogens(sketch, true)) &&
+    arraysEqual(heavyBonds(fetched), heavyBonds(sketch)) &&
+    netFormalCharge(fetched) === netFormalCharge(sketch)
   );
 }
 
@@ -63,8 +71,22 @@ export function unrepresentableCharge(molecule: Molecule): boolean {
   }
 }
 
-function heavyElements(m: Molecule): string[] {
-  return m.atoms.map((a) => a.element).filter((el) => el !== 'H').sort();
+/** Each heavy atom as element + hydrogen count ("CH3", "NiH0"): the H atoms
+ *  bonded to it, plus — for a sketch — the implicit ones it would be given. */
+function heavyAtomsWithHydrogens(m: Molecule, addImplicit: boolean): string[] {
+  const hydrogens = addImplicit ? implicitHydrogenCounts(m) : m.atoms.map(() => 0);
+  for (const bond of m.bonds) {
+    const a1 = m.atoms[bond.atom1Index];
+    const a2 = m.atoms[bond.atom2Index];
+    if (!a1 || !a2) continue;
+    if (a2.element === 'H' && a1.element !== 'H') hydrogens[bond.atom1Index]++;
+    if (a1.element === 'H' && a2.element !== 'H') hydrogens[bond.atom2Index]++;
+  }
+  const out: string[] = [];
+  m.atoms.forEach((a, i) => {
+    if (a.element !== 'H') out.push(`${a.element}H${hydrogens[i]}`);
+  });
+  return out.sort();
 }
 
 function heavyBonds(m: Molecule): string[] {

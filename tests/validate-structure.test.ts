@@ -47,13 +47,14 @@ M  END
 `,
     );
     // Same ring as drawnCyclobutadiene (2 double + 2 single C-C), just
-    // numbered from a different starting atom.
-    expect(structuresMatch(shifted, drawnCyclobutadiene)).toBe(true);
+    // numbered from a different starting atom — the sketch here, matched
+    // against PubChem's record (its own numbering, explicit H's).
+    expect(structuresMatch(pubchemCyclobutadiene, shifted)).toBe(true);
   });
 
-  it('ignores hydrogens entirely while still comparing the heavy scaffold', () => {
-    // Drawn water (1 O) vs a hypothetical "heavy water" with no H at all:
-    // same O atom, so they match on heavy atoms alone.
+  it('counts the sketch\'s implicit hydrogens against the record\'s explicit ones', () => {
+    // A drawn O is water to the local pipeline (two implicit H's), so
+    // PubChem's water matches it; a record of a bare O atom does not.
     const o = parseMolBlock(`  1  0  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
 M  END
@@ -66,7 +67,54 @@ M  END
   1  3  1  0  0  0  0
 M  END
 `);
-    expect(structuresMatch(o, o2h)).toBe(true);
+    expect(structuresMatch(o2h, o)).toBe(true);
+    expect(structuresMatch(o, o)).toBe(false);
+  });
+
+  it('rejects a hydrogen-poor record for a semimetal JSME leaves bare (C–Ge)', () => {
+    // JSME sends a drawn C–Ge as "C[Ge]": no H on Ge. The local pipeline
+    // makes CH3–GeH3, so a record of the CH3–Ge radical is another species.
+    const sketch = parseMolBlock(`  2  1  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2124    0.7000    0.0000 Ge  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+`);
+    const radical = parseMolBlock(`  5  4  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.9500    0.0000    0.0000 Ge  0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3600    1.0200    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3600   -0.5100    0.8800 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3600   -0.5100   -0.8800 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+`);
+    expect(structuresMatch(radical, sketch)).toBe(false);
+  });
+
+  it('expects no hydrogens on a metal the user drew bare (C–Ni)', () => {
+    const sketch = parseMolBlock(`  2  1  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2124    0.7000    0.0000 Ni  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+`);
+    const methylNickel = parseMolBlock(`  5  4  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.9000    0.0000    0.0000 Ni  0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3600    1.0200    0.0000 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3600   -0.5100    0.8800 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.3600   -0.5100   -0.8800 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+`);
+    expect(structuresMatch(methylNickel, sketch)).toBe(true);
   });
 
   it('rejects a different element set', () => {

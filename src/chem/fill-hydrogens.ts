@@ -6,18 +6,25 @@ import { vecNormalize, crossProduct, rotateRodrigues } from '../utils/vec3';
 // what's left over after counting bond orders gets filled with hydrogens.
 // NOT the same as VALENCE_ELECTRONS (hybridize.ts): N, O, S form 3, 2, 2
 // bonds here despite having 5, 6, 6 valence electrons.
+//
+// Nonmetals and the semimetals only (SiH₄, GeH₄, AsH₃, SbH₃, H₂Te and BH₃
+// are the textbook hydrides). A metal or a noble gas gets no hydrogen it was
+// not drawn with: a sketched Na is sodium, not NaH, and Sn is tin, not SnH₄.
+// The sketch is the specification; hydrogens on a metal are the user's to
+// draw.
 const BOND_VALENCE: Record<string, number> = {
   H: 1,
-  He: 0,
-  Li: 1, Be: 2, B: 3,
-  C: 4, N: 3, O: 2, F: 1,
-  Na: 1, Mg: 2, Al: 3,
+  B: 3, C: 4, N: 3, O: 2, F: 1,
   Si: 4, P: 3, S: 2, Cl: 1,
-  K: 1, Ca: 2, Ga: 3,
   Ge: 4, As: 3, Se: 2, Br: 1,
-  Rb: 1, Sr: 2, In: 3,
-  Sn: 4, Sb: 3, Te: 2, I: 1,
+  Sb: 3, Te: 2, I: 1,
 };
+
+/** True for the elements that take implicit hydrogens — the nonmetals and
+ *  semimetals; a metal or a noble gas carries only the hydrogens drawn. */
+export function takesImplicitHydrogens(element: string): boolean {
+  return element in BOND_VALENCE;
+}
 
 // Typical bond-order sums for CHARGED atoms (RDKit-style default
 // valences): a carbocation is trivalent, ammonium N⁺ tetravalent,
@@ -37,6 +44,33 @@ const CHARGED_VALENCE: Record<string, Record<number, number>> = {
   Br: { '1': 2, '-1': 0 },
   I:  { '1': 2, '-1': 0 },
 };
+
+/**
+ * The hydrogens each atom is missing: its usual bond count (shifted by its
+ * formal charge) less the bond orders it already has; zero for a metal or a
+ * noble gas. Read by the filler below and by the fetch guard, which checks
+ * that a remote structure has the hydrogens the local pipeline would give.
+ */
+export function implicitHydrogenCounts(molecule: Molecule): number[] {
+  const bondOrderSum: number[] = new Array(molecule.atoms.length).fill(0);
+  for (const bond of molecule.bonds) {
+    bondOrderSum[bond.atom1Index] += bond.order;
+    bondOrderSum[bond.atom2Index] += bond.order;
+  }
+  return molecule.atoms.map((atom, i) => {
+    const valence = BOND_VALENCE[atom.element];
+    if (!valence) return 0;
+    // A formal charge changes how many bonds the atom wants: a drawn
+    // carbocation (C⁺, two ring bonds) fills ONE hydrogen, not two —
+    // without this the local path silently neutralizes the ion while
+    // PubChem/CIR (explicit Hs in their SDFs) respect it.
+    const charge = atom.charge ?? 0;
+    const target = charge !== 0
+      ? (CHARGED_VALENCE[atom.element]?.[charge] ?? valence)
+      : valence;
+    return Math.max(0, target - bondOrderSum[i]);
+  });
+}
 
 const BOND_LENGTH = 1.0;
 
@@ -59,26 +93,10 @@ export function fillMissingHydrogens(molecule: Molecule): Molecule {
   let nextIndex = atoms.length;
   let hAdded = 0;
 
-  const bondOrderSum: number[] = new Array(atoms.length).fill(0);
-  for (const bond of bonds) {
-    bondOrderSum[bond.atom1Index] += bond.order;
-    bondOrderSum[bond.atom2Index] += bond.order;
-  }
-
-  for (let i = 0; i < atoms.length; i++) {
+  const missingHydrogens = implicitHydrogenCounts(molecule);
+  for (let i = 0; i < missingHydrogens.length; i++) {
     const atom = atoms[i];
-    const valence = BOND_VALENCE[atom.element];
-    if (!valence) continue;
-
-    // A formal charge changes how many bonds the atom wants: a drawn
-    // carbocation (C⁺, two ring bonds) fills ONE hydrogen, not two —
-    // without this the local path silently neutralizes the ion while
-    // PubChem/CIR (explicit Hs in their SDFs) respect it.
-    const charge = atom.charge ?? 0;
-    const target = charge !== 0
-      ? (CHARGED_VALENCE[atom.element]?.[charge] ?? valence)
-      : valence;
-    const missing = Math.max(0, target - bondOrderSum[i]);
+    const missing = missingHydrogens[i];
     if (missing === 0) continue;
 
     // Existing bond directions from this atom.

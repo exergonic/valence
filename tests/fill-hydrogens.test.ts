@@ -244,4 +244,28 @@ M  END
     const filled = fillMissingHydrogens(parsed);
     expect(hCount(filled, 1)).toBe(1);
   });
+
+  it('gives a metal or a noble gas no hydrogens it was not drawn with', () => {
+    // Na is sodium, not NaH; Sn is tin, not SnH4; Xe and Ni stay bare.
+    // Each sits on a methyl so the carbon still shows the filler working.
+    for (const metal of ['Na', 'Mg', 'Al', 'Sn', 'Ni', 'Xe', 'He']) {
+      const mol = {
+        atoms: [
+          { element: 'C', x: 0, y: 0, z: 0 },
+          { element: metal, x: 2, y: 0, z: 0 },
+        ],
+        bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }],
+      };
+      const filled = fillMissingHydrogens(mol);
+      expect(hCount(filled, 1), metal).toBe(0);
+      expect(hCount(filled, 0), metal).toBe(3);
+    }
+  });
+
+  it('fills the semimetals to their textbook hydrides (GeH4, AsH3, H2Te)', () => {
+    for (const [element, h] of [['Ge', 4], ['As', 3], ['Te', 2], ['B', 3], ['Si', 4]] as const) {
+      const filled = fillMissingHydrogens({ atoms: [{ element, x: 0, y: 0, z: 0 }], bonds: [] });
+      expect(hCount(filled, 0), element).toBe(h);
+    }
+  });
 });
