@@ -19,7 +19,8 @@
  * The levels are real; the filling would be a lie.
  */
 import type { SceneContext } from '../render';
-import { activeIsoValue, setActiveIsoValue } from '../render';
+import { activeIsoValue, setActiveIsoValue, gfn2LadderOnScreen } from '../render';
+import type { BasisFunction } from '../chem/extended-huckel/assign-basis';
 import { MO_SURFACE_ISOVALUES, MO_SURFACE_PERCENTILES } from '../chem/extended-huckel/mo-surface';
 import type { Molecule } from '../mol-parser';
 import { closedShellOccupations } from '../chem/extended-huckel/solve';
@@ -41,6 +42,28 @@ const PIPEK_MEZEY_NOTE = {
     href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
   },
 };
+
+const GFN2_ORBITAL_NOTE = {
+  text: 'GFN2-xTB orbitals (semiempirical, self-consistent): each electron feels the charge of the others, which '
+    + 'extended Hückel’s fixed parameters leave out — so where the two ladders disagree on ORDER, GFN2’s is the one '
+    + 'to trust. Its energies are its own: the empty orbitals sit low (formaldehyde’s LUMO near −8 eV), so read the '
+    + 'gaps and the order, not the absolute numbers. Localized orbitals are extended Hückel’s.',
+  link: { label: 'Bannwarth, Ehlert & Grimme, JCTC 2019', href: 'https://pubs.acs.org/doi/10.1021/acs.jctc.8b01176' },
+};
+
+/** One delocalized ladder, from whichever calculation the method row picks:
+ *  the rows, the readout and the composition line read only this. */
+interface Ladder {
+  /** What the list was framed on — a new one re-centres on the frontier. */
+  identity: unknown;
+  energies: number[];
+  occupations: number[] | null;
+  labels: (string | null)[];
+  basis: BasisFunction[];
+  coefficients: number[][];
+  /** The method's own notes, when nothing more pressing is said. */
+  notes: () => void;
+}
 
 /** How each localized-orbital class reads in the list — avo_ibo's own tokens,
  *  so our rows can be read beside an ibos.txt. */
@@ -184,6 +207,49 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       ctx.rerender();
     });
   }
+  // Which calculation the ladder shows, and (open shell, GFN2) which spin.
+  // A new list is new orbitals: the old index would name another one.
+  const methodButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#mo-method-row [data-mo-method]'));
+  const spinRow = document.getElementById('mo-spin-row');
+  const spinButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#mo-spin-row [data-mo-spin]'));
+  const methodRow = document.getElementById('mo-method-row');
+  const methodHint = document.getElementById('mo-method-hint');
+  const ehHint = methodHint?.innerHTML ?? '';
+  for (const button of methodButtons) {
+    button.addEventListener('click', () => {
+      const method = button.dataset.moMethod === 'gfn2' ? 'gfn2' : 'eh';
+      if (ctx.display.moMethod === method) return;
+      ctx.display.moMethod = method;
+      ctx.display.moIndex = null;
+      draw();
+      ctx.rerender();
+    });
+  }
+  for (const button of spinButtons) {
+    button.addEventListener('click', () => {
+      const spin = button.dataset.moSpin === 'beta' ? 'beta' : 'alpha';
+      if (ctx.display.moSpin === spin) return;
+      ctx.display.moSpin = spin;
+      ctx.display.moIndex = null;
+      draw();
+      ctx.rerender();
+    });
+  }
+  function syncMethodRows(view: 'delocalized' | 'localized'): void {
+    const gfn2 = ctx.display.moMethod === 'gfn2';
+    methodRow?.classList.toggle('hidden', view !== 'delocalized');
+    for (const b of methodButtons) b.classList.toggle('active', b.dataset.moMethod === ctx.display.moMethod);
+    const openShell = gfn2 && view === 'delocalized' && !!ctx.gfn2Ladders?.ladders?.beta;
+    spinRow?.classList.toggle('hidden', !openShell);
+    for (const b of spinButtons) b.classList.toggle('active', b.dataset.moSpin === ctx.display.moSpin);
+    if (methodHint) {
+      methodHint.innerHTML = gfn2 && view === 'delocalized'
+        ? 'GFN2-xTB: one self-consistent single point at this geometry, its own parameter set through radon. '
+          + 'Blue and orange are the two orbital phases.'
+        : ehHint;
+    }
+  }
+
   const setOnStage = (onStage: boolean) => {
     panel.classList.toggle('off-stage', !onStage);
     draw();
@@ -292,20 +358,28 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   let framed: { result: unknown; view: string } | null = null;
 
   function draw(): void {
-    const result = ctx.ehResult;
     const view = ctx.display.orbitalView;
-    const sameLadder = framed?.result === result && framed?.view === view;
+    const gfn2 = view === 'delocalized' && ctx.display.moMethod === 'gfn2';
     const scrolled = list.scrollTop;
     list.innerHTML = '';
     note.textContent = '';
     readout.textContent = '';
     composition.textContent = '';
+    syncMethodRows(view);
     // The picture controls only mean something with an orbital selected — say
     // so rather than letting a drag do nothing.
     const hasSelection = view === 'localized'
       ? !!ctx.localizedOrbitals && ctx.display.localizedSelection.length > 0
-      : result !== null && ctx.display.moIndex !== null;
+      : ctx.display.moIndex !== null;
     for (const control of [smooth, opacity, isovalue]) if (control) control.disabled = !hasSelection;
+    // GFN2's orbitals are drawn as surfaces only: the atomic-orbital picture
+    // draws extended Hückel's Slater lobes, which GFN2's basis is not
+    if (smooth && gfn2) {
+      smooth.disabled = true;
+      smooth.checked = true;
+    } else if (smooth) {
+      smooth.checked = ctx.display.smoothMo;
+    }
     // the ladder is not on screen, so its scroll is gone: frame it afresh when it is back
     if (panel.classList.contains('off-stage')) {
       framed = null;
@@ -318,18 +392,11 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     }
 
     const selected = ctx.display.moIndex;
-    if (!result) {
-      note.textContent = ctx.currentMolecule
-        ? 'No orbitals: an element here is outside the extended-Hückel parameter table.'
-        : 'Load a molecule to see its orbitals.';
-      return;
-    }
-    const spOnly = spOnlyMetals(ctx.currentMolecule);
-
-    const occupations = closedShellOccupations(
-      result.electronCount, result.energies.length, result.energies, ctx.currentMolecule?.multiplicity ?? 1,
-    );
-    const levels = result.energies.map((energy, index) => ({
+    const ladder = ctx.display.moMethod === 'gfn2' ? gfn2Ladder() : ehLadder();
+    syncMethodRows(view); // again: the spin row needs the GFN2 ladder, just built
+    if (!ladder) return; // the builder has said why in the note
+    const { occupations } = ladder;
+    const levels = ladder.energies.map((energy, index) => ({
       index,
       energy,
       occupied: occupations ? occupations[index] > 0 : false,
@@ -356,7 +423,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       if (last && Math.abs(last[0].energy - level.energy) < DEGENERATE_TOLERANCE) last.push(level);
       else groups.push([level]);
     }
-    const labels = irreps();
+    const labels = ladder.labels;
     const rows: string[] = [];
     const emptyCount = occupations ? levels.filter((l) => !l.occupied).length : 0;
     let section: boolean | null = null;
@@ -403,30 +470,30 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     });
     // A new ladder opens on the frontier — the level a chemist starts at, or
     // the one already drawn; a redraw of the same ladder stays where it was.
-    if (sameLadder) {
+    if (framed?.result === ladder.identity && framed?.view === view) {
       list.scrollTop = scrolled;
     } else {
-      framed = { result, view };
+      framed = { result: ladder.identity, view };
       const focus = list.querySelector('button.orb-item.selected')
         ?? Array.from(list.querySelectorAll('button.orb-item')).find((b) => b.querySelector('.orb-tag'));
       focus?.scrollIntoView({ block: 'center' });
     }
 
     // readout + composition of the selected orbital
-    if (selected !== null && result.energies[selected] !== undefined) {
-      const energy = result.energies[selected];
+    if (selected !== null && ladder.energies[selected] !== undefined) {
+      const energy = ladder.energies[selected];
       const occupancy = occupations ? occupations[selected] : null;
-      const partners = result.energies
+      const partners = ladder.energies
         .map((e, i) => ({ e, i }))
         .filter(({ e, i }) => i !== selected && Math.abs(e - energy) < DEGENERATE_TOLERANCE)
         .map(({ i }) => i + 1);
-      const irrep = irreps()[selected];
+      const irrep = labels[selected];
       readout.textContent = `MO ${selected + 1} · ${formatEnergy(energy)} ${ENERGY_UNIT}`
         + (irrep ? ` · ${irrep}` : '')
         + (occupancy === null ? '' : occupancy > 0 ? ' · occupied' : ' · empty')
         + (partners.length > 0 ? ` · degenerate with MO ${partners.join(', ')}` : '')
         + ' — click it again to hide';
-      composition.textContent = compositionText(result.basis, result.coefficients[selected])
+      composition.textContent = compositionText(ladder.basis, ladder.coefficients[selected])
         // A linear molecule's two non-zero moments of inertia are equal, so
         // the axes perpendicular to the molecular axis are degenerate and the
         // frame's choice between them is arbitrary. That makes the px/py/pz
@@ -438,39 +505,94 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         // the frame to align to. Deliberately not solved by re-aligning the
         // oracle fixtures — see NOTES.md.
         + (isLinear(ctx.currentMolecule)
-          ? '\u2003(linear molecule: the perpendicular p axes are degenerate, so these px/py/pz names are the calculation frame\'s choice)'
+          ? ' (linear molecule: the perpendicular p axes are degenerate, so these px/py/pz names are the calculation frame\'s choice)'
           : '');
-      const exactPartners = partners.filter((mo) => Math.abs(result.energies[mo - 1] - energy) < CANONICAL_TOLERANCE_EV);
+      const exactPartners = partners.filter((mo) => Math.abs(ladder.energies[mo - 1] - energy) < CANONICAL_TOLERANCE_EV);
       if (exactPartners.length > 0) {
         // Worth saying out loud: a degenerate set is *a* subspace, and any
-        // orthogonal combination inside it is the same physics. The solver
-        // canonicalizes each set against x², y², z², which is what makes it
-        // the combination a textbook draws (and another program's, too) —
-        // but which member carries the nodes follows the frame's own axes.
-        // Only an exact set was rotated. A level merely within the drawing
-        // tolerance was not, and saying so would be a false label.
+        // orthogonal combination inside it is the same physics. Each set is
+        // canonicalized against x², y², z², which is what makes it the
+        // combination a textbook draws (and another program's, too) — but
+        // which member carries the nodes follows the frame's own axes. Only an
+        // exact set was rotated. A level merely within the drawing tolerance
+        // was not, and saying so would be a false label.
         note.textContent = `Degenerate set of ${exactPartners.length + 1}: canonicalized against x², y², z², so these are the symmetry-adapted orbitals a textbook draws — which member carries the nodal plane follows the molecule's own frame.`;
         return;
       }
     } else {
-      readout.textContent = `${result.energies.length} MOs · click a level to draw it`;
+      readout.textContent = `${ladder.energies.length} MOs · click a level to draw it`;
     }
-
-    if (spOnly.length > 0) {
-      // said out loud rather than silently: these metals carry no d here
-      note.textContent = `${spOnly.join(', ')} run on s and p only — the parameter table has no 3d for `
-        + `${spOnly.length === 1 ? 'it' : 'them'}, and a d¹⁰ shell is core-like. Their d orbitals are absent, not hidden.`;
-      return;
-    }
-    if (occupations === null) {
-      const multiplicity = ctx.currentMolecule?.multiplicity ?? 1;
-      note.textContent = multiplicity > 1
-        ? `Open shell (a ${SPIN_NAME[multiplicity] ?? `multiplicity-${multiplicity}`}): extended `
-          + 'Hückel as built here is closed-shell and has no spin, so no occupancy arrows and no localized orbitals.'
-        : `Open shell (${result.electronCount} electrons): extended Hückel as built here has no spin, so occupancies are not shown.`;
-    }
+    ladder.notes();
   }
 
+  /** Extended Hückel's ladder, or null (with the reason in the note). */
+  function ehLadder(): Ladder | null {
+    const result = ctx.ehResult;
+    if (!result) {
+      note.textContent = ctx.currentMolecule
+        ? 'No orbitals: an element here is outside the extended-Hückel parameter table.'
+        : 'Load a molecule to see its orbitals.';
+      return null;
+    }
+    const occupations = closedShellOccupations(
+      result.electronCount, result.energies.length, result.energies, ctx.currentMolecule?.multiplicity ?? 1,
+    );
+    return {
+      identity: result,
+      energies: result.energies,
+      occupations,
+      labels: irreps(),
+      basis: result.basis,
+      coefficients: result.coefficients,
+      notes: () => {
+        const spOnly = spOnlyMetals(ctx.currentMolecule);
+        if (spOnly.length > 0) {
+          // said out loud rather than silently: these metals carry no d here
+          note.textContent = `${spOnly.join(', ')} run on s and p only — the parameter table has no 3d for `
+            + `${spOnly.length === 1 ? 'it' : 'them'}, and a d¹⁰ shell is core-like. Their d orbitals are absent, not hidden.`;
+          return;
+        }
+        if (occupations === null) {
+          const multiplicity = ctx.currentMolecule?.multiplicity ?? 1;
+          note.textContent = multiplicity > 1
+            ? `Open shell (a ${SPIN_NAME[multiplicity] ?? `multiplicity-${multiplicity}`}): extended `
+              + 'Hückel as built here is closed-shell and has no spin, so no occupancy arrows and no localized orbitals. '
+              + 'GFN2-xTB above treats the spin.'
+            : `Open shell (${result.electronCount} electrons): extended Hückel as built here has no spin, so occupancies `
+              + 'are not shown. GFN2-xTB above treats the spin.';
+        }
+      },
+    };
+  }
+
+  /** GFN2-xTB's ladder in the channel the spin row picks, or null (with the
+   *  reason in the note) while the single point runs or when it failed. */
+  function gfn2Ladder(): Ladder | null {
+    const ladder = gfn2LadderOnScreen(ctx);
+    if (!ladder) {
+      const request = ctx.gfn2PropertiesRequest;
+      note.textContent = !ctx.currentMolecule
+        ? 'Load a molecule to see its orbitals.'
+        : request?.molecule === ctx.currentMolecule && request.status === 'failed'
+          ? `No GFN2-xTB orbitals: ${request.reason ?? 'the engine could not treat this molecule'}.`
+          : 'Computing the GFN2-xTB orbitals…';
+      return null;
+    }
+    return {
+      identity: ladder,
+      energies: ladder.energies,
+      occupations: ladder.occupations,
+      labels: ladder.labels,
+      basis: ladder.basis,
+      coefficients: ladder.coefficients,
+      notes: () => {
+        writeNote(note, ladder.spin
+          ? `Open shell: the ${ladder.spin === 'alpha' ? 'α (spin-up)' : 'β (spin-down)'} orbitals, each holding at most `
+            + 'one electron. The two channels differ by the unpaired electrons — switch with the row above.'
+          : GFN2_ORBITAL_NOTE);
+      },
+    };
+  }
   draw();
 
   return {
@@ -499,11 +621,14 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         let homo = -1;
         for (let i = 0; i < orbitals.length; i++) if (orbitals[i].occupied) homo = i;
         if (homo >= 0) ctx.display.localizedSelection = [homo];
-      } else if (ctx.ehResult) {
-        const energies = ctx.ehResult.energies;
-        const occupations = closedShellOccupations(
-          ctx.ehResult.electronCount, energies.length, energies, ctx.currentMolecule?.multiplicity ?? 1,
-        );
+      } else if (ctx.display.moMethod === 'gfn2' ? gfn2LadderOnScreen(ctx) : ctx.ehResult) {
+        const gfn2 = ctx.display.moMethod === 'gfn2' ? gfn2LadderOnScreen(ctx) : null;
+        const energies = gfn2 ? gfn2.energies : ctx.ehResult!.energies;
+        const occupations = gfn2
+          ? gfn2.occupations
+          : closedShellOccupations(
+            ctx.ehResult!.electronCount, energies.length, energies, ctx.currentMolecule?.multiplicity ?? 1,
+          );
         const homo = occupations ? occupations.filter((o) => o > 0).length - 1 : -1;
         // the first member of the HOMO's group, grouped as the ladder groups
         // its rows: a level joins a group within tolerance of its first member

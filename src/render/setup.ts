@@ -5,6 +5,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { Gfn2Properties } from '../geometry/gfn2-refine';
+import type { Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
 import {
   LOCALIZED_ISOVALUE, LOCALIZED_PERCENTILE, MO_SURFACE_ISOVALUE, MO_SURFACE_PERCENTILE,
@@ -63,6 +64,12 @@ export interface DisplaySettings {
   /** The MO panel's view: the energy ladder, or the localized orbitals
    *  (Pipek–Mezey). Only one of the two selections draws at a time. */
   orbitalView: 'delocalized' | 'localized';
+  /** Which calculation the delocalized ladder shows: extended Hückel (the
+   *  textbook picture, and the only one with localized orbitals) or GFN2-xTB
+   *  (self-consistent, so its ordering is the trustworthy one). */
+  moMethod: 'eh' | 'gfn2';
+  /** For an open-shell GFN2 ladder, which spin channel is listed. */
+  moSpin: 'alpha' | 'beta';
   /** Which localized orbitals are drawn over the molecule, in the order they
    *  were picked (empty = none). More than one is the hyperconjugation
    *  picture: a filled orbital and the empty one it reaches into, each with
@@ -166,6 +173,11 @@ export interface SceneContext {
    *  it runs, failed (with why) when the engine could not treat it — the
    *  charges then fall back to MMFF94 and say so. */
   gfn2PropertiesRequest: { molecule: Molecule; status: 'pending' | 'failed'; reason?: string } | null;
+  /** GFN2's orbital ladders, built once from `gfn2Properties` (irrep labels
+   *  cost a symmetry detection). */
+  gfn2Ladders: { properties: Gfn2Properties; ladders: { alpha: Gfn2Ladder; beta: Gfn2Ladder | null } | null } | null;
+  /** GFN2 orbital surfaces asked of the worker and not yet back, by mesh key. */
+  gfn2SurfaceRequests: Set<string>;
   /** Cached fused vdW ESP surface for the current molecule (computed lazily
    *  on the first ESP render; null until then or for an untypeable molecule). */
   espSurface: EspSurfaceData | null;
@@ -320,6 +332,8 @@ export function initScene(container: HTMLElement): SceneContext {
       highlightPiSystems: false,
       moIndex: null,
       orbitalView: 'delocalized',
+      moMethod: 'eh',
+      moSpin: 'alpha',
       localizedSelection: [],
       showOrbitals: true,
       showEsp: false,
@@ -339,6 +353,8 @@ export function initScene(container: HTMLElement): SceneContext {
     gfn2Charges: null,
     gfn2Properties: null,
     gfn2PropertiesRequest: null,
+    gfn2Ladders: null,
+    gfn2SurfaceRequests: new Set(),
     espSurface: null,
     espSurfaceCharges: null,
     moSurfaces: new Map(),

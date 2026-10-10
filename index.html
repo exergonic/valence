@@ -236,6 +236,14 @@
           <!-- the orbital list: the delocalized ladder or the localized bonds and lone pairs -->
           <section id="mo-panel" class="inspector-section for-localized for-delocalized">
             <div id="mo-body">
+              <div id="mo-method-row" class="preset-row" role="group" aria-label="Which calculation the orbitals come from">
+                <button class="view-preset-btn active" data-mo-method="eh" title="Extended Hückel: the textbook orbital picture — fixed atomic parameters, no self-consistency. Its localized orbitals are the Localized view.">Extended Hückel</button>
+                <button class="view-preset-btn" data-mo-method="gfn2" title="GFN2-xTB: self-consistent orbitals — each electron feels the others' charge — so their order is the more trustworthy where the two disagree. Semiempirical; its empty orbitals sit low.">GFN2-xTB</button>
+              </div>
+              <div id="mo-spin-row" class="preset-row hidden" role="group" aria-label="Spin channel">
+                <button class="view-preset-btn active" data-mo-spin="alpha" title="The α (spin-up) orbitals of this open shell">α spin</button>
+                <button class="view-preset-btn" data-mo-spin="beta" title="The β (spin-down) orbitals: one electron fewer for each unpaired one">β spin</button>
+              </div>
               <div id="mo-list" class="hidden"></div>
               <div id="mo-readout" class="mo-readout"></div>
               <div id="mo-composition" class="mo-composition"></div>
@@ -263,7 +271,7 @@
               <div class="export-row">
                 <button id="ctrl-mo-clear" class="export-btn">Clear orbital</button>
               </div>
-              <p class="measure-hint">
+              <p class="measure-hint" id="mo-method-hint">
                 Semiempirical: Alvarez parameters, ICON8 for Si–Cl (s, p and d),
                 Wolfsberg–Helmholz K = 1.75, no self-consistency. Blue and orange
                 are the two orbital phases.

@@ -19,7 +19,8 @@ import {
   dipoleFromCharges, dipoleFromFullGfn2, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE, type DipoleResult,
 } from '../chem/charge-model/dipole';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
-import { gfn2PropertiesAt } from '../geometry/gfn2-refine';
+import { gfn2PropertiesAt, gfn2OrbitalSurface } from '../geometry/gfn2-refine';
+import { gfn2Ladders, type Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import type { ChargeModel } from './setup';
 import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
@@ -149,6 +150,58 @@ function displayedCharges(ctx: SceneContext): { charges: number[] | null; model:
   }
   const properties = gfn2PropertiesOnScreen(ctx);
   return { charges: properties?.charges ?? null, model: 'gfn2', residual: false };
+}
+
+/** GFN2's orbital ladder in the spin channel the panel shows, or null while
+ *  the single point runs (or when the engine build cannot describe its basis). */
+export function gfn2LadderOnScreen(ctx: SceneContext): Gfn2Ladder | null {
+  const properties = gfn2PropertiesOnScreen(ctx);
+  if (!properties || !ctx.currentMolecule) return null;
+  if (ctx.gfn2Ladders?.properties !== properties) {
+    ctx.gfn2Ladders = { properties, ladders: gfn2Ladders(ctx.currentMolecule, properties) };
+  }
+  const ladders = ctx.gfn2Ladders.ladders;
+  if (!ladders) return null;
+  return ctx.display.moSpin === 'beta' && ladders.beta ? ladders.beta : ladders.alpha;
+}
+
+/**
+ * Draw the selected GFN2 orbital. Its surface is built in the worker — the
+ * field and its gradient need the engine's own basis — so the first draw asks
+ * for it and the picture fills in when it lands; after that it is cached by
+ * orbital and level like extended Hückel's. True when an orbital is selected
+ * (drawn or on its way), so the hybrid lobes step aside.
+ */
+function drawGfn2Orbital(ctx: SceneContext): boolean {
+  const index = ctx.display.moIndex;
+  const properties = gfn2PropertiesOnScreen(ctx);
+  const ladder = gfn2LadderOnScreen(ctx);
+  if (index === null || !properties || !ladder || !ladder.coefficients[index]) return false;
+  const value = activeIsoValue(ctx.display);
+  const mode = ctx.display.isoMode;
+  const orbital = `${ladder.spin ?? 'alpha'}:${index}`;
+  const key = `gfn2:${properties.key}:${orbital}@${mode === 'percentile' ? 'p' : 'a'}${value}`;
+  const surface = ctx.moSurfaces.get(key);
+  if (surface) {
+    renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, MO_PHASE_PAIRS[0]);
+    return true;
+  }
+  if (!ctx.gfn2SurfaceRequests.has(key)) {
+    ctx.gfn2SurfaceRequests.add(key);
+    const molecule = ctx.currentMolecule;
+    // the box: the atoms the orbital has a share on
+    const atoms = ladder.atomShares[index].flatMap((share, atom) => (share > 0.02 ? [atom] : []));
+    gfn2OrbitalSurface({ key: properties.key, orbital, coefficients: ladder.coefficients[index], atoms, mode, value })
+      .then((result) => {
+        ctx.gfn2SurfaceRequests.delete(key);
+        if (result && ctx.currentMolecule === molecule) {
+          ctx.moSurfaces.set(key, result);
+          ctx.rerender();
+        }
+      })
+      .catch(() => ctx.gfn2SurfaceRequests.delete(key));
+  }
+  return true;
 }
 
 /** Spin density is only on offer for an open-shell structure; the option says
@@ -338,6 +391,13 @@ export function rebuildDisplay(ctx: SceneContext) {
   // while it is selected. The localized view draws SEVERAL at once (a filled
   // orbital and the empty one it reaches into is the hyperconjugation
   // picture), so each takes its own phase colours, in the order it was picked.
+  if (ctx.display.orbitalView === 'delocalized' && ctx.display.moMethod === 'gfn2') {
+    const selected = drawGfn2Orbital(ctx);
+    ctx.moGroup.visible = selected;
+    ctx.orbitalGroup.visible = selected ? false : ctx.display.showOrbitals;
+    return;
+  }
+
   const picks: Array<{ key: string; coefficients: number[]; phase: [number, number] }> = [];
   if (ctx.display.orbitalView === 'localized' && ctx.localizedOrbitals) {
     ctx.display.localizedSelection.forEach((index, slot) => {
@@ -434,6 +494,8 @@ export function buildScene(ctx: SceneContext) {
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
   if (ctx.gfn2PropertiesRequest && ctx.gfn2PropertiesRequest.molecule !== ctx.currentMolecule) ctx.gfn2PropertiesRequest = null;
   if (ctx.gfn2Properties && ctx.gfn2Properties.molecule !== ctx.currentMolecule) ctx.gfn2Properties = null;
+  ctx.gfn2Ladders = null;
+  ctx.gfn2SurfaceRequests.clear();
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
   ctx.espSurfaceCharges = null;

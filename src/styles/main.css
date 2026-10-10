@@ -1151,6 +1151,11 @@ button, input, select, textarea { font-family: inherit; }
   margin-top: 4px;
 }
 
+/* the orbital panel's method row (delocalized view only) and spin row (open shell) */
+#mo-method-row.hidden, #mo-spin-row.hidden { display: none; }
+#mo-method-row, #mo-spin-row { margin: 0 0 6px; }
+#mo-method-row .view-preset-btn, #mo-spin-row .view-preset-btn { flex: 1; }
+
 /* ── Label Mode Select ── */
 
 .label-mode-select,

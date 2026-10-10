@@ -138,7 +138,7 @@ export function setupControls(ctx: SceneContext) {
   });
 
   // Pedagogical view presets (All / σ-only / π-only / LP-only)
-  const viewPresetBtns = document.querySelectorAll<HTMLButtonElement>('.view-preset-btn');
+  const viewPresetBtns = document.querySelectorAll<HTMLButtonElement>('.view-preset-btn[data-preset]');
   viewPresetBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
       viewPresetBtns.forEach((b) => b.classList.remove('active'));
