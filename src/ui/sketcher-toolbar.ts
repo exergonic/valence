@@ -16,9 +16,14 @@
  *   then presses it;
  * - clear is clear().
  *
- * The codes and keys were mapped against jsme-editor 2024.04.29 (NOTES.md);
- * a JSME upgrade must re-check them.
+ * Any element past the nine buttons is JSME's X atom: "More…" opens our
+ * periodic table, and the pick goes into JSME's X box and gets a button.
+ *
+ * The codes, keys and the X box were mapped against jsme-editor 2024.04.29
+ * (NOTES.md); a JSME upgrade must re-check them.
  */
+import { setupPeriodicTable } from './periodic-table';
+import { takesImplicitHydrogens } from '../chem/fill-hydrogens';
 
 /** setAction() codes for our tools. */
 const TOOL_ACTIONS: Record<string, number> = {
@@ -43,6 +48,64 @@ const PLACE_CARBON = 253;
 const ELEMENT_KEYS: Record<string, string> = {
   C: 'c', N: 'n', O: 'o', S: 's', P: 'p', F: 'f', Cl: 'l', Br: 'b', I: 'i',
 };
+
+/** Every other element is JSME's "X" atom, whose key turns the atom under
+ *  the pointer into whatever atomic SMILES its text box holds. */
+const X_ATOM_KEY = 'x';
+
+function elementKey(element: string): string {
+  return ELEMENT_KEYS[element] ?? X_ATOM_KEY;
+}
+
+/**
+ * What goes in JSME's X box for an element. A metal or a noble gas goes in
+ * bracketed, "[Ni]", which pins its hydrogens at none; a bare "Ni" got
+ * JSME's own guess, which changed with what the atom had been before
+ * (NOTES.md). A nonmetal goes in bare, so JSME's SMILES carries its usual
+ * hydrogens (Si → SiH₃ on a methyl) as the local pipeline does.
+ */
+export function atomicSmilesForXBox(element: string): string {
+  return takesImplicitHydrogens(element) ? element : `[${element}]`;
+}
+
+/**
+ * JSME's X box. The dialog that holds it ("Nonstandard atom") opens only
+ * from JSME's own X button, so the hidden button is pressed once, out of
+ * sight, and the box kept: JSME reads it live at every use, even after the
+ * dialog has closed (NOTES.md). The first press never opens it; the second
+ * does, a moment later.
+ */
+async function openXAtomBox(stage: HTMLElement): Promise<HTMLInputElement | null> {
+  const label = Array.from(stage.querySelectorAll('svg text')).find((t) => t.textContent === 'X');
+  const svg = label?.closest('svg');
+  if (!label || !svg) return null;
+  const b = label.getBoundingClientRect();
+  const x = b.left + b.width / 2;
+  const y = b.top + b.height / 2;
+  document.documentElement.classList.add('jsme-x-hidden');
+  try {
+    for (let press = 0; press < 3; press++) {
+      for (const type of ['mousemove', 'mousedown', 'mouseup']) {
+        svg.dispatchEvent(new MouseEvent(type, {
+          bubbles: true, cancelable: true, view: window, button: 0,
+          buttons: type === 'mousedown' ? 1 : 0, clientX: x, clientY: y, screenX: x, screenY: y,
+        }));
+      }
+      for (let wait = 0; wait < 10; wait++) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const dialog = document.querySelector('.mosaic-WindowPanel');
+        const box = dialog?.querySelector<HTMLInputElement>('input.gwt-TextBox');
+        if (dialog && box) {
+          Array.from(dialog.querySelectorAll('button')).find((el) => el.textContent === 'Close')?.click();
+          return box;
+        }
+      }
+    }
+    return null;
+  } finally {
+    document.documentElement.classList.remove('jsme-x-hidden');
+  }
+}
 
 /** JSME's pieces, told apart by where they sit around the drawing area (the
  *  largest one): the button bar above it, the element column to its left. */
@@ -116,11 +179,15 @@ export function setupSketcherToolbar(): void {
   const container = document.getElementById('jsme_container');
   const stage = document.getElementById('jsme-stage');
   if (!container || !stage) return;
-  const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('#sketch-tools [data-tool], #sketch-elements [data-element]'));
+  const elementRow = document.getElementById('sketch-elements');
+  const moreButton = document.getElementById('sketch-more') as HTMLButtonElement | null;
+  // Live, not captured once: a pick from the periodic table adds a button.
+  const buttons = () => Array.from(document.querySelectorAll<HTMLButtonElement>('#sketch-tools [data-tool], #sketch-elements [data-element]'));
   let element: string | null = null;
+  let xAtomBox: HTMLInputElement | null = null;
 
   const markSelected = (selected: HTMLButtonElement) => {
-    for (const button of buttons) button.setAttribute('aria-pressed', String(button === selected));
+    for (const button of buttons()) button.setAttribute('aria-pressed', String(button === selected));
   };
 
   const chooseTool = (tool: string, button?: HTMLButtonElement) => {
@@ -129,15 +196,47 @@ export function setupSketcherToolbar(): void {
     if (button) markSelected(button);
   };
 
-  for (const button of buttons) {
-    button.addEventListener('click', () => {
+  const chooseElement = (symbol: string, button: HTMLButtonElement) => {
+    if (!(symbol in ELEMENT_KEYS)) {
+      if (!xAtomBox) return;
+      xAtomBox.value = atomicSmilesForXBox(symbol);
+    }
+    element = symbol;
+    window.jsmeApplet?.setAction?.(PLACE_CARBON);
+    markSelected(button);
+  };
+
+  // A pick from the periodic table: one of the nine selects its own button;
+  // any other gets a button at the end of the row (the four most recent are
+  // kept) and is chosen at once, so the next click on the sketch places it.
+  const PICKED_KEPT = 4;
+  const pickElement = (symbol: string) => {
+    if (!elementRow || !moreButton) return;
+    let button = elementRow.querySelector<HTMLButtonElement>(`[data-element="${symbol}"]`);
+    if (!button) {
+      button = document.createElement('button');
+      button.className = 'sketch-element';
+      button.dataset.element = symbol;
+      button.dataset.picked = '';
+      button.title = `${symbol}: click an atom to change it, or empty space to place one`;
+      button.textContent = symbol;
+      button.setAttribute('aria-pressed', 'false');
+      elementRow.insertBefore(button, moreButton);
+      const picked = elementRow.querySelectorAll('[data-picked]');
+      if (picked.length > PICKED_KEPT) picked[0].remove();
+    }
+    chooseElement(symbol, button);
+  };
+  if (moreButton) setupPeriodicTable(moreButton, pickElement);
+
+  for (const bar of [document.getElementById('sketch-tools'), elementRow]) {
+    bar?.addEventListener('click', (event) => {
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-tool], [data-element]');
       const applet = window.jsmeApplet;
-      if (!applet) return;
+      if (!button || !applet) return;
       const tool = button.dataset.tool;
       if (button.dataset.element) {
-        element = button.dataset.element;
-        applet.setAction(PLACE_CARBON);
-        markSelected(button);
+        chooseElement(button.dataset.element, button);
       } else if (tool === 'undo' || tool === 'redo') {
         pressKey(stage, tool === 'undo' ? 'z' : 'y', true);
       } else if (tool === 'clear') {
@@ -165,7 +264,7 @@ export function setupSketcherToolbar(): void {
       event.stopPropagation();
       event.preventDefault();
       swallowRelease = true;
-      pressKey(stage, ELEMENT_KEYS[element]);
+      pressKey(stage, elementKey(element));
     } else {
       // JSME places a carbon only on an empty sketch (beside a structure its
       // action adds nothing); the release below makes it the element
@@ -182,7 +281,7 @@ export function setupSketcherToolbar(): void {
     if (!placing) return;
     placing = false;
     if (element === 'C' || !element) return;
-    const key = ELEMENT_KEYS[element];
+    const key = elementKey(element);
     const { clientX, clientY } = event;
     // The new carbon is not always under the pointer: on a fresh page JSME
     // draws the first atom at the centre of the drawing whatever the click,
@@ -206,13 +305,26 @@ export function setupSketcherToolbar(): void {
   });
 
   // JSME builds its menus asynchronously after the applet exists; clip them as
-  // soon as they are there, and start on the single bond.
+  // soon as they are there, and start on the single bond. Then fetch the X
+  // box for "More…" — pressing JSME's X button makes the X atom its action,
+  // so the chosen tool is set again once the box is in hand.
+  if (moreButton) moreButton.disabled = true;
   const start = () => {
     let tries = 0;
     const attempt = () => {
       if (clipJsmeMenus(container, stage)) {
-        const single = buttons.find((b) => b.dataset.tool === 'single');
+        const single = buttons().find((b) => b.dataset.tool === 'single');
         chooseTool('single', single);
+        void openXAtomBox(stage).then((box) => {
+          xAtomBox = box;
+          const selected = buttons().find((b) => b.getAttribute('aria-pressed') === 'true');
+          if (selected?.dataset.element) chooseElement(selected.dataset.element, selected);
+          else if (selected?.dataset.tool) chooseTool(selected.dataset.tool, selected);
+          if (moreButton) {
+            moreButton.disabled = !box;
+            if (!box) moreButton.title = 'More elements: unavailable — the sketcher did not open its atom box';
+          }
+        });
       } else if (tries++ < 50) {
         setTimeout(attempt, 100);
       }

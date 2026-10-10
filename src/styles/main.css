@@ -365,6 +365,11 @@ button, input, select, textarea { font-family: inherit; }
 #jsme-stage svg text[fill="rgb(255,0,255)"] { fill: var(--sketch-halogen); }
 #jsme-stage svg text[fill="rgb(255,200,0)"] { fill: var(--sketch-p); }
 #jsme-stage svg [stroke="blue"] { stroke: var(--accent); }
+/* every element JSME has no colour of its own for (Ni, Xe, Si, …) */
+#jsme-stage svg text[fill="rgb(64,64,64)"] { fill: var(--sketch-ink); }
+
+/* JSME's X-atom dialog, opened once out of sight to borrow its box */
+.jsme-x-hidden .mosaic-WindowPanel { visibility: hidden !important; }
 
 /* our toolbar: one line of tools, then the elements */
 #sketch-tools,
@@ -424,6 +429,76 @@ button, input, select, textarea { font-family: inherit; }
 .sketch-element[data-element="Cl"],
 .sketch-element[data-element="Br"],
 .sketch-element[data-element="I"] { color: var(--sketch-halogen); }
+
+.sketch-more { color: var(--text-muted); }
+.sketch-more:disabled { opacity: 0.5; cursor: default; }
+
+/* ── The periodic table behind "More…" ── */
+#periodic-table {
+  position: fixed;
+  z-index: 60;
+  width: min(430px, calc(100vw - 16px));
+  padding: 10px;
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+#periodic-table.hidden { display: none; }
+
+.pt-grid {
+  display: grid;
+  grid-template-columns: repeat(18, minmax(0, 1fr));
+  grid-template-rows: repeat(6, auto) 6px auto;
+  gap: 2px;
+}
+
+.pt-cell {
+  aspect-ratio: 1;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pt-cell:hover,
+.pt-cell:focus-visible { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); outline: none; }
+
+.pt-nonmetal { background: var(--accent-soft); border-color: var(--accent-soft-border); color: var(--text); }
+.pt-noble-gas { background: var(--surface-sunken); color: var(--text-muted); }
+
+.pt-marker {
+  align-self: center;
+  font-size: 8px;
+  text-align: center;
+  color: var(--text-faint);
+}
+
+.pt-legend {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+
+.pt-swatch {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin: 0 4px 0 2px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+.pt-swatch.pt-metal { background: var(--surface-2); }
 
 .sketch-tool[aria-pressed="true"],
 .sketch-element[aria-pressed="true"] {

@@ -160,6 +160,31 @@ async function sketcherFirstAtom(b: Browser) {
   await sleep(500);
   check('Clear empties the sketch', (await b.run(`return window.jsmeApplet.smiles();`)) === '');
   check('first atom after Clear is the element chosen', (await place('O', 0.8, 0.85)) === 'O', 'O, far corner');
+
+  // An element from "More…": one pick in the periodic table, then one click
+  // on the sketch places it (JSME's X box, borrowed at startup — NOTES.md).
+  const centre = (selector: string) => b.run(`const r = document.querySelector('${selector}').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+  const press = async (selector: string) => {
+    const p = await centre(selector);
+    await b.moveTo(p.x, p.y);
+    await b.click(p.x, p.y);
+    await sleep(300);
+  };
+  await press('[data-tool="clear"]');
+  await press('#sketch-more');
+  await press('#periodic-table [data-symbol="Xe"]');
+  const picked = await b.run(`return document.querySelector('#sketch-elements [data-element="Xe"]')?.getAttribute('aria-pressed');`);
+  check('a pick from the periodic table is chosen at once', picked === 'true', `Xe button pressed: ${picked}`);
+  const area = await b.run(`
+    const svgs = [...document.getElementById('jsme-stage').querySelectorAll('svg')];
+    const size = (s) => { const r = s.getBoundingClientRect(); return r.width * r.height; };
+    const r = svgs.reduce((a, s) => (size(a) >= size(s) ? a : s)).getBoundingClientRect();
+    return { x: r.x + r.width * 0.4, y: r.y + r.height * 0.4 };`);
+  await b.moveTo(area.x, area.y);
+  await b.click(area.x, area.y);
+  await sleep(1000);
+  const xenon = await b.run(`return window.jsmeApplet.smiles();`);
+  check('an element from "More…" is placed by one click', xenon === '[Xe]', xenon || 'nothing placed');
 }
 
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */
