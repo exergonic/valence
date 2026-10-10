@@ -9,7 +9,7 @@ import { renderPiSystems, tintPiSystemLobes } from './pi-systems';
 import { renderDipole } from './dipole';
 import { renderEsp } from './esp';
 import { renderMoOrbitals, MO_PHASE_PAIRS } from './mo-lobes';
-import { computeEspSurface, espPotentialAt, espVmax, type EspSurfaceData } from '../chem/charge-model/esp';
+import { computeEspSurface, espVmax } from '../chem/charge-model/esp';
 import { computeMoField, levelForFraction, marchMoField } from '../chem/extended-huckel/mo-surface';
 import { renderMoIsosurface } from './mo-isosurface';
 import { applyAtomStyle } from './atom-styles';
@@ -230,7 +230,6 @@ function gfn2EspOnScreen(ctx: SceneContext, properties: Gfn2Properties): SceneCo
       ctx.gfn2Esp = {
         key: properties.key,
         exact: { ...surface, vmax: espVmax(Array.from(potentials)) },
-        pointCharges: null,
       };
     } else {
       ctx.gfn2EspRequest = { key: properties.key, failed: true };
@@ -239,28 +238,6 @@ function gfn2EspOnScreen(ctx: SceneContext, properties: Gfn2Properties): SceneCo
   };
   gfn2EspSurface(properties.key).then(settle, () => settle(null));
   return null;
-}
-
-/** The same density surface coloured by the point charges alone — what the
- *  labels add up to — on the exact surface's colour scale, so it reads paler
- *  where the point charges' potential is weaker rather than re-stretched. */
-function pointChargeEsp(ctx: SceneContext, esp: NonNullable<SceneContext['gfn2Esp']>, charges: number[]): EspSurfaceData {
-  if (esp.pointCharges?.charges === charges) return esp.pointCharges.surface;
-  const atoms = ctx.currentMolecule!.atoms;
-  const p = esp.exact.positions;
-  const potentials = new Float32Array(esp.exact.vertexCount);
-  for (let v = 0; v < potentials.length; v++) potentials[v] = espPotentialAt(p[3 * v], p[3 * v + 1], p[3 * v + 2], atoms, charges);
-  const surface = { ...esp.exact, potentials };
-  esp.pointCharges = { charges, surface };
-  return surface;
-}
-
-/** The full-density toggle is GFN2's: MMFF94 has charges and nothing more. */
-function syncFullDensityControl(model: ChargeModel) {
-  const toggle = document.getElementById('ctrl-full-density') as HTMLInputElement | null;
-  if (!toggle) return;
-  toggle.disabled = model !== 'gfn2';
-  toggle.parentElement?.classList.toggle('disabled', model !== 'gfn2');
 }
 
 /** The header's dipole readout — which model it came from is in the hover. */
@@ -277,8 +254,8 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
         ? 'The full GFN2-xTB dipole: the Mulliken point charges the labels print, plus each atom’s own dipole '
           + '(the lone pairs’ lopsidedness a point charge cannot hold) — the same picture the ESP surface draws, so '
           + 'it need not add up from the labels. Semiempirical: water reads 2.28 D against experiment’s 1.85 D. '
-        : 'The dipole of the GFN2-xTB Mulliken point charges alone — what the labels add up to. GFN2’s full '
-          + 'dipole adds each atom’s own dipole: turn on “Include atomic dipoles”. ') + convention
+        : 'The dipole of the GFN2-xTB Mulliken point charges alone: the engine could not give its full dipole '
+          + 'for this structure. ') + convention
       : 'The dipole of the MMFF94 BCI partial charges (a charge model, not a quantum-mechanical dipole). '
         // The MMFF94 caveats belong to this model only, so they ride on its
         // readout rather than in the Info log, which outlives a model switch.
@@ -408,16 +385,14 @@ function redrawScene(ctx: SceneContext) {
   // untypeable (computeDipole returned null) or the model gives ~0 D.
   // Visibility belongs to the #ctrl-show-dipole checkbox, so a rebuild
   // never flips the user's choice back on (or off).
-  // Under GFN2 the dipole is the full density's (the charges plus the atomic
-  // dipoles, which add up to it exactly) unless the toggle asks for the point
-  // charges alone, the picture the labels add up to. Until the single point
-  // lands (or if it failed) the charges' own.
-  const fullDensity = shown.model === 'gfn2' && ctx.display.fullDensity;
-  syncFullDensityControl(shown.model);
-  const fullDipole = fullDensity ? properties?.dipole ?? null : null;
+  // Under GFN2 the dipole is the full density's: the charges plus the atomic
+  // dipoles, which add up to it exactly. Until the single point lands nothing;
+  // if it failed, the charges' own.
+  const gfn2Dipole = shown.model === 'gfn2';
+  const fullDipole = gfn2Dipole ? properties?.dipole ?? null : null;
   ctx.dipole = fullDipole
     ? dipoleFromFullGfn2(ctx.currentMolecule, fullDipole)
-    : fullDensity && !properties && !gfn2ChargesFailed(ctx)
+    : gfn2Dipole && !properties && !gfn2ChargesFailed(ctx)
       ? null
       : charges ? dipoleFromCharges(ctx.currentMolecule, charges, shown.residual) : null;
   if (ctx.dipole) {
@@ -426,20 +401,18 @@ function redrawScene(ctx: SceneContext) {
   showDipoleReadout(ctx, ctx.dipole, shown.model, ctx.dipole === null && shown.model === 'gfn2' && !gfn2ChargesFailed(ctx), fullDipole !== null);
 
   // The ESP. Under GFN2: its own 0.001 au density surface, built in the
-  // worker, coloured by the exact potential of its charge distribution — or,
-  // toggle off, the same surface coloured by the point charges alone on the
-  // same colour scale (pyridine's nitrogen −57 against −23 kcal/mol/e at the
-  // vdW surface: the point charges' potential IS weaker). Nothing is drawn the
-  // moment it is being built. Under MMFF94, or when the engine cannot build
-  // it, the fused van der Waals surface coloured by the charges (see
-  // chem/charge-model/esp.ts), cached by charges since a model switch changes
-  // them.
+  // worker, coloured by the exact potential of its charge distribution — the
+  // picture correct to the model, so it is simply the default, with no switch
+  // back to point charges. Nothing is drawn the moment it is being built.
+  // Under MMFF94, or when the engine cannot build it, the fused van der Waals
+  // surface coloured by the charges (see chem/charge-model/esp.ts), cached by
+  // charges since a model switch changes them.
   if (ctx.display.showEsp && charges) {
     const gfn2 = shown.model === 'gfn2' && properties;
     const esp = gfn2 ? gfn2EspOnScreen(ctx, properties) : null;
     const building = gfn2 && !esp && !ctx.gfn2EspRequest?.failed;
     if (esp) {
-      renderEsp(ctx.espGroup, fullDensity ? esp.exact : pointChargeEsp(ctx, esp, charges), ctx.display.espOpacity);
+      renderEsp(ctx.espGroup, esp.exact, ctx.display.espOpacity);
       ctx.espGroup.visible = true;
     } else if (building) {
       ctx.espGroup.visible = false;

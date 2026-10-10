@@ -67,16 +67,6 @@ export function setupControls(ctx: SceneContext) {
   // so the two cannot disagree (the ramp is linear in RGB between its stops).
   const espKey = document.querySelector<HTMLElement>('.esp-scale');
   if (espKey) espKey.style.background = `linear-gradient(90deg, ${[-1, 0, 1].map((t) => `rgb(${espColor(t).join(', ')})`).join(', ')})`;
-  // The ESP and the dipole from GFN2's full electron density, or from the
-  // point charges alone — what the labels add up to.
-  const fullDensity = document.querySelector<HTMLInputElement>('#ctrl-full-density');
-  if (fullDensity) {
-    fullDensity.checked = ctx.display.fullDensity;
-    fullDensity.addEventListener('change', () => {
-      ctx.display.fullDensity = fullDensity.checked;
-      rerender();
-    });
-  }
   const espOpacity = document.querySelector<HTMLInputElement>('#ctrl-esp-opacity')!;
   espOpacity.value = String(ctx.display.espOpacity);
   espOpacity.addEventListener('input', () => {

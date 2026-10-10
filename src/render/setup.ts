@@ -90,12 +90,6 @@ export interface DisplaySettings {
   chargeModel: ChargeModel;
   /** ESP surface translucency — 0.05..0.95 (1 − opacity reads as see-through). */
   espOpacity: number;
-  /** Under GFN2, whether the ESP and the dipole come from the full electron
-   *  density (on: the exact potential on GFN2's 0.001 au density surface, and
-   *  the full dipole) or from the point charges alone — the same charges the
-   *  labels print — on the same surface and colour scale. The difference is
-   *  the lesson: a charge on a nucleus cannot hold a lone pair or a π cloud. */
-  fullDensity: boolean;
   /** Draw a selected MO as one continuous isosurface (default) rather than as
    *  the individual atomic orbitals it is built from. */
   smoothMo: boolean;
@@ -195,9 +189,8 @@ export interface SceneContext {
    *  switch, or GFN2 charges arriving) re-extracts it. */
   espSurfaceCharges: number[] | null;
   /** GFN2's ESP for the single point `key` names: the exact potential on its
-   *  density surface, and — built when first asked for — the same surface
-   *  coloured by the point charges alone, on the exact one's colour scale. */
-  gfn2Esp: { key: number; exact: EspSurfaceData; pointCharges: { charges: number[]; surface: EspSurfaceData } | null } | null;
+   *  density surface. */
+  gfn2Esp: { key: number; exact: EspSurfaceData } | null;
   /** That surface, asked of the worker: the key it was asked for, and whether
    *  it failed (then the van der Waals surface stands in). */
   gfn2EspRequest: { key: number; failed: boolean } | null;
@@ -364,7 +357,6 @@ export function initScene(container: HTMLElement): SceneContext {
       showEsp: false,
       chargeModel: 'gfn2',
       espOpacity: 0.5,
-      fullDensity: true,
       smoothMo: true,
       moOpacity: 0.85,
       isoMode: 'percentile',
