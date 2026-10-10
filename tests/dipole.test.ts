@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
-import { computeDipole, dipoleFromCharges } from '../src/chem/charge-model/dipole';
+import { computeDipole, dipoleFromCharges, dipoleFromFullGfn2 } from '../src/chem/charge-model/dipole';
 import { resolveCharges } from '../src/chem/charge-model/bci-charges';
 
 const waterMol = (): Molecule => {
@@ -310,5 +310,26 @@ describe('dipoleFromCharges', () => {
     const water = waterMol();
     expect(dipoleFromCharges(water, [-0.8, 0.4])).toBeNull();
     expect(dipoleFromCharges(water, [-0.8, 0.4, Number.NaN])).toBeNull();
+  });
+});
+
+describe('dipoleFromFullGfn2', () => {
+  it("moves an ion's dipole from the coordinate origin to its centre of mass", () => {
+    // a lone cation 5 Å from the origin: about the origin p = Q·r = 5 e·Å, but
+    // about its own centre of mass it has none — an ion's dipole depends on
+    // the origin, and the app's is the centre of mass
+    const ion = { atoms: [{ element: 'Na', x: 5, y: 0, z: 0, charge: 1 }], bonds: [] };
+    const aboutOrigin: [number, number, number] = [5 * 4.80320, 0, 0];
+    expect(dipoleFromFullGfn2(ion, aboutOrigin).debye).toBeCloseTo(0, 3);
+  });
+
+  it('leaves a neutral molecule as given, and points the arrow δ+ → δ−', () => {
+    const water = { atoms: [
+      { element: 'O', x: 0, y: 0, z: 0.118 }, { element: 'H', x: 0, y: 0.755, z: -0.471 }, { element: 'H', x: 0, y: -0.755, z: -0.471 },
+    ], bonds: [] };
+    // physics convention: p points from δ− (O) toward δ+ (the H side, −z)
+    const result = dipoleFromFullGfn2(water, [0, 0, -2.28]);
+    expect(result.debye).toBeCloseTo(2.28, 3);
+    expect(result.vector[2]).toBeCloseTo(1, 6); // the chemistry arrow: toward O
   });
 });

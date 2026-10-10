@@ -127,3 +127,36 @@ export function dipoleFromCharges(
 
   return { physics, vector, com, debye, residualCharge };
 }
+
+/**
+ * The full GFN2-xTB dipole — the point charges plus each atom's own dipole
+ * (CAMM), what xtb prints as "full" — as a DipoleResult on the same footing
+ * as `dipoleFromCharges`. The engine gives it about the coordinate origin;
+ * for an ion that depends on the origin, so it is moved to the centre of mass,
+ * where the charge-model dipole sits: p_com = p_origin − Q·r_com. Water: 2.28 D
+ * (experiment 1.85 D), where its point charges alone give 1.59 D.
+ */
+export function dipoleFromFullGfn2(
+  molecule: Molecule,
+  aboutOriginDebye: [number, number, number],
+): DipoleResult {
+  let totalMass = 0;
+  for (const a of molecule.atoms) totalMass += ATOMIC_MASS[a.element] ?? 0;
+  const com: [number, number, number] = [0, 0, 0];
+  if (totalMass > 0) {
+    for (const a of molecule.atoms) {
+      const m = ATOMIC_MASS[a.element] ?? 0;
+      com[0] += (m * a.x) / totalMass;
+      com[1] += (m * a.y) / totalMass;
+      com[2] += (m * a.z) / totalMass;
+    }
+  }
+  const netCharge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
+  const physics: [number, number, number] = [0, 1, 2].map(
+    (k) => aboutOriginDebye[k] / EA_TO_DEBYE - netCharge * com[k],
+  ) as [number, number, number];
+  const norm = Math.hypot(physics[0], physics[1], physics[2]);
+  const vector: [number, number, number] =
+    norm > 1e-12 ? [-physics[0] / norm, -physics[1] / norm, -physics[2] / norm] : [0, 0, 0];
+  return { physics, vector, com, debye: norm * EA_TO_DEBYE, residualCharge: false };
+}

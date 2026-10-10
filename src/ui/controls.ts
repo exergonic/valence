@@ -88,7 +88,7 @@ export function setupControls(ctx: SceneContext) {
   // Labels dropdown — one control for all label modes
   const labelModeSelect = document.querySelector<HTMLSelectElement>('#ctrl-label-mode')!;
   labelModeSelect.addEventListener('change', () => {
-    ctx.display.labelMode = labelModeSelect.value as 'atom' | 'orbital' | 'hybrid' | 'charge' | 'off';
+    ctx.display.labelMode = labelModeSelect.value as SceneContext['display']['labelMode'];
     ctx.rerender();
   });
 

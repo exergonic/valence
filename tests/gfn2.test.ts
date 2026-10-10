@@ -132,22 +132,70 @@ describe('GFN2-xTB', () => {
   // gets a single point at its own geometry. At the optimiser's geometry that
   // single point must be the optimiser's charges — one model, not two.
   it("gives the optimiser's own charges as a single point at its geometry", async () => {
-    const { chargesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
     const result = await refine(water);
-    const charges = await chargesAt(result!.molecule, vendorFile);
+    const charges = (await propertiesAt(result!.molecule, vendorFile))?.charges ?? null;
     expect(charges).not.toBeNull();
     charges!.forEach((q, i) => expect(q).toBeCloseTo(result!.charges![i], 4));
   }, 180_000);
 
   // An ion's drawn charge reaches the engine: the charges sum to it.
   it("carries an ion's net charge into the single point — [Ni(CN)₄]²⁻", async () => {
-    const { chargesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
     const example = EXAMPLES.find((e) => e.name.startsWith('Tetracyanonickelate'));
     const nicn4 = parseMolBlock(example!.mol);
-    const charges = await chargesAt(nicn4, vendorFile);
+    const charges = (await propertiesAt(nicn4, vendorFile))?.charges ?? null;
     expect(charges).not.toBeNull();
     expect(charges!.length).toBe(nicn4.atoms.length);
     expect(charges!.reduce((sum, q) => sum + q, 0)).toBeCloseTo(-2, 6);
+  }, 180_000);
+
+  // What one single point knows beyond the charges, pinned against the
+  // Fortran xTB oracle at the same water geometry (xtb 6.7.1 --gfn 2):
+  // full dipole 2.278 D (point charges alone 1.59 D), Wiberg O–H 0.920,
+  // HOMO −12.1801 eV, LUMO 2.4658 eV.
+  it('gives the full dipole, the Wiberg bond orders and the orbital ladder — water, against the oracle', async () => {
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const p = await propertiesAt(water, vendorFile);
+    expect(p).not.toBeNull();
+    const [mx, my, mz] = p!.dipole!;
+    expect(Math.hypot(mx, my, mz)).toBeCloseTo(2.278, 2);
+    expect(p!.bondOrders[0]).toBeCloseTo(0.920, 3);
+    expect(p!.bondOrders[1]).toBeCloseTo(0.920, 3);
+    const homo = p!.alpha.occupations.filter((o) => o > 0.5).length - 1;
+    expect(homo).toBe(3); // four occupied valence orbitals: 8 electrons
+    expect(p!.alpha.energies[homo]).toBeCloseTo(-12.18, 1);
+    expect(p!.alpha.energies[homo + 1]).toBeCloseTo(2.47, 1);
+    // the HOMO is oxygen's lone pair: nearly all of it on O
+    expect(p!.alpha.atomShares[homo][0]).toBeGreaterThan(0.9);
+    expect(p!.spin).toBeNull();
+    expect(p!.beta).toBeNull();
+  }, 180_000);
+
+  // An odd electron count runs as a doublet, and the spin it carries is one
+  // electron's worth, shared out over the atoms (H₃Si–Ni as CIR built it).
+  it('runs an odd electron count as a doublet and reports where the spin sits — H₃Si–Ni', async () => {
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const sini = parseMolBlock(`H3NiSi
+  cir
+
+  5  4  0  0  0  0  0  0  0  0999 V2000
+   -1.6773    0.0000    0.0000 Si  0  0  0  0  0  0  0  0  0  0  0  0
+   -2.1723   -1.3998    0.0289 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.1723    0.6749   -1.2267 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -2.1723    0.7249    1.1978 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.9147    0.0000    0.0000 Ni  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+M  END
+`);
+    const p = await propertiesAt(sini, vendorFile);
+    expect(p).not.toBeNull();
+    expect(p!.multiplicity).toBe(2);
+    expect(p!.spin!.reduce((a, b) => a + b, 0)).toBeCloseTo(1, 4);
+    expect(p!.beta).not.toBeNull();
   }, 180_000);
 
   // The 3-ring planarity repair that used to run after this tier was removed

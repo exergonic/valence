@@ -18,9 +18,9 @@
  */
 import type { Molecule } from '../mol-parser';
 import { breakSymmetry } from './embed';
-import type { Gfn2Progress, Gfn2Result } from './gfn2-refine.worker';
+import type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest } from './gfn2-refine.worker';
 
-export type { Gfn2Progress, Gfn2Result };
+export type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest };
 
 /**
  * Below this lowest Hessian eigenvalue (Eh/bohr²) a converged geometry is a
@@ -67,7 +67,7 @@ export class Gfn2Unavailable extends Error {
 let worker: Worker | null = null;
 let nextId = 1;
 interface PendingRun {
-  // an optimisation resolves a Gfn2Result, a charges request a number[]
+  // an optimisation resolves a Gfn2Result, a properties request Gfn2Properties
   resolvers: PromiseWithResolvers<any>;
   onProgress?: (progress: Gfn2Progress) => void;
 }
@@ -136,20 +136,37 @@ export function refineWithGfn2(
 }
 
 /**
- * GFN2-xTB Mulliken charges at a structure exactly as displayed — one single
- * point, no optimisation, no hydrogens added — so a structure the engine did
- * not produce (a PubChem conformer, an example) can show the same charge model
- * as one it did. Null when the engine cannot treat the molecule; rejects with
- * Gfn2Unavailable without a Worker. Shares the worker, and so the wasm, with
- * the optimisations.
+ * GFN2-xTB's electronic structure at a structure exactly as displayed — one
+ * single point, no optimisation, no hydrogens added: the charges (so a
+ * structure the engine did not produce shows the same charge model as one it
+ * did), the Wiberg bond orders, the spin populations, the full dipole and the
+ * molecular orbitals. Null when the engine cannot treat the molecule; rejects
+ * with Gfn2Unavailable without a Worker. Shares the worker, and so the wasm,
+ * with the optimisations.
  */
-export function gfn2ChargesAt(molecule: Molecule): Promise<number[] | null> {
+export function gfn2PropertiesAt(molecule: Molecule): Promise<Gfn2Properties | null> {
   const w = ensureWorker();
   if (!w) return Promise.reject(new Gfn2Unavailable());
-  const resolvers = Promise.withResolvers<number[] | null>();
+  const resolvers = Promise.withResolvers<Gfn2Properties | null>();
   const id = nextId++;
   pending.set(id, { resolvers });
-  w.postMessage({ id, molecule, task: 'charges' });
+  w.postMessage({ id, molecule, task: 'properties' });
+  return resolvers.promise;
+}
+
+/**
+ * One GFN2 orbital's isosurface, built in the worker from the calculator of
+ * the properties run `request.key` names — the field and its gradient need the
+ * engine's own basis. Null when that run is no longer the worker's latest (a
+ * newer molecule replaced it).
+ */
+export function gfn2OrbitalSurface(request: OrbitalSurfaceRequest): Promise<OrbitalSurface | null> {
+  const w = ensureWorker();
+  if (!w) return Promise.reject(new Gfn2Unavailable());
+  const resolvers = Promise.withResolvers<OrbitalSurface | null>();
+  const id = nextId++;
+  pending.set(id, { resolvers });
+  w.postMessage({ id, task: 'surface', surface: request });
   return resolvers.promise;
 }
 

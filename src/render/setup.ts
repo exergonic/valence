@@ -4,6 +4,7 @@ import type { Molecule } from '../mol-parser';
 import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
+import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
 import {
   LOCALIZED_ISOVALUE, LOCALIZED_PERCENTILE, MO_SURFACE_ISOVALUE, MO_SURFACE_PERCENTILE,
@@ -47,7 +48,7 @@ export interface ColorSettings {
 export interface DisplaySettings {
   atomScale: number;
   bondScale: number;
-  labelMode: 'atom' | 'orbital' | 'hybrid' | 'charge' | 'off';
+  labelMode: 'atom' | 'orbital' | 'hybrid' | 'charge' | 'bond-order' | 'spin' | 'off';
   orbitalPreset: 'glass' | 'glossy' | 'matte' | 'metallic';
   atomStyle: AtomStyle;
   bgColor: string;
@@ -157,10 +158,14 @@ export interface SceneContext {
    *  offer. Paired with its molecule: buildScene drops the bundle when it does
    *  not describe the molecule on screen, so a stale array can never be read. */
   gfn2Charges: Gfn2Charges | null;
-  /** The GFN2 single point asked for the molecule on screen, so it is asked
-   *  once: pending while it runs, failed (with why) when the engine could not
-   *  give charges — the display then falls back to MMFF94 and says so. */
-  gfn2ChargeRequest: { molecule: Molecule; status: 'pending' | 'failed'; reason?: string } | null;
+  /** What GFN2's single point at the displayed geometry knows — charges,
+   *  Wiberg bond orders, spin, the full dipole, the orbitals. Paired with its
+   *  molecule like `gfn2Charges`, so a stale bundle is never read. */
+  gfn2Properties: { molecule: Molecule; properties: Gfn2Properties } | null;
+  /** That single point, asked for the molecule on screen once: pending while
+   *  it runs, failed (with why) when the engine could not treat it — the
+   *  charges then fall back to MMFF94 and say so. */
+  gfn2PropertiesRequest: { molecule: Molecule; status: 'pending' | 'failed'; reason?: string } | null;
   /** Cached fused vdW ESP surface for the current molecule (computed lazily
    *  on the first ESP render; null until then or for an untypeable molecule). */
   espSurface: EspSurfaceData | null;
@@ -332,7 +337,8 @@ export function initScene(container: HTMLElement): SceneContext {
     dipole: null,
     charges: null,
     gfn2Charges: null,
-    gfn2ChargeRequest: null,
+    gfn2Properties: null,
+    gfn2PropertiesRequest: null,
     espSurface: null,
     espSurfaceCharges: null,
     moSurfaces: new Map(),

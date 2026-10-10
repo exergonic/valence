@@ -3,7 +3,7 @@ import { activeIsoValue, type SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
-import { renderLabels, renderChargeLabels, renderHybridizationLabels } from './labels';
+import { renderLabels, renderChargeLabels, renderHybridizationLabels, renderBondOrderLabels, renderSpinLabels } from './labels';
 import { renderOrbitalLabels } from './orbital-labels';
 import { renderPiSystems, tintPiSystemLobes } from './pi-systems';
 import { renderDipole } from './dipole';
@@ -16,11 +16,12 @@ import { applyAtomStyle } from './atom-styles';
 import { hsvToHex } from './color-schemes';
 import { assignOrbitals } from '../chem/vsepr/assign-orbitals';
 import {
-  dipoleFromCharges, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE, type DipoleResult,
+  dipoleFromCharges, dipoleFromFullGfn2, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE, type DipoleResult,
 } from '../chem/charge-model/dipole';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
-import { gfn2ChargesAt } from '../geometry/gfn2-refine';
+import { gfn2PropertiesAt } from '../geometry/gfn2-refine';
 import type { ChargeModel } from './setup';
+import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
 import { localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../chem/localized-orbitals/order-localized';
@@ -52,7 +53,7 @@ function clearGroup(g: THREE.Group) {
 /** True when the engine was asked for this molecule's charges and could not
  *  give them (an element outside GFN2's table, no Worker, a failed SCC). */
 function gfn2ChargesFailed(ctx: SceneContext): boolean {
-  const request = ctx.gfn2ChargeRequest;
+  const request = ctx.gfn2PropertiesRequest;
   return request !== null && request.molecule === ctx.currentMolecule && request.status === 'failed';
 }
 
@@ -87,7 +88,7 @@ export function syncChargeModelControl(ctx: SceneContext) {
   if (gfn2Option) gfn2Option.disabled = gfn2Failed;
   if (mmff94Option) mmff94Option.disabled = mmff94Missing;
   select.title = gfn2Failed
-    ? `GFN2-xTB could not give charges for this molecule (${ctx.gfn2ChargeRequest?.reason ?? 'the engine failed'}).`
+    ? `GFN2-xTB could not give charges for this molecule (${ctx.gfn2PropertiesRequest?.reason ?? 'the engine failed'}).`
     : mmff94Missing
       ? 'This molecule is outside the MMFF94 type space, so it has no MMFF94 charges.'
       : 'Which partial charges the charge labels, the ESP surface and the dipole arrow show — one set for all three.';
@@ -95,29 +96,39 @@ export function syncChargeModelControl(ctx: SceneContext) {
 }
 
 /**
- * Ask the engine for GFN2 charges at the molecule on screen, once per
- * molecule, in the background: the display draws as soon as they arrive. A
- * structure the GFN2 optimiser produced already carries them.
+ * Ask the engine for its single point at the molecule on screen, once per
+ * molecule, in the background: the display draws as soon as it arrives. Every
+ * structure gets one, a GFN2-optimised one included — its charges came with
+ * the run, but the bond orders, the spin and the orbitals did not, and one SCC
+ * costs milliseconds at these sizes.
  */
-function requestGfn2Charges(ctx: SceneContext): void {
+export function requestGfn2Properties(ctx: SceneContext): void {
   const molecule = ctx.currentMolecule;
-  if (!molecule || ctx.gfn2Charges?.molecule === molecule) return;
-  if (ctx.gfn2ChargeRequest?.molecule === molecule) return;
-  ctx.gfn2ChargeRequest = { molecule, status: 'pending' };
-  const settle = (charges: number[] | null, reason?: string) => {
+  if (!molecule || ctx.gfn2Properties?.molecule === molecule) return;
+  if (ctx.gfn2PropertiesRequest?.molecule === molecule) return;
+  ctx.gfn2PropertiesRequest = { molecule, status: 'pending' };
+  const settle = (properties: Gfn2Properties | null, reason?: string) => {
     if (ctx.currentMolecule !== molecule) return; // the molecule changed meanwhile
-    if (charges && charges.length === molecule.atoms.length) {
-      ctx.gfn2Charges = { molecule, charges };
-      ctx.gfn2ChargeRequest = null;
+    if (properties && properties.charges.length === molecule.atoms.length) {
+      ctx.gfn2Properties = { molecule, properties };
+      ctx.gfn2PropertiesRequest = null;
     } else {
-      ctx.gfn2ChargeRequest = { molecule, status: 'failed', reason: reason ?? 'no charges returned' };
+      ctx.gfn2PropertiesRequest = { molecule, status: 'failed', reason: reason ?? 'the engine returned nothing' };
     }
     ctx.rerender();
   };
-  gfn2ChargesAt(molecule).then(
-    (charges) => settle(charges),
+  gfn2PropertiesAt(molecule).then(
+    (properties) => settle(properties),
     (error) => settle(null, (error as Error)?.message),
   );
+}
+
+/** GFN2's single point for the molecule on screen, or null while it runs (or
+ *  when it failed) — asking for it if nobody has yet. */
+export function gfn2PropertiesOnScreen(ctx: SceneContext): Gfn2Properties | null {
+  if (ctx.gfn2Properties && ctx.gfn2Properties.molecule === ctx.currentMolecule) return ctx.gfn2Properties.properties;
+  if (!gfn2ChargesFailed(ctx)) requestGfn2Properties(ctx);
+  return null;
 }
 
 /**
@@ -131,15 +142,26 @@ function displayedCharges(ctx: SceneContext): { charges: number[] | null; model:
   if (effectiveChargeModel(ctx) === 'mmff94') {
     return { charges: ctx.charges?.charges ?? null, model: 'mmff94', residual: ctx.charges?.residualCharge ?? false };
   }
+  // the optimiser's own charges when this structure is its result, else the
+  // single point's
   if (ctx.gfn2Charges && ctx.gfn2Charges.molecule === ctx.currentMolecule) {
     return { charges: ctx.gfn2Charges.charges, model: 'gfn2', residual: false };
   }
-  if (!gfn2ChargesFailed(ctx)) requestGfn2Charges(ctx);
-  return { charges: null, model: 'gfn2', residual: false };
+  const properties = gfn2PropertiesOnScreen(ctx);
+  return { charges: properties?.charges ?? null, model: 'gfn2', residual: false };
+}
+
+/** Spin density is only on offer for an open-shell structure; the option says
+ *  why when it is not. Bond orders wait on the single point, silently. */
+function syncLabelModeControl(properties: Gfn2Properties | null) {
+  const option = document.querySelector<HTMLOptionElement>('#ctrl-label-mode option[value="spin"]');
+  if (!option || !properties) return;
+  option.disabled = properties.spin === null;
+  option.textContent = properties.spin === null ? 'Spin density (closed shell: none)' : 'Spin density';
 }
 
 /** The header's dipole readout — which model it came from is in the hover. */
-function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model: ChargeModel, pending: boolean) {
+function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model: ChargeModel, pending: boolean, full: boolean) {
   const element = document.getElementById('mol-dipole');
   if (!element) return;
   element.classList.toggle('unsupported', !dipole && !pending);
@@ -148,8 +170,12 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
   if (dipole) {
     element.textContent = `Dipole: ${dipole.debye.toFixed(2)} D`;
     element.title = model === 'gfn2'
-      ? 'The dipole of the GFN2-xTB Mulliken point charges — the charges the labels and the ESP show; '
-        + 'not the full GFN2 dipole, which adds atomic dipoles. ' + convention
+      ? (full
+        ? 'The full GFN2-xTB dipole: the Mulliken point charges the labels and the ESP show, plus each atom’s '
+          + 'own dipole (the lone pairs’ lopsidedness the point charges cannot hold). Semiempirical: water reads '
+          + '2.28 D against experiment’s 1.85 D. '
+        : 'The dipole of the GFN2-xTB Mulliken point charges — the charges the labels and the ESP show; '
+          + 'not the full GFN2 dipole, which adds atomic dipoles. ') + convention
       : 'The dipole of the MMFF94 BCI partial charges (a charge model, not a quantum-mechanical dipole). '
         // The MMFF94 caveats belong to this model only, so they ride on its
         // readout rather than in the Info log, which outlives a model switch.
@@ -217,6 +243,9 @@ export function rebuildDisplay(ctx: SceneContext) {
   const shown = displayedCharges(ctx);
   const charges = shown.charges;
   syncChargeModelControl(ctx);
+  // GFN2's single point at this geometry: bond orders, spin (null while it runs)
+  const properties = gfn2PropertiesOnScreen(ctx);
+  syncLabelModeControl(properties);
   if (labelMode === 'atom') {
     // Element symbol labels (C, N, O...)
     renderLabels(ctx.labelGroup, ctx.currentMolecule);
@@ -237,6 +266,14 @@ export function rebuildDisplay(ctx: SceneContext) {
   } else if (labelMode === 'charge' && charges) {
     // Partial charges — the displayed set (GFN2-xTB Mulliken by default).
     renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, charges);
+    ctx.labelGroup.visible = true;
+    ctx.orbitalLabelGroup.visible = false;
+  } else if (labelMode === 'bond-order' && properties) {
+    renderBondOrderLabels(ctx.labelGroup, ctx.currentMolecule, properties.bondOrders);
+    ctx.labelGroup.visible = true;
+    ctx.orbitalLabelGroup.visible = false;
+  } else if (labelMode === 'spin' && properties?.spin) {
+    renderSpinLabels(ctx.labelGroup, ctx.currentMolecule, properties.spin);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
   } else {
@@ -262,11 +299,18 @@ export function rebuildDisplay(ctx: SceneContext) {
   // untypeable (computeDipole returned null) or the model gives ~0 D.
   // Visibility belongs to the #ctrl-show-dipole checkbox, so a rebuild
   // never flips the user's choice back on (or off).
-  ctx.dipole = charges ? dipoleFromCharges(ctx.currentMolecule, charges, shown.residual) : null;
+  // GFN2's dipole is its full one — the charges plus the atomic dipoles — once
+  // the single point lands; until then (or if it failed) the charges' own.
+  const fullDipole = shown.model === 'gfn2' ? properties?.dipole ?? null : null;
+  ctx.dipole = fullDipole
+    ? dipoleFromFullGfn2(ctx.currentMolecule, fullDipole)
+    : shown.model === 'gfn2' && !properties && !gfn2ChargesFailed(ctx)
+      ? null
+      : charges ? dipoleFromCharges(ctx.currentMolecule, charges, shown.residual) : null;
   if (ctx.dipole) {
     renderDipole(ctx.dipoleGroup, ctx.dipole);
   }
-  showDipoleReadout(ctx, ctx.dipole, shown.model, charges === null && shown.model === 'gfn2');
+  showDipoleReadout(ctx, ctx.dipole, shown.model, ctx.dipole === null && shown.model === 'gfn2' && !gfn2ChargesFailed(ctx), fullDipole !== null);
 
   // Charge-model ESP surface — a translucent overlay of the FUSED (united)
 // vdW molecular surface, colored by the potential probed at the fused
@@ -388,7 +432,8 @@ export function buildScene(ctx: SceneContext) {
   // when the user picks that model; the displayed set — GFN2-xTB's by default
   // — and its dipole are chosen in rebuildDisplay.
   ctx.charges = ctx.currentMolecule ? resolveCharges(ctx.currentMolecule) : null;
-  if (ctx.gfn2ChargeRequest && ctx.gfn2ChargeRequest.molecule !== ctx.currentMolecule) ctx.gfn2ChargeRequest = null;
+  if (ctx.gfn2PropertiesRequest && ctx.gfn2PropertiesRequest.molecule !== ctx.currentMolecule) ctx.gfn2PropertiesRequest = null;
+  if (ctx.gfn2Properties && ctx.gfn2Properties.molecule !== ctx.currentMolecule) ctx.gfn2Properties = null;
   // New molecule, new ESP surface (recomputed lazily on first render).
   ctx.espSurface = null;
   ctx.espSurfaceCharges = null;

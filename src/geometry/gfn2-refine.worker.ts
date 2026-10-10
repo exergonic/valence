@@ -25,6 +25,9 @@
  */
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { atomicNumber, lowestMultiplicity } from '../chem/elements';
+import { alignToPrincipalAxes, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
+import { levelForFraction } from '../chem/extended-huckel/mo-surface';
+import { marchSignedField } from '../utils/march-tetrahedra';
 import { jacobiSymmetric } from '../utils/eigen';
 import {
   optimize_lbfgs,
@@ -677,46 +680,435 @@ function release(calc: { delete?: () => void }): void {
   }
 }
 
+/** Hartree to electronvolt (CODATA 2018). */
+const EV_PER_HARTREE = 27.211386245988;
+/** e·bohr to debye. */
+const DEBYE_PER_E_BOHR = 2.541746473;
+/** e·Å to debye. */
+const DEBYE_PER_E_ANGSTROM = DEBYE_PER_E_BOHR / ANGSTROM_PER_BOHR;
+
+/** One spin channel's molecular orbitals, lowest first. */
+export interface Gfn2OrbitalSet {
+  /** Orbital energies, eV. */
+  energies: number[];
+  /** Occupations: 0–2 for a closed shell, 0–1 for one spin channel. */
+  occupations: number[];
+  /** Each orbital's Mulliken share on each atom, [orbital][atom], summing to
+   *  1 over the atoms — which atoms an orbital lives on. */
+  atomShares: number[][];
+}
+
 /**
- * GFN2-xTB per-atom charges (Mulliken SCC, electrons) at a structure as given —
- * one single point, no optimisation and no implicit hydrogens, so the array
- * indexes the displayed atoms one to one. This is how a structure the engine
- * did not produce (a PubChem conformer, an example) gets the app's default
- * charge model. Null when the engine cannot treat the molecule.
+ * GFN2-xTB's electronic structure at a structure exactly as given — one single
+ * point, no optimisation and no implicit hydrogens, so every array indexes the
+ * displayed atoms one to one. This is how every structure on screen (a
+ * PubChem conformer, an example, GFN2's own result) gets the app's default
+ * charges and the rest of what one SCC knows.
  */
-export async function chargesAt(
+export interface Gfn2Properties {
+  /** Mulliken SCC charges per atom, electrons. */
+  charges: number[];
+  /** The Wiberg bond order of each bond in `molecule.bonds`, in that order. */
+  bondOrders: number[];
+  /** Spin population (α − β) per atom; null for a closed shell. */
+  spin: number[] | null;
+  /** The spin multiplicity the single point ran at. */
+  multiplicity: number;
+  /** The full GFN2 dipole, debye: the point charges plus the atomic dipoles.
+   *  Null from an engine build without the dipole binding. */
+  dipole: [number, number, number] | null;
+  /** The molecular orbitals: one set for a closed shell, α and β for an open
+   *  one. Their shapes are drawn by `orbitalField`, which needs this run's
+   *  calculator, so it is kept alive under `key` until the next run. */
+  alpha: Gfn2OrbitalSet;
+  beta: Gfn2OrbitalSet | null;
+  key: number;
+  /** The basis functions, described so the extended-Hückel machinery (irrep
+   *  labels, degenerate-set canonicalization) can read them: atom, s/p/d, and
+   *  a p's axis or a d's shape in the principal-axis frame the single point
+   *  ran in. Each function's sign is folded into `coefficients` and
+   *  `overlap`, so a p always points along +axis. Null from an engine build
+   *  without the AO bindings. */
+  orbitalBasis: Gfn2BasisFunction[] | null;
+  /** The frame the orbitals are expressed in (see align-principal-axes). */
+  frame: PrincipalFrame;
+  /** MO coefficients, [orbital][AO], sign-normalised as `orbitalBasis` says. */
+  coefficients: { alpha: number[][]; beta: number[][] | null };
+  /** The AO overlap matrix, sign-normalised likewise. */
+  overlap: number[][];
+}
+
+/** One GFN2 basis function, identified by probing its values (see
+ *  `describeBasis`): OCC's real-harmonic order is its own business. */
+export interface Gfn2BasisFunction {
+  atomIndex: number;
+  angular: 's' | 'p' | 'd';
+  /** A p's axis in the frame; [0, 0, 0] for s and d. */
+  axis: [number, number, number];
+  /** Which real d function, in the extended-Hückel names. */
+  d?: 'x2-y2' | 'z2' | 'xy' | 'xz' | 'yz';
+}
+
+// The calculator of the latest properties run, for `orbitalSurface`: its
+// geometry (the frame's), and the sign each AO was flipped by. Orbital fields
+// already built for it are cached by orbital, so a new level re-marches.
+let kept: { key: number; calc: any; signs: number[]; frame: PrincipalFrame; fields: Map<string, OrbitalGrid> } | null = null;
+let nextKey = 1;
+
+/**
+ * Which function each AO is, read off its values a bohr from its atom along
+ * x, y, z and the three diagonals — so nothing depends on OCC's ordering or
+ * sign conventions for the real spherical harmonics. A p is the axis where it
+ * is non-zero; a d is told apart by its pattern (z² is twice as large along z
+ * as along x or y, and opposite in sign; x²−y² is opposite along x and y).
+ */
+function describeBasis(M: any, calc: any, frameAtoms: Molecule['atoms']): { basis: Gfn2BasisFunction[]; signs: number[] } | null {
+  if (typeof calc.aoAtoms !== 'function' || typeof calc.orbitalValues !== 'function') return null;
+  const aoAtom = vector(calc.aoAtoms());
+  const aoL = vector(calc.aoAngularMomenta());
+  const n = aoAtom.length;
+  const h = Math.SQRT1_2;
+  const directions: Array<[number, number, number]> = [[1, 0, 0], [0, 1, 0], [0, 0, 1], [h, h, 0], [h, 0, h], [0, h, h]];
+  const basis: Gfn2BasisFunction[] = [];
+  const signs: number[] = [];
+  const unit = M.Vec.create(n);
+  for (let mu = 0; mu < n; mu++) {
+    const atom = frameAtoms[aoAtom[mu]];
+    const centre = [atom.x / ANGSTROM_PER_BOHR, atom.y / ANGSTROM_PER_BOHR, atom.z / ANGSTROM_PER_BOHR];
+    const points = M.Mat3N.create(directions.length);
+    directions.forEach((d, k) => { for (let c = 0; c < 3; c++) points.set(c, k, centre[c] + d[c]); });
+    for (let nu = 0; nu < n; nu++) unit.set(nu, nu === mu ? 1 : 0);
+    const values = calc.orbitalValues(points, unit);
+    const v = directions.map((_, k) => values.get(0, k) as number);
+    points.delete?.();
+    values.delete?.();
+    const [vx, vy, vz, vxy, vxz, vyz] = v;
+    const scale = Math.max(...v.map(Math.abs)) || 1;
+    const small = (x: number) => Math.abs(x) < 1e-3 * scale;
+    let fn: Gfn2BasisFunction;
+    let sign = 1;
+    if (aoL[mu] === 0) {
+      fn = { atomIndex: aoAtom[mu], angular: 's', axis: [0, 0, 0] };
+    } else if (aoL[mu] === 1) {
+      const magnitudes = [vx, vy, vz].map(Math.abs);
+      const k = magnitudes.indexOf(Math.max(...magnitudes));
+      const axis: [number, number, number] = [0, 0, 0];
+      axis[k] = 1;
+      sign = Math.sign([vx, vy, vz][k]) || 1;
+      fn = { atomIndex: aoAtom[mu], angular: 'p', axis };
+    } else if (aoL[mu] === 2) {
+      let d: Gfn2BasisFunction['d'];
+      if (small(vx) && small(vy) && small(vz)) {
+        // xy, xz or yz: non-zero on one diagonal only
+        const magnitudes = [vxy, vxz, vyz].map(Math.abs);
+        const k = magnitudes.indexOf(Math.max(...magnitudes));
+        d = (['xy', 'xz', 'yz'] as const)[k];
+        sign = Math.sign([vxy, vxz, vyz][k]) || 1;
+      } else if (small(vz)) {
+        d = 'x2-y2';
+        sign = Math.sign(vx) || 1;
+      } else {
+        d = 'z2';
+        sign = Math.sign(vz) || 1;
+      }
+      fn = { atomIndex: aoAtom[mu], angular: 'd', axis: [0, 0, 0], d };
+    } else {
+      return null; // an f shell: GFN2 has none
+    }
+    basis.push(fn);
+    signs.push(sign);
+  }
+  unit.delete?.();
+  return { basis, signs };
+}
+
+/** A Mat (rows × cols) as nested arrays, [column][row] — one MO per column. */
+function columns(mat: any): number[][] {
+  const rows = mat.rows();
+  const out: number[][] = [];
+  for (let j = 0; j < mat.cols(); j++) {
+    const column: number[] = [];
+    for (let i = 0; i < rows; i++) column.push(mat.get(i, j));
+    out.push(column);
+  }
+  return out;
+}
+
+function vector(v: any): number[] {
+  return Array.from({ length: v.size() }, (_, i) => v.get(i) as number);
+}
+
+/** Each orbital's Mulliken share per atom: Σ over the atom's AOs of c_μ (S c)_μ. */
+function atomShares(orbitals: number[][], overlap: any, aoAtom: number[], atomCount: number): number[][] {
+  const n = aoAtom.length;
+  return orbitals.map((c) => {
+    const shares = new Array(atomCount).fill(0);
+    for (let mu = 0; mu < n; mu++) {
+      let sc = 0;
+      for (let nu = 0; nu < n; nu++) sc += overlap.get(mu, nu) * c[nu];
+      shares[aoAtom[mu]] += c[mu] * sc;
+    }
+    return shares;
+  });
+}
+
+export async function propertiesAt(
   molecule: Molecule,
   locateFile?: (path: string) => string,
-): Promise<number[] | null> {
+): Promise<Gfn2Properties | null> {
   const count = molecule.atoms.length;
   if (count === 0) return null;
   const M = await (locateFile ? loadGfn2(locateFile) : loadGfn2());
-  const angstrom = molecule.atoms.flatMap((a) => [a.x, a.y, a.z]);
+  // In the principal-axis frame — the one extended Hückel solves in — so a p
+  // orbital here is the same px/py/pz as there, and the irrep labels and the
+  // degenerate-set canonicalization can be shared. Energies, charges and bond
+  // orders do not care; the dipole is turned back below.
+  const frame = alignToPrincipalAxes(molecule);
+  const angstrom = frame.atoms.flatMap((a) => [a.x, a.y, a.z]);
   const calc = M.XtbCalculator.fromMolecule(
     new M.Molecule(M.IVec.fromArray(molecule.atoms.map((a) => elementToZ(a.element))), toMat3N(M, angstrom, count)),
   );
+  let keep = false;
   try {
+    const multiplicity = molecule.multiplicity ?? lowestMultiplicity(molecule.atoms);
     calc.charge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
-    calc.numUnpairedElectrons = (molecule.multiplicity ?? lowestMultiplicity(molecule.atoms)) - 1;
+    calc.numUnpairedElectrons = multiplicity - 1;
     const energy = calc.singlePointEnergy();
-    if (!Number.isFinite(energy) || calc.lastResult()?.converged === false) return null;
-    const q = calc.charges();
-    if (q.size() !== count) return null;
-    return Array.from({ length: count }, (_, i) => q.get(i));
+    const result = calc.lastResult();
+    if (!Number.isFinite(energy) || result?.converged === false) return null;
+    const charges = vector(calc.charges());
+    if (charges.length !== count) return null;
+
+    const wiberg = calc.bondOrders();
+    const bondOrders = molecule.bonds.map((b) => wiberg.get(b.atom1Index, b.atom2Index) as number);
+    const magnetization = vector(calc.atomicMagnetization());
+    const spin = magnetization.length === count ? magnetization : null;
+
+    // The full dipole needs the Valence patch to OCC (see vendor/occ-wasm).
+    let dipole: [number, number, number] | null = null;
+    if (typeof calc.dipoleMoment === 'function') {
+      // about the frame's origin (the centre of mass), in the frame's axes:
+      // back to the molecule's axes and its coordinate origin (p + Q·r_com
+      // for an ion, the same convention OCC's own dipole uses)
+      const mu = calc.dipoleMoment();
+      const inFrame = [mu.x(), mu.y(), mu.z()].map((v) => v * DEBYE_PER_E_BOHR);
+      const [ax, ay, az] = frame.axes;
+      const netCharge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
+      dipole = [0, 1, 2].map((k) =>
+        inFrame[0] * ax[k] + inFrame[1] * ay[k] + inFrame[2] * az[k]
+        + netCharge * frame.origin[k] * DEBYE_PER_E_ANGSTROM,
+      ) as [number, number, number];
+    }
+
+    // The AO → atom map comes from the patch too; without it the shares are
+    // left empty rather than guessed.
+    const aoAtom = typeof calc.aoAtoms === 'function' ? vector(calc.aoAtoms()) : null;
+    const overlap = result.overlapMatrix;
+    const orbitalSet = (energies: any, occupations: any, coefficients: number[][]): Gfn2OrbitalSet => ({
+      energies: vector(energies).map((e) => e * EV_PER_HARTREE),
+      occupations: vector(occupations),
+      atomShares: aoAtom ? atomShares(coefficients, overlap, aoAtom, count) : [],
+    });
+    const alphaC = columns(result.orbitalCoefficients);
+    const alpha = orbitalSet(result.orbitalEnergies, result.orbitalOccupations, alphaC);
+    let beta: Gfn2OrbitalSet | null = null;
+    let betaC: number[][] | null = null;
+    if (result.unrestricted) {
+      betaC = columns(result.orbitalCoefficientsBeta);
+      beta = orbitalSet(result.orbitalEnergiesBeta, result.orbitalOccupationsBeta, betaC);
+    }
+
+    const described = describeBasis(M, calc, frame.atoms);
+    const signs = described?.signs ?? alphaC[0]?.map(() => 1) ?? [];
+    const flip = (orbitals: number[][]) => orbitals.map((c) => c.map((x, mu) => x * signs[mu]));
+    const n = signs.length;
+    const overlapRows: number[][] = [];
+    for (let mu = 0; mu < n; mu++) {
+      const row: number[] = [];
+      for (let nu = 0; nu < n; nu++) row.push(overlap.get(mu, nu) * signs[mu] * signs[nu]);
+      overlapRows.push(row);
+    }
+
+    if (kept) release(kept.calc);
+    kept = { key: nextKey++, calc, signs, frame, fields: new Map() };
+    keep = true;
+    return {
+      charges, bondOrders, spin, multiplicity, dipole, alpha, beta, key: kept.key,
+      orbitalBasis: described?.basis ?? null,
+      frame,
+      coefficients: { alpha: flip(alphaC), beta: betaC ? flip(betaC) : null },
+      overlap: overlapRows,
+    };
   } finally {
-    release(calc);
+    if (!keep) release(calc);
   }
 }
 
-self.onmessage = async (e: MessageEvent<{ id: number; molecule?: Molecule; task?: 'optimise' | 'charges' | 'load' }>) => {
-  const { id, molecule, task } = e.data;
+/** A GFN2 orbital sampled on a grid in the frame (Å), ψ in bohr^-3/2. */
+interface OrbitalGrid {
+  values: Float32Array;
+  origin: [number, number, number];
+  dimensions: [number, number, number];
+  spacing: number;
+  peak: number;
+}
+
+/** A request for one orbital's surface at one level. */
+export interface OrbitalSurfaceRequest {
+  /** The properties run whose calculator holds the orbitals. */
+  key: number;
+  /** Names the orbital for the field cache ("alpha:5"). */
+  orbital: string;
+  /** Its coefficients, sign-normalised as the properties gave them. */
+  coefficients: number[];
+  /** The atoms it lives on (Mulliken share above a few percent): the box. */
+  atoms: number[];
+  /** A percentile of the orbital's own weight, or an absolute amplitude. */
+  mode: 'percentile' | 'absolute';
+  value: number;
+}
+
+/** The surface, in the molecule's coordinates — what the renderer draws. */
+export interface OrbitalSurface {
+  positions: Float32Array;
+  normals: Float32Array;
+  phases: Float32Array;
+  vertexCount: number;
+  isovalue: number;
+}
+
+/** Grid points per field at most; 216 000 points cost ~40 ms. */
+const ORBITAL_GRID_POINTS = 300_000;
+/** How far past its atoms an orbital is sampled (Å): GFN2's valence STO-nG
+ *  functions reach further than the Slater set's at the lowest level offered. */
+const ORBITAL_PAD = 3.5;
+
+function orbitalGrid(M: any, request: OrbitalSurfaceRequest): OrbitalGrid | null {
+  if (!kept || kept.key !== request.key) return null;
+  const cached = kept.fields.get(request.orbital);
+  if (cached) return cached;
+  const atoms = kept.frame.atoms;
+  const lo = [Infinity, Infinity, Infinity];
+  const hi = [-Infinity, -Infinity, -Infinity];
+  for (const i of request.atoms.length > 0 ? request.atoms : atoms.map((_, i) => i)) {
+    const p = [atoms[i].x, atoms[i].y, atoms[i].z];
+    for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], p[c] - ORBITAL_PAD); hi[c] = Math.max(hi[c], p[c] + ORBITAL_PAD); }
+  }
+  const volume = (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
+  const spacing = Math.max(0.15, Math.min(0.25, Math.cbrt(volume / ORBITAL_GRID_POINTS)));
+  const dims = [0, 1, 2].map((c) => Math.ceil((hi[c] - lo[c]) / spacing) + 1) as [number, number, number];
+  const count = dims[0] * dims[1] * dims[2];
+  const points = M.Mat3N.create(count);
+  let index = 0;
+  for (let gz = 0; gz < dims[2]; gz++) {
+    for (let gy = 0; gy < dims[1]; gy++) {
+      for (let gx = 0; gx < dims[0]; gx++) {
+        points.set(0, index, (lo[0] + gx * spacing) / ANGSTROM_PER_BOHR);
+        points.set(1, index, (lo[1] + gy * spacing) / ANGSTROM_PER_BOHR);
+        points.set(2, index, (lo[2] + gz * spacing) / ANGSTROM_PER_BOHR);
+        index++;
+      }
+    }
+  }
+  const coefficients = M.Vec.create(request.coefficients.length);
+  request.coefficients.forEach((c, mu) => coefficients.set(mu, c * kept!.signs[mu]));
+  const out = kept.calc.orbitalValues(points, coefficients);
+  const values = new Float32Array(count);
+  let peak = 0;
+  for (let i = 0; i < count; i++) {
+    const v = out.get(0, i) as number;
+    values[i] = v;
+    peak = Math.max(peak, Math.abs(v));
+  }
+  points.delete?.();
+  out.delete?.();
+  coefficients.delete?.();
+  const grid: OrbitalGrid = { values, origin: lo as [number, number, number], dimensions: dims, spacing, peak };
+  if (kept.fields.size >= 8) kept.fields.clear();
+  kept.fields.set(request.orbital, grid);
+  return grid;
+}
+
+/**
+ * One orbital's surface: the field (cached per orbital), the level, the march,
+ * and each vertex's normal from the analytic ∇ψ — the grid is not consulted
+ * for direction, for the reason given in marchMoField. Then from the frame back
+ * to the molecule's coordinates.
+ */
+export async function orbitalSurface(request: OrbitalSurfaceRequest): Promise<OrbitalSurface | null> {
+  const M = await loadGfn2();
+  const grid = orbitalGrid(M, request);
+  if (!grid || !kept) return null;
+  const level = request.mode === 'percentile'
+    ? levelForFraction(grid as unknown as Parameters<typeof levelForFraction>[0], request.value)
+    : request.value;
+  const sheets = marchSignedField(grid, level, () => [0, 0, 0]);
+  const vertexCount = sheets.positions.length / 3;
+  const normals = new Float32Array(sheets.positions.length);
+  if (vertexCount > 0) {
+    const points = M.Mat3N.create(vertexCount);
+    for (let v = 0; v < vertexCount; v++) {
+      for (let c = 0; c < 3; c++) points.set(c, v, sheets.positions[3 * v + c] / ANGSTROM_PER_BOHR);
+    }
+    const coefficients = M.Vec.create(request.coefficients.length);
+    request.coefficients.forEach((c, mu) => coefficients.set(mu, c * kept!.signs[mu]));
+    const out = kept.calc.orbitalValues(points, coefficients);
+    for (let v = 0; v < vertexCount; v++) {
+      const g = [out.get(1, v), out.get(2, v), out.get(3, v)] as number[];
+      const length = Math.hypot(g[0], g[1], g[2]) || 1;
+      // outward: down the gradient on the positive sheet, up it on the negative
+      const outward = -sheets.phases[v];
+      for (let c = 0; c < 3; c++) normals[3 * v + c] = (outward * g[c]) / length;
+    }
+    points.delete?.();
+    out.delete?.();
+    coefficients.delete?.();
+    // The marcher winds each triangle by the normal it is handed, and it was
+    // handed none (the gradient comes in one batch, afterwards): wind each
+    // triangle now so its face points the way its vertices' normals do.
+    const p = sheets.positions;
+    for (let t = 0; t < vertexCount; t += 3) {
+      const i = 3 * t, j = i + 3, k = i + 6;
+      const ux = p[j] - p[i], uy = p[j + 1] - p[i + 1], uz = p[j + 2] - p[i + 2];
+      const vx = p[k] - p[i], vy = p[k + 1] - p[i + 1], vz = p[k + 2] - p[i + 2];
+      const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
+      const nx = normals[i] + normals[j] + normals[k];
+      const ny = normals[i + 1] + normals[j + 1] + normals[k + 1];
+      const nz = normals[i + 2] + normals[j + 2] + normals[k + 2];
+      if (fx * nx + fy * ny + fz * nz < 0) {
+        for (let c = 0; c < 3; c++) {
+          [p[j + c], p[k + c]] = [p[k + c], p[j + c]];
+          [normals[j + c], normals[k + c]] = [normals[k + c], normals[j + c]];
+        }
+        [sheets.phases[t + 1], sheets.phases[t + 2]] = [sheets.phases[t + 2], sheets.phases[t + 1]];
+      }
+    }
+  }
+  const { axes: [ax, ay, az], origin } = kept.frame;
+  const positions = new Float32Array(sheets.positions.length);
+  const worldNormals = new Float32Array(normals.length);
+  for (let i = 0; i < positions.length; i += 3) {
+    const [x, y, z] = [sheets.positions[i], sheets.positions[i + 1], sheets.positions[i + 2]];
+    const [nx, ny, nz] = [normals[i], normals[i + 1], normals[i + 2]];
+    for (let c = 0; c < 3; c++) {
+      positions[i + c] = origin[c] + x * ax[c] + y * ay[c] + z * az[c];
+      worldNormals[i + c] = nx * ax[c] + ny * ay[c] + nz * az[c];
+    }
+  }
+  return { positions, normals: worldNormals, phases: new Float32Array(sheets.phases), vertexCount, isovalue: level };
+}
+
+self.onmessage = async (e: MessageEvent<{ id: number; molecule?: Molecule; task?: 'optimise' | 'properties' | 'surface' | 'load'; surface?: OrbitalSurfaceRequest }>) => {
+  const { id, molecule, task, surface } = e.data;
   try {
     // 'load' instantiates the engine and nothing else — the page asks for it
     // at startup, so the first optimisation does not wait on the download
     const result = task === 'load'
       ? (await loadGfn2(), true)
-      : task === 'charges'
-        ? await chargesAt(molecule!)
+      : task === 'properties'
+        ? await propertiesAt(molecule!)
+        : task === 'surface'
+          ? await orbitalSurface(surface!)
         : await optimizeWithGfn2(molecule!, undefined, (progress) => self.postMessage({ id, progress }));
     self.postMessage({ id, result });
   } catch (error) {

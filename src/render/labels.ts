@@ -51,6 +51,39 @@ export function formatCharge(q: number): string {
   return q > 0 ? `+${q.toFixed(2)}` : `−${Math.abs(q).toFixed(2)}`;
 }
 
+/**
+ * Wiberg bond orders, one label at each bond's midpoint: GFN2's own count of
+ * the electron pairs shared across the bond (Σ (PS)μν (PS)νμ over the two
+ * atoms' orbitals) — benzene's 1.4, a carbonyl's 2.0, XeF₂'s half-bonds.
+ * Pushed toward the camera by about a bond's radius, so the bond does not
+ * hide its own number.
+ */
+export function renderBondOrderLabels(group: THREE.Group, molecule: Molecule, bondOrders: number[]): void {
+  molecule.bonds.forEach((bond, i) => {
+    const order = bondOrders[i];
+    if (order === undefined) return;
+    const a = molecule.atoms[bond.atom1Index];
+    const b = molecule.atoms[bond.atom2Index];
+    const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, mz = (a.z + b.z) / 2;
+    const sprite = makeTextSprite(order.toFixed(2));
+    sprite.position.set(mx, my, mz);
+    sprite.userData = { atomX: mx, atomY: my, atomZ: mz, push: 0.35 };
+    group.add(sprite);
+  });
+}
+
+/** A spin population: "0.83", "−0.12" (U+2212 minus) — where the unpaired
+ *  electrons sit, and the small opposite spin polarisation leaves behind. */
+export function formatSpin(s: number): string {
+  if (Math.abs(s) < 0.005) return '0.00';
+  return s > 0 ? s.toFixed(2) : `−${Math.abs(s).toFixed(2)}`;
+}
+
+/** Spin populations (α − β per atom) of an open-shell structure, on the atoms. */
+export function renderSpinLabels(group: THREE.Group, molecule: Molecule, spin: number[]): void {
+  placeAtomLabels(group, molecule, (i) => (spin[i] === undefined ? null : formatSpin(spin[i])));
+}
+
 // Partial-charge labels — the element-label treatment (shadowed circle at
 // the atom center, pushed toward the camera per-frame) because the two label
 // modes are mutually exclusive and occupy the same spot. Values come from
