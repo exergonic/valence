@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetch3D } from '../src/geometry/resolve3d';
+import { displayName, fetch3D } from '../src/geometry/resolve3d';
 import {
   drawnCyclobutadiene,
   drawnMethylAnion,
@@ -133,5 +133,30 @@ describe('fetch3D validation guard', () => {
     expect(result).toBeNull();
     // Both legs were attempted.
     expect(fn.mock.calls.length).toBe(2);
+  });
+});
+
+// PubChem's Title is the record's first depositor synonym. Ethoxide's record
+// (CID 119440, CC[O-]) is titled "1-Hydroxyethyl radical" — a radical has an
+// odd electron count, so for a closed-shell structure the IUPAC name stands in.
+describe('displayName', () => {
+  const ethoxide = {
+    atoms: [
+      { element: 'C', x: 0, y: 0, z: 0 }, { element: 'C', x: 0, y: 0, z: 0 },
+      { element: 'O', x: 0, y: 0, z: 0, charge: -1 },
+      ...Array.from({ length: 5 }, () => ({ element: 'H', x: 0, y: 0, z: 0 })),
+    ],
+    bonds: [],
+  } as unknown as Parameters<typeof displayName>[2];
+  const hydroxyethyl = { ...ethoxide, atoms: ethoxide.atoms.map((a) => ({ ...a, charge: 0 })) };
+
+  it('drops a Title that calls a closed-shell structure a radical', () => {
+    expect(displayName('1-Hydroxyethyl radical', 'ethanolate', ethoxide)).toBe('ethanolate');
+  });
+  it('keeps the radical Title on a structure with an unpaired electron', () => {
+    expect(displayName('1-Hydroxyethyl radical', '1-hydroxyethyl', hydroxyethyl)).toBe('1-Hydroxyethyl radical');
+  });
+  it('keeps an ordinary Title over the IUPAC name', () => {
+    expect(displayName('Methoxide', 'methanolate', ethoxide)).toBe('Methoxide');
   });
 });

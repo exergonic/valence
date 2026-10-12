@@ -2,6 +2,7 @@ import type { Molecule } from '../mol-parser';
 import { parseMolBlock } from '../mol-parser';
 import { structuresMatch, unrepresentableCharge } from './validate-structure';
 import { ATOMIC_MASS } from '../chem/assign-mass';
+import { lowestMultiplicity } from '../chem/elements';
 
 export interface PubChemInfo {
   source: 'pubchem' | 'cir' | 'local' | 'gfn2';
@@ -148,6 +149,25 @@ async function fetchPubChemRecord(cid: string): Promise<{ name?: string; pubchem
 }
 
 /**
+ * The name for the placard. PubChem's Title is usually the best one (the
+ * common name: "Acetate", "Methoxide"), but it is simply the record's first
+ * depositor synonym, and some deposits are wrong: ethoxide's record (CID
+ * 119440, CC[O-]) is titled "1-Hydroxyethyl radical". A radical has an odd
+ * electron count, so a Title calling an even-count structure a radical
+ * contradicts the structure itself, and the computed IUPAC name ("ethanolate")
+ * is shown instead.
+ */
+export function displayName(
+  title: string | undefined,
+  iupacName: string | undefined,
+  molecule: Molecule,
+): string | undefined {
+  const closedShell = lowestMultiplicity(molecule.atoms) === 1;
+  if (title && iupacName && closedShell && /\bradical\b/i.test(title)) return iupacName;
+  return title ?? iupacName;
+}
+
+/**
  * Try one 3D structure service, then reject any structure the guard refuses:
  * identity first (heavy-atom graph + net formal charge must match the
  * sketched molecule — see validate-structure.ts; the services resolve the
@@ -210,7 +230,7 @@ export async function fetch3D(smiles: string, reference: Molecule): Promise<Fetc
     if (pubchem.info.cid) {
       const record = await fetchPubChemRecord(pubchem.info.cid);
       if (record) {
-        pubchem.info.name = record.name;
+        pubchem.info.name = displayName(record.name, record.pubchem.iupacName, pubchem.molecule);
         pubchem.info.pubchem = record.pubchem;
       }
     }
