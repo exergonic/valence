@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
-import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe } from './lobes';
+import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe, sharedUnitSphere } from './lobes';
 import { getElementColor, getCovalentRadius, getVdwRadius, VISUAL_RADIUS_SCALE } from './chem-data';
 import { sigmaNeighbors, type AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import { getLonePairDirections } from '../chem/vsepr/orient-lone-pairs';
@@ -98,9 +98,10 @@ export function renderHybridOrbitals(
 /** An s orbital: a translucent sphere on the atom. */
 function sOrbitalSphere(radius: number, color: number, at: [number, number, number]): THREE.Mesh {
   const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(radius, 24, 24),
+    sharedUnitSphere(),
     new THREE.MeshPhongMaterial({ color, transparent: true, opacity: 0.55, depthWrite: false }),
   );
+  mesh.scale.setScalar(radius);
   mesh.position.set(...at);
   return mesh;
 }

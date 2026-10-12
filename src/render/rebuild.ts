@@ -42,7 +42,8 @@ function clearGroup(g: THREE.Group) {
       clearGroup(child);
     }
     if (child instanceof THREE.Mesh) {
-      child.geometry.dispose();
+      // the orbital lobes share one geometry per kind (lobes.ts)
+      if (!child.geometry.userData.shared) child.geometry.dispose();
       if (Array.isArray(child.material)) {
         child.material.forEach(m => m.dispose());
       } else {
