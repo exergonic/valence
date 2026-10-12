@@ -30,6 +30,8 @@ import { alignToPrincipalAxes, type PrincipalFrame } from '../chem/extended-huck
 import { levelForFraction } from '../chem/extended-huckel/mo-surface';
 import { marchSignedField } from '../utils/march-tetrahedra';
 import { jacobiSymmetric } from '../utils/eigen';
+import { fitChargesToPotential, mkFitPoints, fibonacciSphere } from '../chem/charge-model/esp-fit';
+import { cm5Corrections, cm5Covers, hirshfeldCharges, type RadialDensity } from '../chem/charge-model/cm5';
 import {
   optimize_lbfgs,
   optimize_steepest_descent,
@@ -770,7 +772,9 @@ export interface Gfn2BasisFunction {
 // The calculator of the latest properties run, for `orbitalSurface`: its
 // geometry (the frame's), and the sign each AO was flipped by. Orbital fields
 // already built for it are cached by orbital, so a new level re-marches.
-let kept: { key: number; calc: any; signs: number[]; frame: PrincipalFrame; fields: Map<string, OrbitalGrid> } | null = null;
+let kept: {
+  key: number; calc: any; signs: number[]; frame: PrincipalFrame; netCharge: number; fields: Map<string, OrbitalGrid>;
+} | null = null;
 let nextKey = 1;
 
 /**
@@ -983,7 +987,7 @@ export async function propertiesAt(
     }
 
     if (kept) release(kept.calc);
-    kept = { key: nextKey++, calc, signs, frame, fields: new Map() };
+    kept = { key: nextKey++, calc, signs, frame, netCharge: molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0), fields: new Map() };
     keep = true;
     return {
       charges, bondOrders, spin, multiplicity, dipole, atomicDipoles, atomicQuadrupoles, alpha, beta, key: kept.key,
@@ -1284,7 +1288,131 @@ export async function espSurface(key: number): Promise<Gfn2EspSurface | null> {
   return { positions, normals: turned, potentials: Float32Array.from(carried), vertexCount };
 }
 
-self.onmessage = async (e: MessageEvent<{ id: number; molecule?: Molecule; task?: 'optimise' | 'properties' | 'surface' | 'esp' | 'load'; surface?: OrbitalSurfaceRequest; key?: number }>) => {
+/** The charge sets beyond Mulliken, for the properties run `key` names, in
+ *  the molecule's atom order (e). Each is null when it could not be had. */
+export interface Gfn2ChargeSets {
+  /** Merz–Kollman ESP-fitted charges, fitted to the exact potential. */
+  espFitted: number[] | null;
+  /** Hirshfeld charges on GFN2's density, with GFN2 free atoms. */
+  hirshfeld: number[] | null;
+  /** Hirshfeld plus the CM5 correction. */
+  cm5: number[] | null;
+  /** How far the Hirshfeld quadrature missed the net charge before it was
+   *  shared out (e) — a check on the grid, held small by the tests. */
+  hirshfeldResidual: number | null;
+}
+
+/**
+ * The charge sets the Charge Model control offers beyond Mulliken, from the
+ * calculator of the properties run `key` names. Two other ways to divide the
+ * same density into atoms: by which point charges best reproduce its potential
+ * outside the molecule (ESP-fitted), and by real-space stockholder shares
+ * (Hirshfeld, then CM5). Built only when asked for.
+ */
+export async function chargeSets(key: number): Promise<Gfn2ChargeSets | null> {
+  const M = await loadGfn2();
+  if (!kept || kept.key !== key) return null;
+  const { calc, frame, netCharge } = kept;
+  const atoms = frame.atoms;
+
+  let espFitted: number[] | null = null;
+  if (typeof calc.electrostaticPotential === 'function') {
+    const points = mkFitPoints(atoms);
+    const n = points.length / 3;
+    const at = M.Mat3N.create(n);
+    for (let p = 0; p < n; p++) for (let c = 0; c < 3; c++) at.set(c, p, points[3 * p + c] / ANGSTROM_PER_BOHR);
+    const phi = calc.electrostaticPotential(at);
+    at.delete?.();
+    // Eh/e to the app's e/Å
+    const potentials = Array.from({ length: n }, (_, p) => (phi.get(p) as number) / ANGSTROM_PER_BOHR);
+    phi.delete?.();
+    espFitted = fitChargesToPotential(atoms, points, potentials, netCharge);
+  }
+
+  let hirshfeld: number[] | null = null;
+  let cm5: number[] | null = null;
+  let hirshfeldResidual: number | null = null;
+  if (typeof calc.densityValues === 'function' && cm5Covers(atoms)) {
+    const free = atoms.map((a) => freeAtomDensity(M, a.element));
+    if (free.every((f): f is RadialDensity => f !== null)) {
+      const bohr = atoms.map((a) => ({ x: a.x / ANGSTROM_PER_BOHR, y: a.y / ANGSTROM_PER_BOHR, z: a.z / ANGSTROM_PER_BOHR }));
+      const density = (points: Float64Array) => {
+        const n = points.length / 3;
+        const at = M.Mat3N.create(n);
+        for (let p = 0; p < n; p++) for (let c = 0; c < 3; c++) at.set(c, p, points[3 * p + c]);
+        const rho = calc.densityValues(at);
+        at.delete?.();
+        const out = new Float64Array(n);
+        for (let p = 0; p < n; p++) out[p] = rho.get(p);
+        rho.delete?.();
+        return out;
+      };
+      const partition = hirshfeldCharges(bohr, free, density, netCharge);
+      hirshfeld = partition.charges;
+      hirshfeldResidual = partition.residual;
+      const correction = cm5Corrections(atoms);
+      cm5 = hirshfeld.map((q, a) => q + correction[a]);
+    }
+  }
+  return { espFitted, hirshfeld, cm5, hirshfeldResidual };
+}
+
+/** Free-atom radial grid: step and reach (bohr), and the directions each
+ *  radius is averaged over. */
+const FREE_ATOM_STEP = 0.01;
+const FREE_ATOM_REACH = 16;
+const FREE_ATOM_DIRECTIONS = 62;
+
+/** GFN2's free atoms, by element: computed once per worker. */
+const freeAtoms = new Map<string, RadialDensity | null>();
+
+/**
+ * A neutral GFN2 atom's valence density, spherically averaged — Hirshfeld's
+ * reference atom. An open p shell (carbon's 2p²) is not spherical as computed,
+ * so each radius is the average over many directions: the "free atom" of the
+ * partition is the spherical one. Null when the engine cannot converge the
+ * atom on its own.
+ */
+function freeAtomDensity(M: any, element: string): RadialDensity | null {
+  if (freeAtoms.has(element)) return freeAtoms.get(element)!;
+  let result: RadialDensity | null = null;
+  const calc = M.XtbCalculator.fromMolecule(new M.Molecule(M.IVec.fromArray([elementToZ(element)]), toMat3N(M, [0, 0, 0], 1)));
+  try {
+    calc.charge = 0;
+    calc.numUnpairedElectrons = lowestMultiplicity([{ element }]) - 1;
+    const energy = calc.singlePointEnergy();
+    if (Number.isFinite(energy) && calc.lastResult()?.converged !== false) {
+      const radii = Math.round(FREE_ATOM_REACH / FREE_ATOM_STEP) + 1;
+      const directions = fibonacciSphere(FREE_ATOM_DIRECTIONS);
+      const points = M.Mat3N.create(radii * directions.length);
+      let p = 0;
+      for (let i = 0; i < radii; i++) {
+        for (const d of directions) {
+          for (let c = 0; c < 3; c++) points.set(c, p, i * FREE_ATOM_STEP * d[c]);
+          p++;
+        }
+      }
+      const values = calc.densityValues(points);
+      points.delete?.();
+      const rho = new Float64Array(radii);
+      for (let i = 0; i < radii; i++) {
+        let sum = 0;
+        for (let k = 0; k < directions.length; k++) sum += values.get(i * directions.length + k);
+        rho[i] = sum / directions.length;
+      }
+      values.delete?.();
+      result = { step: FREE_ATOM_STEP, rho };
+    }
+  } catch {
+    result = null;
+  } finally {
+    release(calc);
+  }
+  freeAtoms.set(element, result);
+  return result;
+}
+
+self.onmessage = async (e: MessageEvent<{ id: number; molecule?: Molecule; task?: 'optimise' | 'properties' | 'surface' | 'esp' | 'charges' | 'load'; surface?: OrbitalSurfaceRequest; key?: number }>) => {
   const { id, molecule, task, surface, key } = e.data;
   try {
     // 'load' instantiates the engine and nothing else — the page asks for it
@@ -1297,6 +1425,8 @@ self.onmessage = async (e: MessageEvent<{ id: number; molecule?: Molecule; task?
           ? await orbitalSurface(surface!)
           : task === 'esp'
             ? await espSurface(key!)
+            : task === 'charges'
+              ? await chargeSets(key!)
         : await optimizeWithGfn2(molecule!, undefined, (progress) => self.postMessage({ id, progress }));
     self.postMessage({ id, result });
   } catch (error) {

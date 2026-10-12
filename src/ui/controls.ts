@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { SceneContext, ColorScheme, AtomStyle } from '../render';
 import { syncChargeModelControl } from '../render';
+import { asChargeModel } from '../render/setup';
 import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { espColor } from '../chem/charge-model/esp';
@@ -80,7 +81,7 @@ export function setupControls(ctx: SceneContext) {
   const chargeModelSelect = document.querySelector<HTMLSelectElement>('#ctrl-charge-model')!;
   chargeModelSelect.value = ctx.display.chargeModel;
   chargeModelSelect.addEventListener('change', () => {
-    ctx.display.chargeModel = chargeModelSelect.value === 'gfn2' ? 'gfn2' : 'mmff94';
+    ctx.display.chargeModel = asChargeModel(chargeModelSelect.value);
     rerender();
   });
   syncChargeModelControl(ctx);

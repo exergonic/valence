@@ -289,6 +289,52 @@ describe('GFN2-xTB', () => {
     expect(surface.potentials[highest]).toBeGreaterThan(0);
   }, 180_000);
 
+  // The charge sets beyond Mulliken, three ways of dividing the same density.
+  // ESP-fitted charges are fitted to the potential outside, so they give back
+  // the full dipole; Hirshfeld's real-space shares are famously small, and
+  // CM5's bond correction roughly doubles them (DFT water: about −0.33 and
+  // −0.66 on the O). The Hirshfeld grid must hold the net charge by itself.
+  it("divides water's density three ways: ESP-fitted, Hirshfeld, CM5", async () => {
+    const { propertiesAt, chargeSets } = await import('../src/geometry/gfn2-refine.worker');
+    const p = (await propertiesAt(water, vendorFile))!;
+    const sets = (await chargeSets(p.key))!;
+    const esp = sets.espFitted!, hirshfeld = sets.hirshfeld!, cm5 = sets.cm5!;
+    for (const q of [esp, hirshfeld, cm5]) expect(q.reduce((a, b) => a + b, 0)).toBeCloseTo(0, 6);
+    expect(Math.abs(sets.hirshfeldResidual!)).toBeLessThan(2e-3);
+    const debye = Math.hypot(...[0, 1, 2].map((c) =>
+      esp.reduce((sum, q, i) => sum + q * [water.atoms[i].x, water.atoms[i].y, water.atoms[i].z][c], 0) * 4.80320));
+    expect(debye).toBeCloseTo(Math.hypot(...p.dipole!), 1);
+    expect(hirshfeld[0]).toBeGreaterThan(-0.45);
+    expect(hirshfeld[0]).toBeLessThan(-0.25);
+    expect(cm5[0]).toBeGreaterThan(-0.8);
+    expect(cm5[0]).toBeLessThan(-0.6);
+    expect(cm5[1]).toBeCloseTo(cm5[2], 3); // the golden-spiral grid is not symmetric
+  }, 180_000);
+
+  // The inductive effect, on the conformers PubChem returns: a chlorine on the
+  // far carbon leaves the oxygen less negative under every charge set, and
+  // CM5 shows it on the oxygen's own carbon as well (Mulliken barely moves
+  // that carbon: its hydrogens carry the change).
+  it('shows the chlorine’s pull on 2-chloroethanolate against ethoxide', async () => {
+    const { propertiesAt, chargeSets } = await import('../src/geometry/gfn2-refine.worker');
+    const { PUBCHEM_ETHOXIDE_SDF, PUBCHEM_CHLOROETHOXIDE_SDF } = await import('./fixtures');
+    const run = async (sdf: string) => {
+      const molecule = parseMolBlock(sdf);
+      const p = (await propertiesAt(molecule, vendorFile))!;
+      const sets = (await chargeSets(p.key))!;
+      const oxygen = molecule.atoms.findIndex((a) => a.element === 'O');
+      const bonded = molecule.bonds.find((b) =>
+        (b.atom1Index === oxygen || b.atom2Index === oxygen))!;
+      const carbon = bonded.atom1Index === oxygen ? bonded.atom2Index : bonded.atom1Index;
+      return { mulliken: p.charges, cm5: sets.cm5!, oxygen, carbon };
+    };
+    const plain = await run(PUBCHEM_ETHOXIDE_SDF);
+    const chloro = await run(PUBCHEM_CHLOROETHOXIDE_SDF);
+    expect(chloro.mulliken[chloro.oxygen]).toBeGreaterThan(plain.mulliken[plain.oxygen] + 0.02);
+    expect(chloro.cm5[chloro.oxygen]).toBeGreaterThan(plain.cm5[plain.oxygen] + 0.02);
+    expect(chloro.cm5[chloro.carbon]).toBeGreaterThan(plain.cm5[plain.carbon] + 0.005);
+  }, 180_000);
+
   // An odd electron count runs as a doublet, and the spin it carries is one
   // electron's worth, shared out over the atoms (H₃Si–Ni as CIR built it).
   it('runs an odd electron count as a doublet and reports where the spin sits — H₃Si–Ni', async () => {

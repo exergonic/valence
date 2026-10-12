@@ -19,10 +19,10 @@ import {
   dipoleFromCharges, dipoleFromFullGfn2, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE, type DipoleResult,
 } from '../chem/charge-model/dipole';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
-import { gfn2PropertiesAt, gfn2OrbitalSurface, gfn2EspSurface, type Gfn2EspSurface } from '../geometry/gfn2-refine';
+import { gfn2PropertiesAt, gfn2OrbitalSurface, gfn2EspSurface, gfn2ChargeSets, type Gfn2EspSurface, type Gfn2ChargeSets } from '../geometry/gfn2-refine';
 import { gfn2Ladders, type Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import { syncVibration } from './vibration';
-import type { ChargeModel } from './setup';
+import { isGfn2ChargeModel, type ChargeModel } from './setup';
 import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
 import { localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
@@ -59,20 +59,53 @@ function gfn2ChargesFailed(ctx: SceneContext): boolean {
   return request !== null && request.molecule === ctx.currentMolecule && request.status === 'failed';
 }
 
+/** The charges each GFN2 option beyond Mulliken reads from its charge sets. */
+const CHARGE_SET: Partial<Record<ChargeModel, 'espFitted' | 'cm5'>> = {
+  'gfn2-esp': 'espFitted',
+  'gfn2-cm5': 'cm5',
+};
+
+/** True when this GFN2 option cannot have charges for the molecule on screen:
+ *  the worker failed to build its set, or built it without this one. */
+function chargeSetMissing(ctx: SceneContext, model: ChargeModel): boolean {
+  const field = CHARGE_SET[model];
+  if (!field) return false;
+  const key = ctx.gfn2Properties?.molecule === ctx.currentMolecule ? ctx.gfn2Properties?.properties.key : undefined;
+  if (key === undefined) return false;
+  if (ctx.gfn2ChargeSetsRequest?.key === key && ctx.gfn2ChargeSetsRequest.failed) return true;
+  return ctx.gfn2ChargeSets?.key === key && ctx.gfn2ChargeSets.sets[field] === null;
+}
+
 /**
  * The charge model on screen for this molecule: the one the control selects,
- * or the other when the selected one has no charges for it — GFN2 when the
- * engine failed, MMFF94 when the molecule is outside its type space. The
- * selection itself is left alone (it is the user's intent, and the next
- * molecule may honour it).
+ * or another when the selected one has no charges for it — MMFF94 when the
+ * engine failed, GFN2 when the molecule is outside MMFF94's type space,
+ * Mulliken when an ESP-fitted or CM5 set could not be built. The selection
+ * itself is left alone (it is the user's intent, and the next molecule may
+ * honour it).
  */
 function effectiveChargeModel(ctx: SceneContext): ChargeModel {
-  if (ctx.display.chargeModel === 'gfn2' && gfn2ChargesFailed(ctx) && ctx.charges) return 'mmff94';
-  if (ctx.display.chargeModel === 'mmff94' && !ctx.charges && ctx.currentMolecule && !gfn2ChargesFailed(ctx)) {
-    return 'gfn2';
-  }
-  return ctx.display.chargeModel;
+  const chosen = ctx.display.chargeModel;
+  if (isGfn2ChargeModel(chosen) && gfn2ChargesFailed(ctx) && ctx.charges) return 'mmff94';
+  if (chosen === 'mmff94' && !ctx.charges && ctx.currentMolecule && !gfn2ChargesFailed(ctx)) return 'gfn2';
+  if (chargeSetMissing(ctx, chosen)) return 'gfn2';
+  return chosen;
 }
+
+/** What each charge set is, for the line under the control. */
+const CHARGE_MODEL_ABOUT: Record<ChargeModel, string> = {
+  gfn2: 'Mulliken: each basis function’s electrons go to the atom it sits on, and a pair shared between two '
+    + 'atoms is split evenly. The charges GFN2-xTB’s own energy uses.',
+  'gfn2-esp': 'ESP-fitted (Merz–Kollman): the point charges that best reproduce GFN2-xTB’s potential on shells '
+    + 'outside the molecule — the closest any point charges come to the surface and the dipole. An atom buried '
+    + 'inside its neighbours (a CH₂ carbon) is barely seen from outside, so its charge is poorly determined '
+    + 'and swings with the conformation.',
+  'gfn2-cm5': 'CM5: Hirshfeld charges — the density at each point shared among the atoms as their free atoms '
+    + 'would claim it — plus a correction for each bond, fitted to reproduce dipole moments. Real-space, and '
+    + 'steady from one conformation to the next.',
+  mmff94: 'MMFF94 BCI: a force field’s charges, from bond-charge increments by atom type — no electronic '
+    + 'structure. The ESP surface and the dipole are these charges’ own.',
+};
 
 /**
  * Keep the charge-model control honest: it shows the model on screen, and
@@ -85,16 +118,21 @@ export function syncChargeModelControl(ctx: SceneContext) {
   if (!select) return;
   const gfn2Failed = gfn2ChargesFailed(ctx);
   const mmff94Missing = ctx.currentMolecule !== null && !ctx.charges;
-  const gfn2Option = select.querySelector<HTMLOptionElement>('option[value="gfn2"]');
-  const mmff94Option = select.querySelector<HTMLOptionElement>('option[value="mmff94"]');
-  if (gfn2Option) gfn2Option.disabled = gfn2Failed;
-  if (mmff94Option) mmff94Option.disabled = mmff94Missing;
+  for (const option of Array.from(select.options)) {
+    const model = option.value as ChargeModel;
+    option.disabled = model === 'mmff94' ? mmff94Missing : gfn2Failed || chargeSetMissing(ctx, model);
+  }
+  const shown = effectiveChargeModel(ctx);
   select.title = gfn2Failed
     ? `GFN2-xTB could not give charges for this molecule (${ctx.gfn2PropertiesRequest?.reason ?? 'the engine failed'}).`
     : mmff94Missing
       ? 'This molecule is outside the MMFF94 type space, so it has no MMFF94 charges.'
-      : 'Which partial charges the charge labels, the ESP surface and the dipole arrow show — one set for all three.';
-  select.value = effectiveChargeModel(ctx);
+      : chargeSetMissing(ctx, ctx.display.chargeModel)
+        ? 'GFN2-xTB could not build that charge set for this molecule, so its Mulliken charges are shown.'
+        : 'Which partial charges the charge labels print.';
+  select.value = shown;
+  const about = document.getElementById('charge-model-about');
+  if (about) about.textContent = CHARGE_MODEL_ABOUT[shown];
 }
 
 /**
@@ -141,8 +179,17 @@ export function gfn2PropertiesOnScreen(ctx: SceneContext): Gfn2Properties | null
  * the engine cannot treat the molecule. MMFF94 when the user picks it.
  */
 function displayedCharges(ctx: SceneContext): { charges: number[] | null; model: ChargeModel; residual: boolean } {
-  if (effectiveChargeModel(ctx) === 'mmff94') {
+  const model = effectiveChargeModel(ctx);
+  if (model === 'mmff94') {
     return { charges: ctx.charges?.charges ?? null, model: 'mmff94', residual: ctx.charges?.residualCharge ?? false };
+  }
+  // ESP-fitted or CM5: from the single point's charge sets, null while the
+  // worker builds them
+  const field = CHARGE_SET[model];
+  if (field) {
+    const properties = gfn2PropertiesOnScreen(ctx);
+    const sets = properties ? gfn2ChargeSetsOnScreen(ctx, properties) : null;
+    return { charges: sets?.[field] ?? null, model, residual: false };
   }
   // the optimiser's own charges when this structure is its result, else the
   // single point's
@@ -240,6 +287,26 @@ function gfn2EspOnScreen(ctx: SceneContext, properties: Gfn2Properties): SceneCo
   return null;
 }
 
+/**
+ * GFN2's ESP-fitted, Hirshfeld and CM5 charges for the single point on screen,
+ * or null while the worker builds them (or when it could not) — asking for
+ * them if nobody has yet.
+ */
+function gfn2ChargeSetsOnScreen(ctx: SceneContext, properties: Gfn2Properties): Gfn2ChargeSets | null {
+  if (ctx.gfn2ChargeSets?.key === properties.key) return ctx.gfn2ChargeSets.sets;
+  if (ctx.gfn2ChargeSetsRequest?.key === properties.key) return null;
+  ctx.gfn2ChargeSetsRequest = { key: properties.key, failed: false };
+  const molecule = ctx.currentMolecule;
+  const settle = (sets: Gfn2ChargeSets | null) => {
+    if (ctx.currentMolecule !== molecule || ctx.gfn2ChargeSetsRequest?.key !== properties.key) return;
+    if (sets) ctx.gfn2ChargeSets = { key: properties.key, sets };
+    else ctx.gfn2ChargeSetsRequest = { key: properties.key, failed: true };
+    ctx.rerender();
+  };
+  gfn2ChargeSets(properties.key).then(settle, () => settle(null));
+  return null;
+}
+
 /** The header's dipole readout — which model it came from is in the hover. */
 function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model: ChargeModel, pending: boolean, full: boolean) {
   const element = document.getElementById('mol-dipole');
@@ -249,11 +316,14 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
     + 'convention; the physics convention draws it the other way.';
   if (dipole) {
     element.textContent = `Dipole: ${dipole.debye.toFixed(2)} D`;
-    element.title = model === 'gfn2'
+    element.title = isGfn2ChargeModel(model)
       ? (full
-        ? 'The full GFN2-xTB dipole: the Mulliken point charges the labels print, plus each atom’s own dipole '
-          + '(the lone pairs’ lopsidedness a point charge cannot hold) — the same picture the ESP surface draws, so '
-          + 'it need not add up from the labels. Semiempirical: water reads 2.28 D against experiment’s 1.85 D. '
+        ? (model === 'gfn2'
+          ? 'The full GFN2-xTB dipole: the Mulliken point charges the labels print, plus each atom’s own dipole '
+            + '(the lone pairs’ lopsidedness a point charge cannot hold) — the same picture the ESP surface draws, so '
+            + 'it need not add up from the labels. '
+          : 'The full GFN2-xTB dipole, from its electron density — the same whichever charges the labels print. ')
+          + 'Semiempirical: water reads 2.28 D against experiment’s 1.85 D. '
         : 'The dipole of the GFN2-xTB Mulliken point charges alone: the engine could not give its full dipole '
           + 'for this structure. ') + convention
       : 'The dipole of the MMFF94 BCI partial charges (a charge model, not a quantum-mechanical dipole). '
@@ -388,7 +458,7 @@ function redrawScene(ctx: SceneContext) {
   // Under GFN2 the dipole is the full density's: the charges plus the atomic
   // dipoles, which add up to it exactly. Until the single point lands nothing;
   // if it failed, the charges' own.
-  const gfn2Dipole = shown.model === 'gfn2';
+  const gfn2Dipole = isGfn2ChargeModel(shown.model);
   const fullDipole = gfn2Dipole ? properties?.dipole ?? null : null;
   ctx.dipole = fullDipole
     ? dipoleFromFullGfn2(ctx.currentMolecule, fullDipole)
@@ -398,7 +468,7 @@ function redrawScene(ctx: SceneContext) {
   if (ctx.dipole) {
     renderDipole(ctx.dipoleGroup, ctx.dipole);
   }
-  showDipoleReadout(ctx, ctx.dipole, shown.model, ctx.dipole === null && shown.model === 'gfn2' && !gfn2ChargesFailed(ctx), fullDipole !== null);
+  showDipoleReadout(ctx, ctx.dipole, shown.model, ctx.dipole === null && gfn2Dipole && !gfn2ChargesFailed(ctx), fullDipole !== null);
 
   // The ESP. Under GFN2: its own 0.001 au density surface, built in the
   // worker, coloured by the exact potential of its charge distribution — the
@@ -407,14 +477,15 @@ function redrawScene(ctx: SceneContext) {
   // Under MMFF94, or when the engine cannot build it, the fused van der Waals
   // surface coloured by the charges (see chem/charge-model/esp.ts), cached by
   // charges since a model switch changes them.
-  if (ctx.display.showEsp && charges) {
-    const gfn2 = shown.model === 'gfn2' && properties;
+  // Under GFN2 the surface needs the single point, not the labels' charges.
+  if (ctx.display.showEsp) {
+    const gfn2 = isGfn2ChargeModel(shown.model) && properties;
     const esp = gfn2 ? gfn2EspOnScreen(ctx, properties) : null;
     const building = gfn2 && !esp && !ctx.gfn2EspRequest?.failed;
     if (esp) {
       renderEsp(ctx.espGroup, esp.exact, ctx.display.espOpacity);
       ctx.espGroup.visible = true;
-    } else if (building) {
+    } else if (building || !charges) {
       ctx.espGroup.visible = false;
     } else {
       if (!ctx.espSurface || ctx.espSurfaceCharges !== charges) {
@@ -544,6 +615,8 @@ export function buildScene(ctx: SceneContext) {
   ctx.espSurfaceCharges = null;
   ctx.gfn2Esp = null;
   ctx.gfn2EspRequest = null;
+  ctx.gfn2ChargeSets = null;
+  ctx.gfn2ChargeSetsRequest = null;
   ctx.moSurfaces.clear();
   ctx.moFields.clear();
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is

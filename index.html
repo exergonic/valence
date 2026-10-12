@@ -211,12 +211,17 @@
             <span class="ctrl-label">Charges from</span>
             <select id="ctrl-charge-model" class="label-mode-select">
               <option value="gfn2">GFN2-xTB (Mulliken)</option>
+              <option value="gfn2-esp">GFN2-xTB (ESP-fitted)</option>
+              <option value="gfn2-cm5">GFN2-xTB (CM5)</option>
               <option value="mmff94">MMFF94 (BCI)</option>
             </select>
+            <p class="measure-hint" id="charge-model-about"></p>
             <p class="measure-hint" id="charge-model-hint">
-              The labels print point charges. Under GFN2-xTB the ESP surface and
-              the dipole come from its full electron density, which a point charge
-              on each nucleus cannot hold — so they need not add up from the labels.
+              The labels print point charges: one way of dividing the electron
+              density among the atoms, and there are several. Under GFN2-xTB the
+              ESP surface and the dipole come from the full density itself, which
+              a point charge on each nucleus cannot hold — so they are the same
+              whichever charges the labels print, and need not add up from them.
             </p>
             <label class="ctrl-toggle">
               <input type="checkbox" id="ctrl-show-esp" />

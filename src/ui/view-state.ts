@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import type { SceneContext } from '../render';
 import { buildScene } from '../render';
+import { asChargeModel } from '../render/setup';
 import type { Annotation } from './annotations';
 
 export interface ViewState {
@@ -76,9 +77,9 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
   ctx.display.atomScale = d.atomScale;
   ctx.display.bondScale = d.bondScale;
   ctx.display.labelMode = d.labelMode as any;
-  // GFN2-xTB unless the view chose MMFF94: views saved before the selector
-  // existed never chose, so they get the default like everyone else.
-  ctx.display.chargeModel = d.chargeModel === 'mmff94' ? 'mmff94' : 'gfn2';
+  // GFN2-xTB Mulliken unless the view chose another: views saved before the
+  // selector existed never chose, so they get the default like everyone else.
+  ctx.display.chargeModel = asChargeModel(d.chargeModel);
   ctx.display.orbitalPreset = d.orbitalPreset as any;
   // Views saved before atom styles existed fall back to the classic look.
   ctx.display.atomStyle = (d.atomStyle ?? 'classic') as any;

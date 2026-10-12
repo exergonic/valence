@@ -4,7 +4,7 @@ import type { Molecule } from '../mol-parser';
 import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
-import type { Gfn2Properties } from '../geometry/gfn2-refine';
+import type { Gfn2Properties, Gfn2ChargeSets } from '../geometry/gfn2-refine';
 import type { Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
@@ -20,9 +20,9 @@ import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complementary' | 'cool' | 'warm' | 'highcontrast' | 'custom';
 
 /**
- * Which partial charges the display draws — the charge labels, the ESP surface
- * and the dipole arrow, all three from one array so they describe one charge
- * distribution.
+ * Which partial charges the charge labels print. Under MMFF94 the ESP surface
+ * and the dipole arrow come from the same array; under GFN2-xTB they come from
+ * its full electron density, whichever division of it the labels show.
  *
  * GFN2-xTB's Mulliken SCC charges are the default: the engine's own for a
  * structure it optimised, or one single point at the displayed geometry for a
@@ -31,7 +31,21 @@ export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complement
  * user picks them — fitting for PubChem's MMFF94 geometries — and as the
  * fallback when the engine cannot treat the molecule.
  */
-export type ChargeModel = 'mmff94' | 'gfn2';
+export type ChargeModel = 'gfn2' | 'gfn2-esp' | 'gfn2-cm5' | 'mmff94';
+
+/** The first three divide GFN2-xTB's one electron density into atoms, three
+ *  ways: Mulliken by basis function (`gfn2`), by the point charges that best
+ *  reproduce its potential (`gfn2-esp`), by real-space shares plus a dipole
+ *  correction (`gfn2-cm5`). MMFF94 is a charge model of its own. */
+export function isGfn2ChargeModel(model: ChargeModel): boolean {
+  return model !== 'mmff94';
+}
+
+/** A control's or a saved view's value as a charge model; anything else is
+ *  the default. */
+export function asChargeModel(value: string | undefined): ChargeModel {
+  return value === 'gfn2-esp' || value === 'gfn2-cm5' || value === 'mmff94' ? value : 'gfn2';
+}
 
 /** GFN2-xTB per-atom charges, paired with the molecule they belong to — a
  *  charge array is only valid for the geometry it was computed at. */
@@ -194,6 +208,11 @@ export interface SceneContext {
   /** That surface, asked of the worker: the key it was asked for, and whether
    *  it failed (then the van der Waals surface stands in). */
   gfn2EspRequest: { key: number; failed: boolean } | null;
+  /** GFN2's ESP-fitted, Hirshfeld and CM5 charges for the single point `key`
+   *  names, built in the worker when one of them is first chosen. */
+  gfn2ChargeSets: { key: number; sets: Gfn2ChargeSets } | null;
+  /** Those charges, asked of the worker, and whether that failed. */
+  gfn2ChargeSetsRequest: { key: number; failed: boolean } | null;
   /** Extracted isosurfaces, keyed `mo:<index>` / `localized:<index>`. Each
    *  costs ~50 ms to extract, and the same orbital can be picked, dropped and
    *  picked again while comparing orbitals — so they are kept until the
@@ -377,6 +396,8 @@ export function initScene(container: HTMLElement): SceneContext {
     espSurfaceCharges: null,
     gfn2Esp: null,
     gfn2EspRequest: null,
+    gfn2ChargeSets: null,
+    gfn2ChargeSetsRequest: null,
     moSurfaces: new Map(),
     moFields: new Map(),
     ehResult: null,

@@ -18,9 +18,9 @@
  */
 import type { Molecule } from '../mol-parser';
 import { breakSymmetry } from './embed';
-import type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface } from './gfn2-refine.worker';
+import type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets } from './gfn2-refine.worker';
 
-export type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface };
+export type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets };
 
 /**
  * Below this lowest Hessian eigenvalue (Eh/bohr²) a converged geometry is a
@@ -184,6 +184,22 @@ export function gfn2EspSurface(key: number): Promise<Gfn2EspSurface | null> {
   const id = nextId++;
   pending.set(id, { resolvers });
   w.postMessage({ id, task: 'esp', key });
+  return resolvers.promise;
+}
+
+/**
+ * The ESP-fitted, Hirshfeld and CM5 charges of the properties run `key`
+ * names, built in the worker from its calculator (the potential and the
+ * density need the engine). Null when that run is no longer the worker's
+ * latest.
+ */
+export function gfn2ChargeSets(key: number): Promise<Gfn2ChargeSets | null> {
+  const w = ensureWorker();
+  if (!w) return Promise.reject(new Gfn2Unavailable());
+  const resolvers = Promise.withResolvers<Gfn2ChargeSets | null>();
+  const id = nextId++;
+  pending.set(id, { resolvers });
+  w.postMessage({ id, task: 'charges', key });
   return resolvers.promise;
 }
 
