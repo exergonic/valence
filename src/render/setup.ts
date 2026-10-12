@@ -24,10 +24,12 @@ export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complement
  * and the dipole arrow come from the same array; under GFN2-xTB they come from
  * its full electron density, whichever division of it the labels show.
  *
- * GFN2-xTB's Mulliken SCC charges are the default: the engine's own for a
- * structure it optimised, or one single point at the displayed geometry for a
- * structure it did not (a PubChem conformer, an example), computed when a
- * charge display first asks for them. MMFF94 BCI charges are there when the
+ * GFN2-xTB's ESP-fitted charges are the default — of the point charges, the
+ * ones that match the ESP surface most closely (decided with the user
+ * 2026-10-12) — fitted to the single point every displayed structure gets;
+ * the labels wait the moment the fit takes rather than flash other numbers,
+ * and Mulliken (the engine's own SCC charges) stands in when it cannot be
+ * built. MMFF94 BCI charges are there when the
  * user picks them — fitting for PubChem's MMFF94 geometries — and as the
  * fallback when the engine cannot treat the molecule.
  */
@@ -35,16 +37,16 @@ export type ChargeModel = 'gfn2' | 'gfn2-esp' | 'gfn2-cm5' | 'mmff94';
 
 /** The first three divide GFN2-xTB's one electron density into atoms, three
  *  ways: Mulliken by basis function (`gfn2`), by the point charges that best
- *  reproduce its potential (`gfn2-esp`), by real-space shares plus a dipole
- *  correction (`gfn2-cm5`). MMFF94 is a charge model of its own. */
+ *  reproduce its potential (`gfn2-esp`, the default), by real-space shares
+ *  plus a dipole correction (`gfn2-cm5`). MMFF94 is a charge model of its own. */
 export function isGfn2ChargeModel(model: ChargeModel): boolean {
   return model !== 'mmff94';
 }
 
-/** A control's or a saved view's value as a charge model; anything else is
- *  the default. */
+/** A control's or a saved view's value as a charge model; anything else
+ *  (a view saved before the selector existed) is the default. */
 export function asChargeModel(value: string | undefined): ChargeModel {
-  return value === 'gfn2-esp' || value === 'gfn2-cm5' || value === 'mmff94' ? value : 'gfn2';
+  return value === 'gfn2' || value === 'gfn2-cm5' || value === 'mmff94' ? value : 'gfn2-esp';
 }
 
 /** GFN2-xTB per-atom charges, paired with the molecule they belong to — a
@@ -374,7 +376,7 @@ export function initScene(container: HTMLElement): SceneContext {
       localizedSelection: [],
       showOrbitals: true,
       showEsp: false,
-      chargeModel: 'gfn2',
+      chargeModel: 'gfn2-esp',
       espOpacity: 0.5,
       smoothMo: true,
       moOpacity: 0.85,

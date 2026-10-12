@@ -2,12 +2,12 @@
  * The dipole moment of a set of point charges.
  *
  * This is a CHARGE-MODEL dipole, not a quantum-mechanical one: it is the
- * dipole of the per-atom charges the display shows — GFN2-xTB's Mulliken
- * charges by default, or the MMFF94 BCI charges (chem/charge-model/
- * bci-charges.ts) when the user picks them. A full GFN2 dipole would add the
- * atomic dipoles the method also carries; the point charges are what the
- * labels and the ESP surface show, and one distribution for all three is the
- * point. `computeDipole` is the MMFF94 path; `dipoleFromCharges` takes any.
+ * dipole of the per-atom charges the display shows. Under GFN2-xTB the
+ * display draws the full dipole instead (`dipoleFromFullGfn2`), and this one
+ * only when the engine could not give it; under MMFF94 it is the BCI charges'
+ * (chem/charge-model/bci-charges.ts), one distribution for the labels, the
+ * ESP surface and the dipole. `computeDipole` is the MMFF94 path;
+ * `dipoleFromCharges` takes any.
  *
  * Physics: p = Σᵢ qᵢ(rᵢ − r_com). The sum is origin-independent for a
  * neutral molecule but not for an ion, so the origin sits at the center of

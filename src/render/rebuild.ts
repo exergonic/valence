@@ -79,15 +79,15 @@ function chargeSetMissing(ctx: SceneContext, model: ChargeModel): boolean {
 /**
  * The charge model on screen for this molecule: the one the control selects,
  * or another when the selected one has no charges for it — MMFF94 when the
- * engine failed, GFN2 when the molecule is outside MMFF94's type space,
- * Mulliken when an ESP-fitted or CM5 set could not be built. The selection
- * itself is left alone (it is the user's intent, and the next molecule may
- * honour it).
+ * engine failed, the default (ESP-fitted) when the molecule is outside
+ * MMFF94's type space, Mulliken when an ESP-fitted or CM5 set could not be
+ * built. The selection itself is left alone (it is the user's intent, and the
+ * next molecule may honour it).
  */
 function effectiveChargeModel(ctx: SceneContext): ChargeModel {
-  const chosen = ctx.display.chargeModel;
+  let chosen = ctx.display.chargeModel;
   if (isGfn2ChargeModel(chosen) && gfn2ChargesFailed(ctx) && ctx.charges) return 'mmff94';
-  if (chosen === 'mmff94' && !ctx.charges && ctx.currentMolecule && !gfn2ChargesFailed(ctx)) return 'gfn2';
+  if (chosen === 'mmff94' && !ctx.charges && ctx.currentMolecule && !gfn2ChargesFailed(ctx)) chosen = 'gfn2-esp';
   if (chargeSetMissing(ctx, chosen)) return 'gfn2';
   return chosen;
 }
@@ -174,9 +174,10 @@ export function gfn2PropertiesOnScreen(ctx: SceneContext): Gfn2Properties | null
 /**
  * The partial charges on display, and which model they are — ONE array for
  * the charge labels, the ESP surface and the dipole, so the three describe one
- * charge distribution. GFN2-xTB by default: null while its single point is
- * still running (the picture fills in when it lands), MMFF94 in its place when
- * the engine cannot treat the molecule. MMFF94 when the user picks it.
+ * charge distribution. GFN2-xTB's ESP-fitted charges by default: null while
+ * the single point or the fit is still running (the labels fill in when they
+ * land), MMFF94 in its place when the engine cannot treat the molecule.
+ * MMFF94 when the user picks it.
  */
 function displayedCharges(ctx: SceneContext): { charges: number[] | null; model: ChargeModel; residual: boolean } {
   const model = effectiveChargeModel(ctx);
@@ -420,7 +421,7 @@ function redrawScene(ctx: SceneContext) {
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
   } else if (labelMode === 'charge' && charges) {
-    // Partial charges — the displayed set (GFN2-xTB Mulliken by default).
+    // Partial charges — the displayed set (GFN2-xTB ESP-fitted by default).
     renderChargeLabels(ctx.labelGroup, ctx.currentMolecule, charges);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;

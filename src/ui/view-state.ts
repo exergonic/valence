@@ -77,8 +77,8 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
   ctx.display.atomScale = d.atomScale;
   ctx.display.bondScale = d.bondScale;
   ctx.display.labelMode = d.labelMode as any;
-  // GFN2-xTB Mulliken unless the view chose another: views saved before the
-  // selector existed never chose, so they get the default like everyone else.
+  // The default (GFN2-xTB ESP-fitted) unless the view chose another: views
+  // saved before the selector existed never chose, so they get it too.
   ctx.display.chargeModel = asChargeModel(d.chargeModel);
   ctx.display.orbitalPreset = d.orbitalPreset as any;
   // Views saved before atom styles existed fall back to the classic look.
