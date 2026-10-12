@@ -209,11 +209,35 @@ async function orbitalListStaysPut(b: Browser) {
   check('clicking an MO leaves the list where it was', Math.abs(after.scroll - before.scroll) < 1, `scrollTop ${before.scroll} → ${after.scroll}`);
 }
 
+/**
+ * A clean console on load, in a narrow window — so a real error is never
+ * buried in noise. A sketcher under ~300 px is where JSME's menu icons logged
+ * dozens of invalid-SVG errors (index.html corrects their markup); the main
+ * run's wide window never showed them. Its own browser, at its own size.
+ */
+async function loadsCleanWhenNarrow() {
+  const narrow = await launchBrowser(800, 870, 1);
+  try {
+    await narrow.open(url);
+    await sleep(1500);
+    const stage = await narrow.run(`return document.getElementById('jsme-stage').clientWidth;`);
+    check('a narrow window loads without console errors', narrow.pageErrors.length === 0,
+      narrow.pageErrors.slice(0, 2).join('; ') || `sketcher ${stage} px`);
+  } finally {
+    await narrow.close();
+  }
+}
+
+const started = Date.now();
+console.log(`Valence smoke test — ${url}\n`);
+try {
+  await loadsCleanWhenNarrow();
+} catch (error) {
+  check('loadsCleanWhenNarrow', false, `stopped: ${(error as Error).message.split('\n')[0]}`);
+}
 // 150 % display scaling, as on most Windows laptops: at 100 % JSME draws the
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
-const started = Date.now();
-console.log(`Valence smoke test — ${url}\n`);
 try {
   for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, orbitalListStaysPut]) {
     try {

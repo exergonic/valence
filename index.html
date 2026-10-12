@@ -503,6 +503,26 @@
 
     <script src="/jsme/jsme.nocache.js"></script>
     <script>
+      // JSME writes its menu buttons' SVG through innerHTML, and in a narrow
+      // sketcher (under ~300 px) some of its icon frames carry a negative
+      // width — the browser logs an error for each (dozens per page load),
+      // noise that would bury a real error. A
+      // negative width draws nothing, and neither does 0, so a <rect>'s
+      // negative width or height is written as 0 before the browser parses
+      // it. Installed here, before JSME exists; any other innerHTML passes
+      // through untouched.
+      (function () {
+        const inner = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        const zeroNegativeSize = (tag) => tag.replace(/\s(width|height)="-[\d.]+"/g, ' $1="0"');
+        Object.defineProperty(Element.prototype, 'innerHTML', {
+          configurable: true,
+          get: inner.get,
+          set(value) {
+            if (typeof value === 'string' && value.includes('="-')) value = value.replace(/<rect\b[^>]*>/g, zeroNegativeSize);
+            inner.set.call(this, value);
+          },
+        });
+      })();
       function jsmeOnLoad() {
         window.jsmeApplet = new JSApplet.JSME("jsme-stage", "100%", "100%", {"options": "newlook", "guicolor": "#f3f4f6"});
         // JSME's own menus are clipped out of view and driven by our toolbar

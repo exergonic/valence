@@ -61,7 +61,9 @@ export async function launchBrowser(width = 1600, height = 1000, scale = 1) {
   await new Promise((r) => ws.addEventListener('open', r, { once: true }));
   let nextId = 0;
   const pending = new Map<number, (msg: any) => void>();
-  /** Errors the page itself raised: uncaught exceptions and console.error. */
+  /** Errors the page itself raised: uncaught exceptions, console.error, and
+   *  the errors the browser logs on its own (an invalid SVG attribute) —
+   *  failed requests aside, since a fetch that falls through is expected. */
   const pageErrors: string[] = [];
   ws.addEventListener('message', (e) => {
     const msg = JSON.parse(String(e.data));
@@ -72,6 +74,9 @@ export async function launchBrowser(width = 1600, height = 1000, scale = 1) {
     }
     if (msg.method === 'Runtime.consoleAPICalled' && msg.params.type === 'error') {
       pageErrors.push(`console.error: ${msg.params.args.map((a: any) => a.value ?? a.description).join(' ').slice(0, 200)}`);
+    }
+    if (msg.method === 'Log.entryAdded' && msg.params.entry.level === 'error' && msg.params.entry.source !== 'network') {
+      pageErrors.push(`browser: ${String(msg.params.entry.text).slice(0, 200)}`);
     }
     // a dialog would freeze the page and every later call; note it and dismiss
     if (msg.method === 'Page.javascriptDialogOpening') {
@@ -86,6 +91,7 @@ export async function launchBrowser(width = 1600, height = 1000, scale = 1) {
   });
   await send('Page.enable');
   await send('Runtime.enable');
+  await send('Log.enable');
   await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile: false });
 
   /** Run `body` (the inside of an async function) in the page; its return value comes back. */
