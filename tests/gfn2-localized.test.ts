@@ -1,7 +1,7 @@
 /**
  * GFN2-xTB's orbitals as the Localized view's source: the same Pipek–Mezey
  * localization and the same avo_ibo classifier as extended Hückel's, on GFN2's
- * own basis (a second s on H, a polarization d on the heavier main group) and
+ * own basis (minimal, plus a polarization d on the heavier main group) and
  * its Fock matrix, rebuilt from the orbitals. The classifier's gates were tuned
  * on extended Hückel and are not re-tuned: these pin that they still land on
  * the Lewis picture. Structures are the app's own examples.

@@ -392,7 +392,7 @@ export function initScene(container: HTMLElement): SceneContext {
       highlightPiSystems: false,
       moIndex: null,
       orbitalView: 'delocalized',
-      moMethod: 'eh',
+      moMethod: 'gfn2',
       moSpin: 'alpha',
       vibrationIndex: null,
       localizedSelection: [],

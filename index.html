@@ -113,7 +113,7 @@
             <button data-model="vsepr" title="VSEPR: the hybrid orbitals and lone pairs, labelled by element">VSEPR</button>
             <button data-model="charge" title="Charge model: the atoms with their partial charges, the electrostatic potential surface and the dipole">Charge Model</button>
             <button data-model="localized" title="Localized orbitals: the bonds and lone pairs (Pipek–Mezey), the highest occupied one drawn">Localized Orbitals</button>
-            <button data-model="delocalized" title="Delocalized orbitals: the extended-Hückel molecular orbitals, the HOMO drawn">Delocalized Orbitals</button>
+            <button data-model="delocalized" title="Delocalized orbitals: the GFN2-xTB molecular orbitals (extended Hückel beside them), the HOMO drawn">Delocalized Orbitals</button>
           </div>
         </div>
 
@@ -243,8 +243,8 @@
           <section id="mo-panel" class="inspector-section for-localized for-delocalized">
             <div id="mo-body">
               <div id="mo-method-row" class="preset-row" role="group" aria-label="Which calculation the orbitals come from">
-                <button class="view-preset-btn active" data-mo-method="eh" title="Extended Hückel: the textbook orbital picture — fixed atomic parameters, no self-consistency. The Localized view uses it only when GFN2-xTB has no orbitals to give.">Extended Hückel</button>
-                <button class="view-preset-btn" data-mo-method="gfn2" title="GFN2-xTB: self-consistent orbitals — each electron feels the others' charge — so their order is the more trustworthy where the two disagree. Semiempirical; its empty orbitals sit low. Its localized orbitals are the Localized view.">GFN2-xTB</button>
+                <button class="view-preset-btn active" data-mo-method="gfn2" title="GFN2-xTB: self-consistent orbitals — each electron feels the others' charge — so their order is the more trustworthy where the two disagree. Semiempirical; its empty orbitals sit low. Its localized orbitals are the Localized view.">GFN2-xTB</button>
+                <button class="view-preset-btn" data-mo-method="eh" title="Extended Hückel: the textbook orbital picture — fixed atomic parameters, no self-consistency. The Localized view uses it only when GFN2-xTB has no orbitals to give.">Extended Hückel</button>
               </div>
               <div id="mo-spin-row" class="preset-row hidden" role="group" aria-label="Spin channel">
                 <button class="view-preset-btn active" data-mo-spin="alpha" title="The α (spin-up) orbitals of this open shell">α spin</button>

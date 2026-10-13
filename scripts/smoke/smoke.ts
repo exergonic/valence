@@ -64,6 +64,15 @@ async function pickExample(b: Browser, name: string) {
   await settle(b, 900);
 }
 
+/** Both orbital lists are GFN2's by default, and wait on its single point. */
+async function orbitalsReady(b: Browser) {
+  for (let waited = 0; waited < 15_000; waited += 250) {
+    const note: string = await b.run(`return document.getElementById('mo-note').textContent;`);
+    if (!/^Computing/.test(note)) return;
+    await sleep(250);
+  }
+}
+
 async function view(b: Browser, model: string) {
   await b.run(`document.querySelector('[data-model="${model}"]').click();`);
   await settle(b, 700);
@@ -95,12 +104,7 @@ async function examplesInEveryView(b: Browser) {
       const coverage = await sceneCoverage(b);
       if (coverage < 0.005) problems.push(`${model}: the scene looks empty (${(coverage * 100).toFixed(2)}% drawn)`);
       if (model === 'localized' || model === 'delocalized') {
-        // the localized list is GFN2's, and waits on the single point
-        for (let waited = 0; waited < 15_000; waited += 250) {
-          const note: string = await b.run(`return document.getElementById('mo-note').textContent;`);
-          if (!/^Computing/.test(note)) break;
-          await sleep(250);
-        }
+        await orbitalsReady(b);
         const state = await b.run(`return {
           rows: document.querySelectorAll('button.orb-item').length,
           homo: [...document.querySelectorAll('.orb-tag')].some((t) => t.textContent === 'HOMO'),
@@ -199,6 +203,7 @@ async function orbitalListStaysPut(b: Browser) {
   await b.open(url);
   await pickExample(b, 'Benzene (C₆H₆)');
   await view(b, 'delocalized');
+  await orbitalsReady(b);
   const before = await b.run(`
     const rows = [...document.querySelectorAll('button.orb-item')];
     const list = rows[0].parentElement;

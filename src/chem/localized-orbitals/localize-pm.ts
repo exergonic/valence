@@ -273,7 +273,7 @@ export interface LocalizedSets {
  * Evangelista build valence-virtual orbitals by projecting the (huge) virtual
  * space of a full basis onto the minimal one by SVD and keeping the
  * n_min − n_occ directions the density can reach. Extended Hückel's basis IS
- * minimal, and GFN2's nearly so (a second s on H, a polarization d on the
+ * minimal, and GFN2's nearly so (one s on H, as here; a polarization d on the
  * heavier main group), so there is nothing to screen: the virtual space is already
  * n_min − n_occ dimensional and already spans that complement, and the SVD is
  * a square orthogonal matrix whose singular values are all 1 — degenerate, so

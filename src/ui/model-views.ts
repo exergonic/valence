@@ -8,7 +8,8 @@
  *   Charge Model — the atoms, their partial charges, the ESP surface, the dipole
  *   Localized    — the atoms, element labels, the Pipek–Mezey orbital list
  *                  with its highest occupied orbital drawn
- *   Delocalized  — the atoms, element labels, the extended-Hückel MO ladder
+ *   Delocalized  — the atoms, element labels, the MO ladder (GFN2-xTB's by
+ *                  default, extended Hückel's beside it)
  *                  with the HOMO drawn
  *
  * A view is a mode, not a one-off preset: it stays selected while the user
@@ -57,7 +58,7 @@ const PRESETS: Record<ModelView, Preset> = {
   delocalized: {
     atoms: true, vseprOrbitals: false, labels: 'atom', esp: false, dipole: false, orbitals: 'delocalized',
     title: 'Delocalized orbitals',
-    blurb: 'Extended-Hückel molecular orbitals, the canonical picture: each spread over the molecule.',
+    blurb: 'The canonical molecular orbitals, GFN2-xTB’s or extended Hückel’s: each spread over the molecule.',
   },
 };
 
