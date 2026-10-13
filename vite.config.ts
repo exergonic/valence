@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, statSync } from 'fs';
 import { extname, join } from 'path';
@@ -30,6 +31,13 @@ const VENDOR_TYPES: Record<string, string> = {
 export default defineConfig({
   base: process.env.TAURI_ENV_PLATFORM ? '/' : '/valence/',
   build: { target: 'esnext' },
+  test: {
+    // A test's limit is for hangs, not speed. The heavy ones (an orbital
+    // surface, a localization) take 0.4-1.4 s alone and several times that
+    // when the whole suite runs in parallel beside a dev server — two passed
+    // Vitest's 5 s default that way. The GFN2 tests set their own, longer.
+    testTimeout: 30_000,
+  },
   server: {
     watch: {
       // The Rust build output is not the app's source, and a `tauri build`

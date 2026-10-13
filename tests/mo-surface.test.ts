@@ -36,10 +36,7 @@ const s1 = (zeta: number): BasisFunction => ({
 
 const probe = { value: 0, gx: 0, gy: 0, gz: 0 };
 
-// Building a surface takes 0.1–1.4 s alone (benzene's HOMO, the winding
-// check), and several times that when the whole suite runs in parallel, which
-// pushed one past Vitest's 5 s default. The limit is for hangs, not speed.
-describe('the MO isosurface', { timeout: 30_000 }, () => {
+describe('the MO isosurface', () => {
   it('evaluates a normalized 1s Slater orbital to its known value', async () => {
     // (ζ³/π)^½ e^(−ζr) with ζ = 1 bohr⁻¹, at r = 0.3 Å = 0.5669 bohr
     const expected = Math.sqrt(1 / Math.PI) * Math.exp(-0.3 * BOHR_PER_ANGSTROM);
