@@ -20,6 +20,7 @@ import { canonicalizeDegenerateSets } from '../extended-huckel/canonicalize-dege
 import { labelIrreps } from '../extended-huckel/irrep-labels';
 import { period } from '../elements';
 import type { Gfn2Properties } from '../../geometry/gfn2-refine';
+import type { OrbitalSpace } from '../localized-orbitals/localize-pm';
 
 /** One spin channel's orbitals, lowest first. */
 export interface Gfn2Ladder {
@@ -72,6 +73,32 @@ function shares(basis: BasisFunction[], overlap: number[][], coefficients: numbe
     }
     return out;
   });
+}
+
+/**
+ * One ladder as an OrbitalSpace, for the localized orbitals. GFN2 gives no
+ * Hamiltonian matrix, but its orbitals diagonalize its Fock matrix, so the
+ * matrix is rebuilt from them: F = S C ε Cᵀ S, exactly the operator whose
+ * eigenpairs they are (orthonormal on S, a full set in a square basis).
+ * Null when a level is fractionally filled — GFN2's Fermi filling leaves one
+ * where levels are degenerate at the frontier, and the occupied set is then
+ * not settled.
+ */
+export function gfn2OrbitalSpace(ladder: Gfn2Ladder): OrbitalSpace | null {
+  const capacity = ladder.spin ? 1 : 2;
+  const occupied = ladder.occupations.filter((o) => o === capacity).length;
+  if (ladder.occupations.some((o, i) => o !== (i < occupied ? capacity : 0))) return null;
+  const n = ladder.basis.length;
+  const fock = Array.from({ length: n }, () => new Array<number>(n).fill(0));
+  ladder.coefficients.forEach((c, k) => {
+    const sc = ladder.overlap.map((row) => row.reduce((sum, s, nu) => sum + s * c[nu], 0));
+    const energy = ladder.energies[k];
+    for (let mu = 0; mu < n; mu++) {
+      const scale = energy * sc[mu];
+      for (let nu = 0; nu < n; nu++) fock[mu][nu] += scale * sc[nu];
+    }
+  });
+  return { basis: ladder.basis, overlap: ladder.overlap, hamiltonian: fock, coefficients: ladder.coefficients, occupied };
 }
 
 /** The α ladder (the only one for a closed shell) and the β ladder of an open

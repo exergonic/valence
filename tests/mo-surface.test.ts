@@ -19,7 +19,7 @@ import { symmetrizeMolecule } from '../src/geometry/symmetrize';
 import { solveExtendedHuckel } from '../src/chem/extended-huckel/solve';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
 import { computeMoField, computeMoSurface, evaluateMo, levelForFraction, marchMoField } from '../src/chem/extended-huckel/mo-surface';
-import { localizeOrbitals } from '../src/chem/localized-orbitals/localize-pm';
+import { extendedHuckelSpace, localizeOrbitals as localizeSpace } from '../src/chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../src/chem/localized-orbitals/order-localized';
 import type { BasisFunction } from '../src/chem/extended-huckel/assign-basis';
 
@@ -178,7 +178,7 @@ describe('the MO isosurface', () => {
     // peak scaling exists for.
     const molecule = parseMolBlock(EXAMPLES.find((e) => e.name.startsWith('Sulfur hexafluoride'))!.mol)!;
     const result = solveExtendedHuckel(molecule)!;
-    const localized = localizeOrbitals(molecule, result)!;
+    const localized = localizeSpace(extendedHuckelSpace(molecule, result)!, molecule.atoms.length)!;
     const bond = orderLocalizedOrbitals(molecule, result, localized)
       .find((orbital) => orbital.occupied && orbital.character === 'sigma')!;
     const surface = computeMoSurface(molecule, result.basis, bond.coefficients, 0.1);
@@ -214,7 +214,7 @@ describe('the MO isosurface', () => {
     const molecule: Molecule = { atoms: symmetrizeMolecule({ atoms, bonds: [] }).atoms, bonds: [] };
     const result = solveExtendedHuckel(molecule)!;
     const homo = result.electronCount / 2 - 1;
-    const localized = localizeOrbitals(molecule, result)!;
+    const localized = localizeSpace(extendedHuckelSpace(molecule, result)!, molecule.atoms.length)!;
     for (const coefficients of [result.coefficients[homo], result.coefficients[homo + 1], localized.occupied[0]]) {
       const grid = computeMoField(molecule, result.basis, coefficients, 0.1)!;
       let sum = 0;

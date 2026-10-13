@@ -95,14 +95,21 @@ async function examplesInEveryView(b: Browser) {
       const coverage = await sceneCoverage(b);
       if (coverage < 0.005) problems.push(`${model}: the scene looks empty (${(coverage * 100).toFixed(2)}% drawn)`);
       if (model === 'localized' || model === 'delocalized') {
+        // the localized list is GFN2's, and waits on the single point
+        for (let waited = 0; waited < 15_000; waited += 250) {
+          const note: string = await b.run(`return document.getElementById('mo-note').textContent;`);
+          if (!/^Computing/.test(note)) break;
+          await sleep(250);
+        }
         const state = await b.run(`return {
           rows: document.querySelectorAll('button.orb-item').length,
           homo: [...document.querySelectorAll('.orb-tag')].some((t) => t.textContent === 'HOMO'),
           note: document.getElementById('mo-note').textContent,
         };`);
-        // an open shell (O₂, the triplet NiCl₄²⁻) has levels but no filling, and
-        // no localized orbitals — by design, and the note says why
-        const openShell = /not closed|open.shell|open shell|no occupancy/i.test(state.note);
+        // an open shell (O₂, the triplet NiCl₄²⁻) can have levels but no
+        // settled filling, and then no localized orbitals — by design, and the
+        // note says why
+        const openShell = /not closed|open.shell|open shell|no occupancy|partly filled/i.test(state.note);
         if (model === 'delocalized' && state.rows === 0) problems.push('delocalized: no orbital levels');
         if (model === 'delocalized' && !state.homo && !openShell) problems.push('delocalized: no HOMO marked');
         if (model === 'localized' && state.rows === 0 && !openShell) problems.push(`localized: no orbitals (${state.note.slice(0, 80)})`);

@@ -1,5 +1,8 @@
 /**
- * Pipek–Mezey localization of the extended-Hückel occupied MOs.
+ * Pipek–Mezey localization of a calculation's MOs — GFN2-xTB's when the
+ * single point has run, extended Hückel's otherwise (an `OrbitalSpace` either
+ * way: the localization reads coefficients, overlap and a one-electron
+ * Hamiltonian, and nothing that tells the two apart).
  *
  * Localization is a unitary transform of the occupied space: it cannot create
  * physics the density lacks, but it turns the delocalized canonical MOs into
@@ -18,8 +21,8 @@
  *   θ = ¼ · atan2(Σ_A d_A w_A, ½ · Σ_A (d_A² − w_A²))
  *
  * with d_A = (n_A(i) − n_A(j))/2 and w_A = n_A(i,j) — the same angle
- * `avo_ibo` uses, written with the overlap-weighted populations the
- * non-orthogonal extended-Hückel basis requires (mulliken-populations.ts).
+ * `avo_ibo` uses, written with the overlap-weighted populations a
+ * non-orthogonal basis requires (mulliken-populations.ts).
  *
  * **Where PM is blind, the Hamiltonian chooses.** A pair that is equivalent
  * by symmetry — an exactly 50/50 two-centre bond's σ/π partners, two lone
@@ -47,14 +50,46 @@
  * J. Chem. Theory Comput. 13, 2561 (2017)), which this cut skips — the
  * teaching need is the occupied picture.
  *
- * Refusals come first, per the house ladder: an open shell (an odd electron
- * count, or a degenerate set the count would only partly fill, e.g. O₂'s π*)
- * gets no localized orbitals rather than a wrong set.
+ * Refusals come first, per the house ladder: an orbital set whose filling is
+ * not settled — extended Hückel's open shell (an odd electron count, or a
+ * degenerate set the count would only partly fill, e.g. O₂'s π*), a GFN2
+ * level left fractionally filled — gets no localized orbitals rather than a
+ * wrong set. GFN2 treats an open shell as two spin channels, each with a
+ * settled filling, and each channel is localized on its own.
  */
 import type { Molecule } from '../../mol-parser';
 import type { ExtendedHuckelResult } from '../extended-huckel/solve';
 import { closedShellOccupations } from '../extended-huckel/solve';
+import type { BasisFunction } from '../extended-huckel/assign-basis';
 import { atomicPopulations, crossPopulations } from './mulliken-populations';
+
+/**
+ * One set of orbitals to localize: the canonical MOs of one calculation (one
+ * spin channel of an open shell), in a non-orthogonal AO basis.
+ */
+export interface OrbitalSpace {
+  basis: BasisFunction[];
+  overlap: number[][];
+  /** The one-electron Hamiltonian in the AO basis, eV — extended Hückel's H,
+   *  GFN2's Fock matrix. It orders the list (⟨φ|H|φ⟩) and resolves the pairs
+   *  PM is blind to; nothing else reads it. */
+  hamiltonian: number[][];
+  /** [orbital][AO], lowest first. */
+  coefficients: number[][];
+  /** How many of the lowest orbitals are filled. */
+  occupied: number;
+}
+
+/** Extended Hückel's orbitals as an OrbitalSpace, or null for an open shell
+ *  (`closedShellOccupations` refuses it — the occupied set is not known). */
+export function extendedHuckelSpace(molecule: Molecule, result: ExtendedHuckelResult): OrbitalSpace | null {
+  const occupations = closedShellOccupations(
+    result.electronCount, result.basis.length, result.energies, molecule.multiplicity ?? 1,
+  );
+  if (!occupations) return null;
+  const { basis, overlap, hamiltonian, coefficients } = result;
+  return { basis, overlap, hamiltonian, coefficients, occupied: occupations.filter((o) => o > 0).length };
+}
 
 /** A sweep stops when no pair rotates by more than this (radians). */
 export const PM_TOLERANCE = 1e-12;
@@ -108,7 +143,7 @@ function pairObjective(
   i: number[],
   j: number[],
   overlap: number[][],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   atomCount: number,
 ): number {
   const ni = atomicPopulations(i, overlap, basis, atomCount);
@@ -124,7 +159,7 @@ function pairObjectiveAt(
   j: number[],
   theta: number,
   overlap: number[][],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   atomCount: number,
 ): number {
   const c = Math.cos(theta);
@@ -139,7 +174,7 @@ export function pipekMezeyAngle(
   i: number[],
   j: number[],
   overlap: number[][],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   atomCount: number,
 ): number {
   const ni = atomicPopulations(i, overlap, basis, atomCount);
@@ -198,7 +233,7 @@ function resolveFlatPairs(
   rows: number[][],
   overlap: number[][],
   hamiltonian: number[][],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   atomCount: number,
 ): void {
   const occupied = rows.length;
@@ -230,15 +265,16 @@ export interface LocalizedSets {
 }
 
 /**
- * Localize the occupied AND valence-virtual extended-Hückel MOs. Returns the
- * coefficients in the same MO-major order and calculation frame as
- * `result.coefficients`, so the existing MO renderers draw them unchanged.
+ * Localize the occupied AND valence-virtual MOs. Returns the coefficients in
+ * the same MO-major order and calculation frame as `space.coefficients`, so
+ * the existing MO renderers draw them unchanged.
  *
  * **Why the virtual block is localizable as it stands.** Derricotte &
  * Evangelista build valence-virtual orbitals by projecting the (huge) virtual
  * space of a full basis onto the minimal one by SVD and keeping the
  * n_min − n_occ directions the density can reach. Extended Hückel's basis IS
- * minimal, so there is nothing to screen: the virtual space is already
+ * minimal, and GFN2's nearly so (a second s on H, a polarization d on the
+ * heavier main group), so there is nothing to screen: the virtual space is already
  * n_min − n_occ dimensional and already spans that complement, and the SVD is
  * a square orthogonal matrix whose singular values are all 1 — degenerate, so
  * it selects nothing. What is left is the localization itself, on the
@@ -251,27 +287,15 @@ export interface LocalizedSets {
  * out C–C π, benzene's three come out ring π*, and every C–H σ* sits on its
  * own bond. That is what makes them worth drawing beside an occupied partner.
  *
- * Null when there are no localized orbitals to give: an open shell (refused by
- * `closedShellOccupations` — the occupied set is not even known) or no
- * occupied levels.
+ * Null when there are no occupied levels to localize.
  */
-export function localizeOrbitals(
-  molecule: Molecule,
-  result: ExtendedHuckelResult,
-): LocalizedSets | null {
-  const occupations = closedShellOccupations(
-    result.electronCount, result.basis.length, result.energies, molecule.multiplicity ?? 1,
-  );
-  if (!occupations) return null;
-  const occupied = occupations.filter((o) => o > 0).length;
+export function localizeOrbitals(space: OrbitalSpace, atomCount: number): LocalizedSets | null {
+  const { occupied, overlap, hamiltonian, basis, coefficients } = space;
   if (occupied === 0) return null;
-
-  const { overlap, hamiltonian, basis } = result;
-  const atomCount = molecule.atoms.length;
-  const block = (from: number, to: number) => Array.from({ length: to - from }, (_, k) => result.coefficients[from + k].slice());
+  const block = (from: number, to: number) => Array.from({ length: to - from }, (_, k) => coefficients[from + k].slice());
 
   const occupiedRows = block(0, occupied);
-  const virtualRows = block(occupied, result.basis.length);
+  const virtualRows = block(occupied, coefficients.length);
   localizeBlock(occupiedRows, overlap, hamiltonian, basis, atomCount);
   localizeBlock(virtualRows, overlap, hamiltonian, basis, atomCount);
   return { occupied: occupiedRows, virtual: virtualRows };
@@ -286,7 +310,7 @@ function localizeBlock(
   rows: number[][],
   overlap: number[][],
   hamiltonian: number[][],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   atomCount: number,
 ): void {
   const occupied = rows.length;

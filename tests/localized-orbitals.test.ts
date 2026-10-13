@@ -11,7 +11,13 @@ import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock, type Molecule } from '../src/mol-parser';
 import { solveExtendedHuckel, type ExtendedHuckelResult } from '../src/chem/extended-huckel/solve';
 import { solveGeneralized } from '../src/utils/eigen';
-import { localizeOrbitals, pipekMezeyAngle } from '../src/chem/localized-orbitals/localize-pm';
+
+/** Extended Hückel's localized blocks, or null when the shell is open. */
+function localizeOrbitals(molecule: Molecule, result: ExtendedHuckelResult) {
+  const space = extendedHuckelSpace(molecule, result);
+  return space && localizeSpace(space, molecule.atoms.length);
+}
+import { extendedHuckelSpace, localizeOrbitals as localizeSpace, pipekMezeyAngle } from '../src/chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals, type LocalizedOrbital } from '../src/chem/localized-orbitals/order-localized';
 import { atomicPopulations, crossPopulations } from '../src/chem/localized-orbitals/mulliken-populations';
 import type { BasisFunction } from '../src/chem/extended-huckel/assign-basis';

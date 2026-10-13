@@ -14,6 +14,7 @@ import {
 } from '../chem/extended-huckel/mo-surface';
 import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
 import type { LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
+import type { BasisFunction } from '../chem/extended-huckel/assign-basis';
 import { updateLabels } from './labels';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
@@ -153,6 +154,22 @@ export function setActiveIsoValue(display: DisplaySettings, value: number): void
   }
 }
 
+/**
+ * The localized orbitals the Localized view lists, and where they came from:
+ * GFN2-xTB's (one spin channel of an open shell), or extended Hückel's when
+ * GFN2 has none to give.
+ */
+export interface LocalizedList {
+  source: 'gfn2' | 'eh';
+  spin: 'alpha' | 'beta' | null;
+  basis: BasisFunction[];
+  /** Classified and ordered; null when the filling is not settled — no list
+   *  rather than a wrong one (the panel says why). */
+  orbitals: LocalizedOrbital[] | null;
+  /** What it was localized from — a GFN2 ladder or the EH result. */
+  from: unknown;
+}
+
 export interface SceneContext {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
@@ -228,11 +245,13 @@ export interface SceneContext {
    *  buildScene, like the dipole); null when an element is outside the
    *  parameter table. */
   ehResult: ExtendedHuckelResult | null;
-  /** The molecule's localized orbitals, classified and ordered for display
-   *  (computed once in buildScene). Null when EH refused, the shell is open,
-   *  or there is nothing occupied — no list rather than a wrong one. */
-  localizedOrbitals: LocalizedOrbital[] | null;
+  /** The Localized view's list, built on first ask from the orbitals it names
+   *  (see localizedOnScreen) and kept until they change. */
+  localized: LocalizedList | null;
   rerender: () => void;
+  /** Called when the GFN2 single point lands — its orbitals are the ladder's
+   *  GFN2 rows and the Localized view's list, which waited for it. */
+  onGfn2Orbitals: () => void;
   /** GFN2-xTB's harmonic vibrations for the structure on screen — only when
    *  that structure is GFN2's own minimum (a fetched conformer is not one, so
    *  its "frequencies" would be meaningless). Paired with its molecule. */
@@ -403,11 +422,12 @@ export function initScene(container: HTMLElement): SceneContext {
     moSurfaces: new Map(),
     moFields: new Map(),
     ehResult: null,
-    localizedOrbitals: null,
+    localized: null,
     rerender: () => {},
     vibrations: null,
     frame,
     onSceneBuilt: () => {},
+    onGfn2Orbitals: () => {},
     teardown,
     get autoRotate() { return autoRotate; },
     setAutoRotate: (on: boolean) => { autoRotate = on; },

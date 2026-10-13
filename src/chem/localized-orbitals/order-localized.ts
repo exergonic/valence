@@ -4,10 +4,11 @@
  *
  * Localized orbitals are not eigenstates — there is no eigenvalue to sort by —
  * so the list is ordered by **⟨φ|H|φ⟩**, the one-electron expectation of the
- * extended-Hückel Hamiltonian, within each section (occupied first, then the
- * valence-virtual block). It is well defined for any orbital — the mean of the
- * canonical energies the localized orbital spans — and it is the sort key
- * ONLY: the number inherits EH's parameter sensitivity, so it is never shown.
+ * calculation's Hamiltonian (GFN2's Fock matrix, or extended Hückel's H),
+ * within each section (occupied first, then the valence-virtual block). It is
+ * well defined for any orbital — the mean of the canonical energies the
+ * localized orbital spans — and it is the sort key ONLY: the number inherits
+ * the method's parameter sensitivity, so it is never shown.
  *
  * The list is an **energy ladder**, ascending: lowest at the bottom of the
  * panel, rising as you read up, the way the canonical level diagram and other
@@ -28,11 +29,10 @@
  */
 import type { Molecule } from '../../mol-parser';
 import { alignToPrincipalAxes } from '../extended-huckel/align-principal-axes';
-import { EH_PARAMETERS } from '../extended-huckel/parameters';
-import type { ExtendedHuckelResult } from '../extended-huckel/solve';
-import type { DFunction } from '../extended-huckel/assign-basis';
+import type { BasisFunction, DFunction } from '../extended-huckel/assign-basis';
+import { isDBlock } from '../elements';
 import { aoWeights, atomicPopulations, bondPopulations } from './mulliken-populations';
-import type { LocalizedSets } from './localize-pm';
+import type { LocalizedSets, OrbitalSpace } from './localize-pm';
 
 /**
  * The orbital classes, in avo_ibo's vocabulary. That project's classifier
@@ -70,9 +70,9 @@ export interface LocalizedOrbital {
   /** ⟨φ|H|φ⟩ in eV. The sort key within a section, and never displayed. */
   energy: number;
   character: LocalizedCharacter;
-  /** Doubly occupied (an occupied-space orbital), or empty (a
-   *  valence-virtual). Extended Hückel has no correlation, so this is exact;
-   *  it is what splits the list into its two sections. */
+  /** Filled (an occupied-space orbital: two electrons, or one in a spin
+   *  channel), or empty (a valence-virtual). Neither method has correlation,
+   *  so this is exact; it is what splits the list into its two sections. */
   occupied: boolean;
   /** Mulliken population per atom, in atom order. */
   populations: number[];
@@ -140,25 +140,24 @@ interface AtomShare {
   polarization: number;
 }
 
-/** A same-n d shell: Si, P, S, Cl. It polarizes the valence s and p; it is
+/** A main-group atom's d: extended Hückel's same-n 3d on Si, P, S and Cl,
+ *  GFN2's on the heavier main group. It polarizes the valence s and p; it is
  *  not the valence shell the way a metal's d (one n below the s) is.
  *
  *  The rule exists because our d is a BASIS ARTIFACT as much as a chemistry
- *  one: measured, sulfur's 3d carries ~10% of an iodine lone pair here, where a
- *  converged calculation gives under 1% (avo_ibo's SO₃ labels name s and p
- *  alone). A minimal-basis d is kept because the MO energies need it — SF₆ is
- *  only readable with one — and it is about an order of magnitude too heavy for
- *  populations, so it does not vote on topology. NOTES.md has the table. */
+ *  one: measured, sulfur's 3d carries ~10% of an iodine lone pair in extended
+ *  Hückel, where a converged calculation gives under 1% (avo_ibo's SO₃ labels
+ *  name s and p alone). A minimal-basis d is kept because the MO energies need
+ *  it — SF₆ is only readable with one — and it is about an order of magnitude
+ *  too heavy for populations, so it does not vote on topology. NOTES.md has
+ *  the table. */
 function polarizationD(element: string): boolean {
-  const row = EH_PARAMETERS[element.toUpperCase()];
-  return !!row?.d && row.d.n === row.s.n;
+  return !isDBlock(element);
 }
 
-/** A valence d shell, n one below the s: the d block. 4d and 5d included;
- *  the same-n polarization functions are not. */
+/** A valence d shell, n one below the s: the d block, 3d to 5d. */
 function valenceDShell(element: string): boolean {
-  const row = EH_PARAMETERS[element.toUpperCase()];
-  return !!row?.d && row.d.n < row.s.n;
+  return isDBlock(element);
 }
 
 /** What counts as this atom carrying the orbital. Polarization d dresses a
@@ -171,7 +170,7 @@ function centreShare(share: AtomShare): number {
  *  populations use. A negative total (an out-of-phase tail) counts as none. */
 function atomShares(
   weights: number[],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   elements: string[],
 ): AtomShare[] {
   const shares: AtomShare[] = Array.from({ length: elements.length }, (_, atom) => ({
@@ -211,7 +210,7 @@ function pPointsAlongBond(
   a: number,
   b: number,
   coefficients: number[],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   frameAtoms: Molecule['atoms'],
 ): boolean {
   const dx = frameAtoms[a].x - frameAtoms[b].x;
@@ -257,7 +256,7 @@ function twoCentreType(
   b: AtomShare,
   elements: string[],
   coefficients: number[],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   frameAtoms: Molecule['atoms'],
 ): 'sigma' | 'pi' | 'delta' {
   const metal = [a, b].find((share) =>
@@ -288,7 +287,7 @@ function classify(
   bondPops: number[],
   molecule: Molecule,
   coefficients: number[],
-  basis: ExtendedHuckelResult['basis'],
+  basis: BasisFunction[],
   frameAtoms: Molecule['atoms'],
 ): LocalizedCharacter {
   const [first, second, third, fourth] = shares;
@@ -360,7 +359,7 @@ function classify(
 /** Character + the numbers the order needs, for one localized orbital. */
 function describe(
   molecule: Molecule,
-  result: ExtendedHuckelResult,
+  result: Pick<OrbitalSpace, 'basis' | 'overlap' | 'hamiltonian'>,
   coefficients: number[],
   occupied: boolean,
   frameAtoms: Molecule['atoms'],
@@ -401,7 +400,7 @@ function describe(
  */
 export function orderLocalizedOrbitals(
   molecule: Molecule,
-  result: ExtendedHuckelResult,
+  result: Pick<OrbitalSpace, 'basis' | 'overlap' | 'hamiltonian'>,
   localized: LocalizedSets,
 ): LocalizedOrbital[] {
   const frameAtoms = alignToPrincipalAxes(molecule).atoms;

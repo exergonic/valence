@@ -62,6 +62,14 @@ export function showsOnlyValenceS(element: string): boolean {
   return alkali || dOrFBlock;
 }
 
+/** The d block, Sc–Zn, Y–Cd and La–Hg (the lanthanides with it, whose
+ *  valence functions in GFN2 are s, p and d): the elements whose d shell is
+ *  a valence shell, one n below the s, rather than a polarization function. */
+export function isDBlock(element: string): boolean {
+  const z = atomicNumber(element);
+  return (z >= 21 && z <= 30) || (z >= 39 && z <= 48) || (z >= 57 && z <= 80);
+}
+
 /** The valence s orbital's name, "4s" for nickel. */
 export function valenceSOrbital(element: string): string {
   return `${period(element)}s`;

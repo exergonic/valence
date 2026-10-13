@@ -1,5 +1,5 @@
 export { initScene, activeIsoValue, setActiveIsoValue } from './setup';
-export type { SceneContext, DisplaySettings, ColorSettings, ColorScheme } from './setup';
+export type { SceneContext, DisplaySettings, ColorSettings, ColorScheme, LocalizedList } from './setup';
 export { renderAtoms } from './atoms';
 export { applyAtomStyle, atomEnvMap, atomLayer, makeAtomMaterial, ATOM_LAYER } from './atom-styles';
 export type { AtomStyle } from './atom-styles';
@@ -10,4 +10,4 @@ export { renderOrbitalLabels } from './orbital-labels';
 export { renderPiSystems } from './pi-systems';
 export { renderDipole } from './dipole';
 export { renderEsp } from './esp';
-export { rebuildDisplay, buildScene, syncChargeModelControl, gfn2LadderOnScreen } from './rebuild';
+export { rebuildDisplay, buildScene, syncChargeModelControl, gfn2LadderOnScreen, localizedOnScreen } from './rebuild';

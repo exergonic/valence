@@ -2,7 +2,8 @@
  * The MO panel, in two views of the same calculation. **Delocalized** lists the
  * canonical orbitals — one row per level, ascending, lowest at the bottom —
  * and clicking a row draws that MO over the molecule. **Localized** lists the
- * Pipek–Mezey orbitals, also ascending by ⟨φ|H|φ⟩. Both are rows of the same
+ * Pipek–Mezey orbitals — GFN2-xTB's, or extended Hückel's when GFN2 has none
+ * to give — also ascending by ⟨φ|H|φ⟩. Both are rows of the same
  * kind, because they describe the same electrons.
  *
  * The delocalized rows are RANKED, not placed by energy: true spacing is
@@ -19,7 +20,7 @@
  * The levels are real; the filling would be a lie.
  */
 import type { SceneContext } from '../render';
-import { activeIsoValue, setActiveIsoValue, gfn2LadderOnScreen } from '../render';
+import { activeIsoValue, setActiveIsoValue, gfn2LadderOnScreen, localizedOnScreen, type LocalizedList } from '../render';
 import type { BasisFunction } from '../chem/extended-huckel/assign-basis';
 import { MO_SURFACE_ISOVALUES, MO_SURFACE_PERCENTILES } from '../chem/extended-huckel/mo-surface';
 import type { Molecule } from '../mol-parser';
@@ -32,22 +33,28 @@ import { SP_ONLY_METALS } from '../chem/extended-huckel/parameters';
 import { ENERGY_UNIT, formatEnergy } from './units';
 import { writeNote } from './info-note';
 
-const PIPEK_MEZEY_NOTE = {
-  text: 'Pipek–Mezey localization of the extended-Hückel orbitals (semiempirical): the delocalized MOs '
-    + 'rearranged into bonds and lone pairs, occupied space and valence-virtual space alike, listed as an energy '
-    + 'ladder — lowest at the bottom. No energies are printed: a localized orbital is not an eigenstate, so the order uses the one-electron '
-    + 'expectation ⟨φ|H|φ⟩ while the numbers themselves would inherit the parameter sensitivity.',
-  link: {
-    label: 'Pipek & Mezey, J. Chem. Phys. 1989',
-    href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
-  },
-};
+/** The Localized view's note, naming the calculation it localized. */
+function pipekMezeyNote(list: LocalizedList) {
+  const source = list.source === 'gfn2'
+    ? `GFN2-xTB orbitals (semiempirical, self-consistent)${list.spin ? ` — the ${list.spin === 'alpha' ? 'α' : 'β'} spin channel, one electron per orbital` : ''}`
+    : 'extended-Hückel orbitals (semiempirical) — GFN2-xTB had none to give for this structure';
+  return {
+    text: `Pipek–Mezey localization of the ${source}: the delocalized MOs `
+      + 'rearranged into bonds and lone pairs, occupied space and valence-virtual space alike, listed as an energy '
+      + 'ladder — lowest at the bottom. No energies are printed: a localized orbital is not an eigenstate, so the order uses the one-electron '
+      + 'expectation ⟨φ|H|φ⟩ while the numbers themselves would inherit the parameter sensitivity.',
+    link: {
+      label: 'Pipek & Mezey, J. Chem. Phys. 1989',
+      href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
+    },
+  };
+}
 
 const GFN2_ORBITAL_NOTE = {
   text: 'GFN2-xTB orbitals (semiempirical, self-consistent): each electron feels the charge of the others, which '
     + 'extended Hückel’s fixed parameters leave out — so where the two ladders disagree on ORDER, GFN2’s is the one '
     + 'to trust. Its energies are its own: the empty orbitals sit low (formaldehyde’s LUMO near −8 eV), so read the '
-    + 'gaps and the order, not the absolute numbers. Localized orbitals are extended Hückel’s.',
+    + 'gaps and the order, not the absolute numbers. The Localized view localizes these orbitals.',
   link: { label: 'Bannwarth, Ehlert & Grimme, JCTC 2019', href: 'https://pubs.acs.org/doi/10.1021/acs.jctc.8b01176' },
 };
 
@@ -231,6 +238,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       if (ctx.display.moSpin === spin) return;
       ctx.display.moSpin = spin;
       ctx.display.moIndex = null;
+      ctx.display.localizedSelection = [];
       draw();
       ctx.rerender();
     });
@@ -239,11 +247,16 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const gfn2 = ctx.display.moMethod === 'gfn2';
     methodRow?.classList.toggle('hidden', view !== 'delocalized');
     for (const b of methodButtons) b.classList.toggle('active', b.dataset.moMethod === ctx.display.moMethod);
-    const openShell = gfn2 && view === 'delocalized' && !!ctx.gfn2Ladders?.ladders?.beta;
+    // the spin row serves whichever list reads GFN2's orbitals: the ladder
+    // with GFN2 picked, the localized list whenever it is GFN2's
+    const readsGfn2 = view === 'delocalized' ? gfn2 : ctx.localized?.source === 'gfn2';
+    const openShell = readsGfn2 && !!ctx.gfn2Ladders?.ladders?.beta;
     spinRow?.classList.toggle('hidden', !openShell);
     for (const b of spinButtons) b.classList.toggle('active', b.dataset.moSpin === ctx.display.moSpin);
     if (methodHint) {
-      methodHint.innerHTML = gfn2 && view === 'delocalized'
+      // the hint describes the calculation the list on screen reads: the
+      // localized list is GFN2's unless GFN2 had none to give
+      methodHint.innerHTML = readsGfn2 || (view === 'localized' && !ctx.localized)
         ? 'GFN2-xTB: one self-consistent single point at this geometry, its own parameter set through radon. '
           + 'Blue and orange are the two orbital phases.'
         : ehHint;
@@ -283,16 +296,28 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
    * here would inherit the extended-Hückel parameters (PLAN.md Phase 4).
    */
   function drawLocalized(): void {
-    const orbitals = ctx.localizedOrbitals;
+    const shown = localizedOnScreen(ctx);
     const molecule = ctx.currentMolecule;
-    const basis = ctx.ehResult?.basis;
-    if (!orbitals || !molecule || !basis) {
-      note.textContent = ctx.currentMolecule
-        ? 'No localized orbitals: the shell is not closed — an odd electron count, a degenerate set the '
-          + 'count would only partly fill, or a molecule known to be open-shell.'
-        : 'Load a molecule to see its orbitals.';
+    if (shown === 'pending') {
+      note.textContent = 'Computing the GFN2-xTB orbitals to localize…';
       return;
     }
+    const orbitals = shown?.orbitals;
+    if (!shown || !orbitals || !molecule) {
+      note.textContent = !molecule
+        ? 'Load a molecule to see its orbitals.'
+        : !shown
+          ? 'No localized orbitals: GFN2-xTB could not treat this molecule, and an element here is outside the '
+            + 'extended-Hückel parameter table.'
+          : shown.source === 'gfn2'
+            ? 'No localized orbitals: GFN2-xTB leaves a level at the frontier partly filled — a degenerate set the '
+              + 'electrons cannot fill evenly — so which orbitals are occupied is not settled.'
+              + (shown.spin ? ' Try the other spin channel.' : '')
+            : 'No localized orbitals: the shell is not closed — an odd electron count, a degenerate set the '
+              + 'count would only partly fill, or a molecule known to be open-shell.';
+      return;
+    }
+    const basis = shown.basis;
 
     const selection = ctx.display.localizedSelection;
     const occupiedCount = orbitals.filter((o) => o.occupied).length;
@@ -307,9 +332,10 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       const tag = orbital.occupied ? 'occupied' : 'empty';
       if (tag !== section) {
         section = tag;
+        const spin = shown.spin ? ` (${shown.spin === 'alpha' ? 'α' : 'β'})` : '';
         const header = orbital.occupied
-          ? `Occupied · ${occupiedCount}`
-          : `Empty — valence-virtual · ${orbitals.length - occupiedCount}`;
+          ? `Occupied${spin} · ${occupiedCount}`
+          : `Empty${spin} — valence-virtual · ${orbitals.length - occupiedCount}`;
         html += `<div class="orb-group">${header}</div>`;
       }
       const slot = selection.indexOf(index);
@@ -347,7 +373,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     } else {
       readout.textContent = `${orbitals.length} localized orbitals · click one to draw it, another to compare`;
     }
-    writeNote(note, PIPEK_MEZEY_NOTE);
+    writeNote(note, pipekMezeyNote(shown));
   }
 
   // The ladder the list was last framed on. Every click redraws the list, and
@@ -369,12 +395,14 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     // The picture controls only mean something with an orbital selected — say
     // so rather than letting a drag do nothing.
     const hasSelection = view === 'localized'
-      ? !!ctx.localizedOrbitals && ctx.display.localizedSelection.length > 0
+      ? ctx.display.localizedSelection.length > 0
       : ctx.display.moIndex !== null;
     for (const control of [smooth, opacity, isovalue]) if (control) control.disabled = !hasSelection;
     // GFN2's orbitals are drawn as surfaces only: the atomic-orbital picture
-    // draws extended Hückel's Slater lobes, which GFN2's basis is not
-    if (smooth && gfn2) {
+    // draws extended Hückel's Slater lobes, which GFN2's basis is not. The
+    // localized list is GFN2's unless GFN2 failed; until it is known, so is
+    // the switch.
+    if (smooth && (gfn2 || (view === 'localized' && ctx.localized?.source !== 'eh'))) {
       smooth.disabled = true;
       smooth.checked = true;
     } else if (smooth) {
@@ -388,6 +416,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     if (view === 'localized') {
       framed = null;
       drawLocalized();
+      syncMethodRows(view); // again: the spin row needs the list, just built
       return;
     }
 
@@ -556,8 +585,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
           const multiplicity = ctx.currentMolecule?.multiplicity ?? 1;
           note.textContent = multiplicity > 1
             ? `Open shell (a ${SPIN_NAME[multiplicity] ?? `multiplicity-${multiplicity}`}): extended `
-              + 'Hückel as built here is closed-shell and has no spin, so no occupancy arrows and no localized orbitals. '
-              + 'GFN2-xTB above treats the spin.'
+              + 'Hückel as built here is closed-shell and has no spin, so no occupancy arrows. '
+              + 'GFN2-xTB above treats the spin, and the Localized view localizes its orbitals.'
             : `Open shell (${result.electronCount} electrons): extended Hückel as built here has no spin, so occupancies `
               + 'are not shown. GFN2-xTB above treats the spin.';
         }
@@ -595,7 +624,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   }
   draw();
 
-  return {
+  const panelApi: MoPanel = {
     setOnStage,
     setView,
     /** Stop drawing any MO or localized orbital — the VSEPR lobes and the
@@ -617,7 +646,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       if (ctx.display.orbitalView === 'localized') {
         // the occupied section comes first in the array, ascending in ⟨φ|H|φ⟩,
         // so its last member is the top row of the Occupied list
-        const orbitals = ctx.localizedOrbitals ?? [];
+        const shown = localizedOnScreen(ctx);
+        const orbitals = (shown !== 'pending' && shown?.orbitals) || [];
         let homo = -1;
         for (let i = 0; i < orbitals.length; i++) if (orbitals[i].occupied) homo = i;
         if (homo >= 0) ctx.display.localizedSelection = [homo];
@@ -642,6 +672,20 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       ctx.rerender();
     },
   };
+
+  // The single point landed: its orbitals fill the GFN2 ladder and the
+  // localized list, which were waiting on it. Under an orbital view with
+  // nothing drawn yet — the HOMO could not be picked from a list not yet
+  // there — draw it now, as a new molecule would.
+  ctx.onGfn2Orbitals = () => {
+    const onStage = !panel.classList.contains('off-stage');
+    const nothingDrawn = ctx.display.moIndex === null && ctx.display.localizedSelection.length === 0;
+    const waited = ctx.display.orbitalView === 'localized' || ctx.display.moMethod === 'gfn2';
+    if (onStage && nothingDrawn && waited) panelApi.selectHomo();
+    else draw();
+  };
+
+  return panelApi;
 }
 
 /** The spin names a chemist reads, for the open-shell note. */

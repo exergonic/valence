@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { activeIsoValue, type SceneContext } from './setup';
+import { activeIsoValue, type LocalizedList, type SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
@@ -20,12 +20,12 @@ import {
 } from '../chem/charge-model/dipole';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { gfn2PropertiesAt, gfn2OrbitalSurface, gfn2EspSurface, gfn2ChargeSets, type Gfn2EspSurface, type Gfn2ChargeSets } from '../geometry/gfn2-refine';
-import { gfn2Ladders, type Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
+import { gfn2Ladders, gfn2OrbitalSpace, type Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import { syncVibration } from './vibration';
 import { isGfn2ChargeModel, type ChargeModel } from './setup';
 import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
-import { localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
+import { extendedHuckelSpace, localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../chem/localized-orbitals/order-localized';
 import { resolveCharges } from '../chem/charge-model/bci-charges';
 import { labelPaletteFor } from './label-colors';
@@ -157,6 +157,9 @@ export function requestGfn2Properties(ctx: SceneContext): void {
       ctx.gfn2PropertiesRequest = { molecule, status: 'failed', reason: reason ?? 'the engine returned nothing' };
     }
     ctx.rerender();
+    // the orbital panel waited on this, either for the orbitals or for word
+    // that extended Hückel's must stand in
+    ctx.onGfn2Orbitals();
   };
   gfn2PropertiesAt(molecule).then(
     (properties) => settle(properties),
@@ -216,32 +219,71 @@ export function gfn2LadderOnScreen(ctx: SceneContext): Gfn2Ladder | null {
 }
 
 /**
- * Draw the selected GFN2 orbital. Its surface is built in the worker — the
- * field and its gradient need the engine's own basis — so the first draw asks
- * for it and the picture fills in when it lands; after that it is cached by
- * orbital and level like extended Hückel's. True when an orbital is selected
- * (drawn or on its way), so the hybrid lobes step aside.
+ * The Localized view's orbitals: GFN2-xTB's once the single point is in — each
+ * spin channel of an open shell localized on its own — and extended Hückel's
+ * only when GFN2 has none to give (the engine failed, or a build without the
+ * orbital bindings). 'pending' while the single point runs. Localized on first
+ * ask and kept until the orbitals change: Pipek–Mezey costs up to a second
+ * (PCl₅) on the main thread, and no other view reads it.
  */
-function drawGfn2Orbital(ctx: SceneContext): boolean {
-  const index = ctx.display.moIndex;
+export function localizedOnScreen(ctx: SceneContext): LocalizedList | 'pending' | null {
+  const molecule = ctx.currentMolecule;
+  if (!molecule) return null;
   const properties = gfn2PropertiesOnScreen(ctx);
-  const ladder = gfn2LadderOnScreen(ctx);
-  if (index === null || !properties || !ladder || !ladder.coefficients[index]) return false;
+  if (!properties && !gfn2ChargesFailed(ctx)) return 'pending';
+  const ladder = properties ? gfn2LadderOnScreen(ctx) : null;
+  const from = ladder ?? ctx.ehResult;
+  if (!from) return null;
+  if (ctx.localized?.from === from) return ctx.localized;
+  if (ladder) {
+    const space = gfn2OrbitalSpace(ladder);
+    const sets = space && localizeOrbitals(space, molecule.atoms.length);
+    ctx.localized = {
+      source: 'gfn2', spin: ladder.spin, basis: ladder.basis, from,
+      orbitals: space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null,
+    };
+  } else {
+    const result = ctx.ehResult!;
+    const space = extendedHuckelSpace(molecule, result);
+    const sets = space && localizeOrbitals(space, molecule.atoms.length);
+    ctx.localized = {
+      source: 'eh', spin: null, basis: result.basis, from,
+      orbitals: sets ? orderLocalizedOrbitals(molecule, result, sets) : null,
+    };
+  }
+  return ctx.localized;
+}
+
+/** One GFN2 orbital to draw: any coefficient vector in its basis — a canonical
+ *  MO or a localized one — under a name the worker caches its field by. */
+interface Gfn2Pick {
+  orbital: string;
+  coefficients: number[];
+  /** The atoms it has a share on: the box its field is built in. */
+  atoms: number[];
+  phase: [number, number];
+}
+
+/**
+ * Draw GFN2 orbitals. Their surfaces are built in the worker — the field and
+ * its gradient need the engine's own basis — so the first draw asks for each
+ * and the picture fills in when it lands; after that it is cached by orbital
+ * and level like extended Hückel's.
+ */
+function drawGfn2Orbitals(ctx: SceneContext, properties: Gfn2Properties, picks: Gfn2Pick[]): void {
   const value = activeIsoValue(ctx.display);
   const mode = ctx.display.isoMode;
-  const orbital = `${ladder.spin ?? 'alpha'}:${index}`;
-  const key = `gfn2:${properties.key}:${orbital}@${mode === 'percentile' ? 'p' : 'a'}${value}`;
-  const surface = ctx.moSurfaces.get(key);
-  if (surface) {
-    renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, MO_PHASE_PAIRS[0]);
-    return true;
-  }
-  if (!ctx.gfn2SurfaceRequests.has(key)) {
+  for (const pick of picks) {
+    const key = `gfn2:${properties.key}:${pick.orbital}@${mode === 'percentile' ? 'p' : 'a'}${value}`;
+    const surface = ctx.moSurfaces.get(key);
+    if (surface) {
+      renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase);
+      continue;
+    }
+    if (ctx.gfn2SurfaceRequests.has(key)) continue;
     ctx.gfn2SurfaceRequests.add(key);
     const molecule = ctx.currentMolecule;
-    // the box: the atoms the orbital has a share on
-    const atoms = ladder.atomShares[index].flatMap((share, atom) => (share > 0.02 ? [atom] : []));
-    gfn2OrbitalSurface({ key: properties.key, orbital, coefficients: ladder.coefficients[index], atoms, mode, value })
+    gfn2OrbitalSurface({ key: properties.key, orbital: pick.orbital, coefficients: pick.coefficients, atoms: pick.atoms, mode, value })
       .then((result) => {
         ctx.gfn2SurfaceRequests.delete(key);
         if (result && ctx.currentMolecule === molecule) {
@@ -251,7 +293,39 @@ function drawGfn2Orbital(ctx: SceneContext): boolean {
       })
       .catch(() => ctx.gfn2SurfaceRequests.delete(key));
   }
-  return true;
+}
+
+/** The selected GFN2 orbitals, from the ladder or the localized list. True when
+ *  one is selected (drawn or on its way), so the hybrid lobes step aside. */
+function drawSelectedGfn2Orbitals(ctx: SceneContext, localized: LocalizedList | null): boolean {
+  const properties = gfn2PropertiesOnScreen(ctx);
+  if (!properties) return false;
+  const picks: Gfn2Pick[] = [];
+  if (localized) {
+    ctx.display.localizedSelection.forEach((index, slot) => {
+      const orbital = localized.orbitals?.[index];
+      if (!orbital) return;
+      picks.push({
+        orbital: `localized:${localized.spin ?? 'alpha'}:${index}`,
+        coefficients: orbital.coefficients,
+        atoms: orbital.populations.flatMap((share, atom) => (share > 0.02 ? [atom] : [])),
+        phase: MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length],
+      });
+    });
+  } else {
+    const index = ctx.display.moIndex;
+    const ladder = gfn2LadderOnScreen(ctx);
+    if (index !== null && ladder?.coefficients[index]) {
+      picks.push({
+        orbital: `${ladder.spin ?? 'alpha'}:${index}`,
+        coefficients: ladder.coefficients[index],
+        atoms: ladder.atomShares[index].flatMap((share, atom) => (share > 0.02 ? [atom] : [])),
+        phase: MO_PHASE_PAIRS[0],
+      });
+    }
+  }
+  drawGfn2Orbitals(ctx, properties, picks);
+  return picks.length > 0;
 }
 
 /** Spin density is only on offer for an open-shell structure; the option says
@@ -507,17 +581,22 @@ function redrawScene(ctx: SceneContext) {
   // while it is selected. The localized view draws SEVERAL at once (a filled
   // orbital and the empty one it reaches into is the hyperconjugation
   // picture), so each takes its own phase colours, in the order it was picked.
-  if (ctx.display.orbitalView === 'delocalized' && ctx.display.moMethod === 'gfn2') {
-    const selected = drawGfn2Orbital(ctx);
+  // asked only with a localized orbital selected: off the Localized view
+  // nothing is, and the list is not built for a view nobody is looking at
+  const localizedShown = ctx.display.orbitalView === 'localized' && ctx.display.localizedSelection.length > 0
+    ? localizedOnScreen(ctx) : null;
+  const localized = localizedShown === 'pending' ? null : localizedShown;
+  if ((ctx.display.orbitalView === 'delocalized' && ctx.display.moMethod === 'gfn2') || localized?.source === 'gfn2') {
+    const selected = drawSelectedGfn2Orbitals(ctx, localized);
     ctx.moGroup.visible = selected;
     ctx.orbitalGroup.visible = selected ? false : ctx.display.showOrbitals;
     return;
   }
 
   const picks: Array<{ key: string; coefficients: number[]; phase: [number, number] }> = [];
-  if (ctx.display.orbitalView === 'localized' && ctx.localizedOrbitals) {
+  if (ctx.display.orbitalView === 'localized' && localized?.orbitals) {
     ctx.display.localizedSelection.forEach((index, slot) => {
-      const orbital = ctx.localizedOrbitals![index];
+      const orbital = localized.orbitals![index];
       if (!orbital) return;
       picks.push({
         key: `localized:${index}`,
@@ -625,11 +704,8 @@ export function buildScene(ctx: SceneContext) {
   // computed once here and cached; null when an element is outside the
   // parameter table. A new molecule also clears any selected MO.
   ctx.ehResult = ctx.currentMolecule ? solveExtendedHuckel(ctx.currentMolecule) : null;
-  ctx.localizedOrbitals = null;
-  if (ctx.currentMolecule && ctx.ehResult) {
-    const localized = localizeOrbitals(ctx.currentMolecule, ctx.ehResult);
-    if (localized) ctx.localizedOrbitals = orderLocalizedOrbitals(ctx.currentMolecule, ctx.ehResult, localized);
-  }
+  // the localized list is built when the Localized view first asks for it
+  ctx.localized = null;
   ctx.display.moIndex = null;
   ctx.display.localizedSelection = [];
   rebuildDisplay(ctx);
