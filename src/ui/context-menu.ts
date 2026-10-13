@@ -1,6 +1,7 @@
 import type { SceneContext } from '../render';
+import { gfn2LadderOnScreen, gfn2PropertiesOnScreen } from '../render';
 import { capturePng, moleculeToSDF, moleculeToXYZ } from './controls';
-import { moDataText } from './mo-data';
+import { gfn2MoDataText, moDataText } from './mo-data';
 
 /**
  * Right-click on the molecular display: put the three things a debugging
@@ -74,10 +75,28 @@ export function setupContextMenu(ctx: SceneContext, container: HTMLElement) {
 
   addItem('XYZ', () => navigator.clipboard.writeText(moleculeToXYZ(ctx.currentMolecule!)));
   // The LCAO printout: what a chemist needs to compare this app's orbitals
-  // against another program's, frame and basis order included.
-  const moItem = addItem('MO data', () => navigator.clipboard.writeText(
-    moDataText(ctx.currentMolecule!, ctx.ehResult!),
-  ));
+  // against another program's, frame and basis order included. GFN2-xTB's
+  // orbitals, the ones the app leads with; extended Hückel's only when GFN2
+  // has none to give.
+  const moItem = addItem('MO data', async () => {
+    const text = moDataSource();
+    if (text) await navigator.clipboard.writeText(text());
+  });
+  /** The writer for the orbitals on hand, or null while GFN2's single point
+   *  runs (its orbitals are the ones to export, and they are a moment away). */
+  function moDataSource(): (() => string) | null {
+    const molecule = ctx.currentMolecule;
+    if (!molecule) return null;
+    const properties = gfn2PropertiesOnScreen(ctx);
+    gfn2LadderOnScreen(ctx); // builds both channels' ladders
+    const ladders = ctx.gfn2Ladders?.ladders;
+    if (properties && ladders) return () => gfn2MoDataText(molecule, properties, ladders);
+    const request = ctx.gfn2PropertiesRequest;
+    const pending = !properties && !(request?.molecule === molecule && request.status === 'failed');
+    if (pending || !ctx.ehResult) return null;
+    const result = ctx.ehResult;
+    return () => moDataText(molecule, result);
+  }
   addItem('SDF', () => navigator.clipboard.writeText(moleculeToSDF(ctx.currentMolecule!)));
   // The PNG rides into the clipboard as a promise: a write handed to Safari
   // must be started by the click itself, not after a capture is awaited.
@@ -95,8 +114,9 @@ export function setupContextMenu(ctx: SceneContext, container: HTMLElement) {
     if (suppress) return;
     // Nothing to copy from an empty display — no menu full of dead items.
     if (!ctx.currentMolecule) return;
-    // MO data needs orbitals: an element outside the parameter table has none.
-    moItem.disabled = !ctx.ehResult;
+    // MO data needs orbitals: none while GFN2's single point runs, none from
+    // either calculation for an element outside both tables.
+    moItem.disabled = !moDataSource();
     menu.classList.remove('hidden');
     menu.style.left = '0px';
     menu.style.top = '0px';
