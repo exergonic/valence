@@ -76,3 +76,34 @@ M  END
     expect(orbitals[0].hybridization).toBe('sp³');
   });
 });
+
+// Every element GFN2-xTB treats — so every element "More…" can place — has a
+// mass, both radii and a colour. A missing mass used to count as 0: the
+// molecular weight left a nickel out, the centre of mass ignored it, and the
+// vibrations quietly did not appear.
+describe('the element tables reach every GFN2 element', () => {
+  it('has a mass, both radii and a colour for H–Rn', async () => {
+    const { ATOMIC_MASS } = await import('../src/chem/assign-mass');
+    const { ELEMENT_COLORS } = await import('../src/render/chem-data');
+    const { getCovalentRadius, getVdwRadius } = await import('../src/chem/radii');
+    const { GFN2_ELEMENTS } = await import('../src/chem/elements');
+    expect(GFN2_ELEMENTS.length).toBe(86);
+    for (const element of GFN2_ELEMENTS) {
+      expect(ATOMIC_MASS[element], element).toBeGreaterThan(0);
+      expect(ELEMENT_COLORS[element], element).toBeDefined();
+      expect(getVdwRadius(element), element).toBeGreaterThan(1);
+      expect(getCovalentRadius(element), element).toBeGreaterThan(0.2);
+    }
+  });
+
+  it('matches the sources at spot checks, and weighs [NiCl₄]²⁻ with its nickel', async () => {
+    const { ATOMIC_MASS } = await import('../src/chem/assign-mass');
+    const { getCovalentRadius, getVdwRadius } = await import('../src/chem/radii');
+    const { computeFormula } = await import('../src/geometry/resolve3d');
+    expect(ATOMIC_MASS.Ni).toBeCloseTo(58.6934, 4); // IUPAC
+    expect(getCovalentRadius('Pt')).toBe(1.36); // Cordero 2008
+    expect(getCovalentRadius('Ni')).toBe(1.24);
+    expect(getVdwRadius('Xe')).toBe(2.16); // Mantina, via PubChem
+    expect(computeFormula(['Ni', 'Cl', 'Cl', 'Cl', 'Cl']).weight).toBeCloseTo(200.49, 2);
+  });
+});
