@@ -234,7 +234,12 @@ export function localizedOnScreen(ctx: SceneContext): LocalizedList | 'pending' 
   const ladder = properties ? gfn2LadderOnScreen(ctx) : null;
   const from = ladder ?? ctx.ehResult;
   if (!from) return null;
-  if (ctx.localized?.from === from) return ctx.localized;
+  // Every list built for this molecule is kept, not just the one on screen:
+  // an open shell's two spin channels are two lists, and keeping one meant
+  // that going back from β to α localized α all over again (0.9 s for the
+  // triplet NiCl₄²⁻).
+  const kept = ctx.localizedLists.find((list) => list.from === from);
+  if (kept) return (ctx.localized = kept);
   if (ladder) {
     const space = gfn2OrbitalSpace(ladder);
     const sets = space && localizeOrbitals(space, molecule.atoms.length);
@@ -251,6 +256,7 @@ export function localizedOnScreen(ctx: SceneContext): LocalizedList | 'pending' 
       orbitals: sets ? orderLocalizedOrbitals(molecule, result, sets) : null,
     };
   }
+  ctx.localizedLists.push(ctx.localized);
   return ctx.localized;
 }
 
@@ -706,6 +712,7 @@ export function buildScene(ctx: SceneContext) {
   ctx.ehResult = ctx.currentMolecule ? solveExtendedHuckel(ctx.currentMolecule) : null;
   // the localized list is built when the Localized view first asks for it
   ctx.localized = null;
+  ctx.localizedLists = [];
   ctx.display.moIndex = null;
   ctx.display.localizedSelection = [];
   rebuildDisplay(ctx);

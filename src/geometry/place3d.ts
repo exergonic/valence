@@ -371,6 +371,11 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     // stayed) and ICl₄⁻ tetrahedral (it ended distorted, 17 kcal/mol above
     // square planar). A metal is not counted (domains 0): its neighbours set
     // its shape.
+    //
+    // Seven domains (IF₇ AX₇, XeF₆ AX₆E) are left undone on purpose, for now:
+    // they start octahedral (the count tops out at six), not as a pentagonal
+    // bipyramid. Decided with the user 2026-10-13 — they are rare in a
+    // general-chemistry lesson, and GFN2 is left to find their shape.
     const vectors = squarePlanarD8(molecule, curr, coordinationNumber)
       ? SQUARE_PLANAR_VECTORS
       : vseprBondVectors(domains[curr], coordinationNumber);

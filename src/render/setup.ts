@@ -248,6 +248,9 @@ export interface SceneContext {
   /** The Localized view's list, built on first ask from the orbitals it names
    *  (see localizedOnScreen) and kept until they change. */
   localized: LocalizedList | null;
+  /** Every localized list built for this molecule — both spin channels of an
+   *  open shell — so switching back is instant. */
+  localizedLists: LocalizedList[];
   rerender: () => void;
   /** Called when the GFN2 single point lands — its orbitals are the ladder's
    *  GFN2 rows and the Localized view's list, which waited for it. */
@@ -423,6 +426,7 @@ export function initScene(container: HTMLElement): SceneContext {
     moFields: new Map(),
     ehResult: null,
     localized: null,
+    localizedLists: [],
     rerender: () => {},
     vibrations: null,
     frame,
