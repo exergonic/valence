@@ -5,6 +5,7 @@ import { asChargeModel } from '../render/setup';
 import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { espColor } from '../chem/charge-model/esp';
+import { collectSdfData, sdfDataFields, type SdfField } from './sdf-data';
 
 export function setupControls(ctx: SceneContext) {
   let rafScheduled = false;
@@ -238,8 +239,9 @@ export function setupControls(ctx: SceneContext) {
   const exportSdf = document.getElementById('ctrl-export-sdf')!;
   exportSdf.addEventListener('click', () => {
     if (!ctx.currentMolecule) return;
-    const sdf = moleculeToSDF(ctx.currentMolecule);
-    downloadFile(sdf, 'molecule.sdf', 'chemical/x-mol');
+    void sdfWithData(ctx).then((sdf) => {
+      if (sdf) downloadFile(sdf, 'molecule.sdf', 'chemical/x-mol');
+    });
   });
 
   // Export XYZ
@@ -408,9 +410,19 @@ export function capturePng(ctx: SceneContext): Promise<Blob> {
   return png;
 }
 
-export function moleculeToSDF(mol: { atoms: any[]; bonds: any[] }): string {
+/**
+ * The molecule as an SDF record: the V2000 block, then any data fields — the
+ * `> <NAME>` blocks after `M  END` (what Valence computed, see sdf-data.ts).
+ * A field's value may run over several lines; a blank line ends it in the
+ * format, so blank lines inside a value are dropped.
+ */
+export function moleculeToSDF(
+  mol: { atoms: any[]; bonds: any[] },
+  fields: SdfField[] = [],
+  title = 'Valence export',
+): string {
   const lines: string[] = [];
-  lines.push('Valence export');
+  lines.push(title);
   lines.push('  converter');
   lines.push('');
   lines.push(`${mol.atoms.length.toString().padStart(3)}${mol.bonds.length.toString().padStart(3)}  0  0  0  0  0  0  0  0999 V2000`);
@@ -439,8 +451,25 @@ export function moleculeToSDF(mol: { atoms: any[]; bonds: any[] }): string {
       + chunk.map((c) => c.idx.toString().padStart(4) + c.charge.toString().padStart(4)).join(''));
   }
   lines.push('M  END');
+  for (const field of fields) {
+    lines.push(`> <${field.name}>`);
+    lines.push(...field.value.split('\n').filter((line) => line.trim() !== ''));
+    lines.push('');
+  }
   lines.push('$$$$');
   return lines.join('\n') + '\n';
+}
+
+/**
+ * The molecule on screen as SDF with everything Valence computed for it —
+ * what the Export button downloads and the right-click copies. Waits for the
+ * GFN2 single point and its charge sets if they are still on their way; null
+ * when the molecule changed meanwhile.
+ */
+export async function sdfWithData(ctx: SceneContext): Promise<string | null> {
+  const data = await collectSdfData(ctx);
+  if (!data) return null;
+  return moleculeToSDF(data.molecule, sdfDataFields(data), data.header.name ?? 'Valence export');
 }
 
 export function moleculeToXYZ(mol: { atoms: any[] }): string {

@@ -147,7 +147,8 @@ export function requestGfn2Properties(ctx: SceneContext): void {
   const molecule = ctx.currentMolecule;
   if (!molecule || ctx.gfn2Properties?.molecule === molecule) return;
   if (ctx.gfn2PropertiesRequest?.molecule === molecule) return;
-  ctx.gfn2PropertiesRequest = { molecule, status: 'pending' };
+  const request: NonNullable<SceneContext['gfn2PropertiesRequest']> = { molecule, status: 'pending' };
+  ctx.gfn2PropertiesRequest = request;
   const settle = (properties: Gfn2Properties | null, reason?: string) => {
     if (ctx.currentMolecule !== molecule) return; // the molecule changed meanwhile
     if (properties && properties.charges.length === molecule.atoms.length) {
@@ -161,7 +162,7 @@ export function requestGfn2Properties(ctx: SceneContext): void {
     // that extended Hückel's must stand in
     ctx.onGfn2Orbitals();
   };
-  gfn2PropertiesAt(molecule).then(
+  request.done = gfn2PropertiesAt(molecule).then(
     (properties) => settle(properties),
     (error) => settle(null, (error as Error)?.message),
   );

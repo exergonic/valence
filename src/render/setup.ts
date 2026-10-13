@@ -208,7 +208,11 @@ export interface SceneContext {
   /** That single point, asked for the molecule on screen once: pending while
    *  it runs, failed (with why) when the engine could not treat it — the
    *  charges then fall back to MMFF94 and say so. */
-  gfn2PropertiesRequest: { molecule: Molecule; status: 'pending' | 'failed'; reason?: string } | null;
+  gfn2PropertiesRequest: {
+    molecule: Molecule; status: 'pending' | 'failed'; reason?: string;
+    /** Settles when the run does, either way — for whoever must wait on it (the SDF export). */
+    done?: Promise<void>;
+  } | null;
   /** GFN2's orbital ladders, built once from `gfn2Properties` (irrep labels
    *  cost a symmetry detection). */
   gfn2Ladders: { properties: Gfn2Properties; ladders: { alpha: Gfn2Ladder; beta: Gfn2Ladder | null } | null } | null;

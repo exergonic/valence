@@ -1,6 +1,6 @@
 import type { SceneContext } from '../render';
 import { gfn2LadderOnScreen, gfn2PropertiesOnScreen } from '../render';
-import { capturePng, moleculeToSDF, moleculeToXYZ } from './controls';
+import { capturePng, moleculeToXYZ, sdfWithData } from './controls';
 import { gfn2MoDataText, moDataText } from './mo-data';
 
 /**
@@ -97,7 +97,15 @@ export function setupContextMenu(ctx: SceneContext, container: HTMLElement) {
     const result = ctx.ehResult;
     return () => moDataText(molecule, result);
   }
-  addItem('SDF', () => navigator.clipboard.writeText(moleculeToSDF(ctx.currentMolecule!)));
+  // The SDF carries everything computed, and may wait on the GFN2 single
+  // point: handed over as a promise, like the PNG, so the click still owns
+  // the write.
+  addItem('SDF', () => navigator.clipboard.write([new ClipboardItem({
+    'text/plain': sdfWithData(ctx).then((sdf) => {
+      if (!sdf) throw new Error('the molecule changed before its data was ready');
+      return new Blob([sdf], { type: 'text/plain' });
+    }),
+  })]));
   // The PNG rides into the clipboard as a promise: a write handed to Safari
   // must be started by the click itself, not after a capture is awaited.
   addItem('PNG', () => navigator.clipboard.write([new ClipboardItem({ 'image/png': capturePng(ctx) })]));

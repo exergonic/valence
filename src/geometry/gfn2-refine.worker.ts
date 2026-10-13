@@ -716,6 +716,8 @@ export interface Gfn2OrbitalSet {
  * charges and the rest of what one SCC knows.
  */
 export interface Gfn2Properties {
+  /** The total GFN2 energy at this geometry, hartree. */
+  energy: number;
   /** Mulliken SCC charges per atom, electrons. */
   charges: number[];
   /** The Wiberg bond order of each bond in `molecule.bonds`, in that order. */
@@ -990,7 +992,7 @@ export async function propertiesAt(
     kept = { key: nextKey++, calc, signs, frame, netCharge: molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0), fields: new Map() };
     keep = true;
     return {
-      charges, bondOrders, spin, multiplicity, dipole, atomicDipoles, atomicQuadrupoles, alpha, beta, key: kept.key,
+      energy, charges, bondOrders, spin, multiplicity, dipole, atomicDipoles, atomicQuadrupoles, alpha, beta, key: kept.key,
       orbitalBasis: described?.basis ?? null,
       frame,
       coefficients: { alpha: flip(alphaC), beta: betaC ? flip(betaC) : null },
