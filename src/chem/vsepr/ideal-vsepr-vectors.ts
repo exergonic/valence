@@ -1,7 +1,8 @@
-// Ideal VSEPR vertex directions — one unit vector per coordination site for
+// Ideal VSEPR vertex directions — one unit vector per electron domain for
 // a given steric number — shared by the embedder (place3d.ts) and the
 // hydrogen filler (fill-hydrogens.ts). These are the shapes the
-// hybridization engine names: sp → linear … sp³d² → octahedral.
+// hybridization engine names: sp → linear … sp³d² → octahedral. Each list's
+// order matters to vseprBondVectors: lone pairs take its last vertices.
 
 export const LINEAR_VECTORS: [number, number, number][] = [
   [1, 0, 0],
@@ -54,4 +55,17 @@ export function idealVseprVectors(count: number): [number, number, number][] {
   if (count === 5) return TRIG_BIPYRAMIDAL_VECTORS;
   if (count >= 6) return OCTAHEDRAL_VECTORS;
   return TETRA_VECTORS;
+}
+
+/**
+ * The bond directions of an AXₘEₙ centre: the ideal shape of all its electron
+ * domains, with the lone pairs' vertices left empty. The vertex lists above
+ * are ordered for this — the bonds take the first m and the lone pairs the
+ * rest — so a trigonal bipyramid's lone pairs are equatorial (its axial
+ * vertices come first: SF₄ a seesaw, ClF₃ T-shaped, XeF₂ linear) and an
+ * octahedron's are trans to one another (±z come last: BrF₅ square
+ * pyramidal, XeF₄ square planar). With no lone pairs it is the whole shape.
+ */
+export function vseprBondVectors(domains: number, bonds: number): [number, number, number][] {
+  return idealVseprVectors(Math.max(domains, bonds)).slice(0, Math.max(bonds, 1));
 }

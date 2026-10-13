@@ -1,7 +1,8 @@
 import type { Molecule } from '../mol-parser';
 import { applyWedgeStereo } from './stereo-wedge';
 import { vecDot, vecSub, crossProduct, vecNormalize, rotateRodrigues, projectPerpendicular } from '../utils/vec3';
-import { idealVseprVectors, SQUARE_PLANAR_VECTORS } from '../chem/vsepr/ideal-vsepr-vectors';
+import { vseprBondVectors, SQUARE_PLANAR_VECTORS } from '../chem/vsepr/ideal-vsepr-vectors';
+import { electronDomainCounts } from '../chem/vsepr/assign-orbitals';
 import { dElectronCount } from '../chem/d-electron-count';
 import { getCovalentRadius } from '../chem/radii';
 
@@ -192,6 +193,7 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     }
   }
   const bondLength = bondLengthFor(molecule);
+  const domains = electronDomainCounts(molecule);
 
   const pos: [number, number, number][] = new Array(n);
   const placed = new Set<number>();
@@ -362,9 +364,16 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   while (queue.length > 0) {
     const curr = queue.shift()!;
     const coordinationNumber = adj[curr].length;
+    // Lone pairs are electron domains too: the bonds go where the AXₘEₙ
+    // shape puts them, not where the neighbour count alone would. Counted by
+    // neighbours only, water started linear, ClF₃ trigonal planar (GFN2 found
+    // a flat stationary point there, 15 kcal/mol above the T-shape, and
+    // stayed) and ICl₄⁻ tetrahedral (it ended distorted, 17 kcal/mol above
+    // square planar). A metal is not counted (domains 0): its neighbours set
+    // its shape.
     const vectors = squarePlanarD8(molecule, curr, coordinationNumber)
       ? SQUARE_PLANAR_VECTORS
-      : idealVseprVectors(coordinationNumber);
+      : vseprBondVectors(domains[curr], coordinationNumber);
 
     const unplaced = adj[curr].filter((ni) => !placed.has(ni));
     if (unplaced.length === 0) continue;

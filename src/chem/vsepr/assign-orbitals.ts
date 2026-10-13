@@ -74,6 +74,71 @@ export function sigmaNeighbors(molecule: Molecule): number[][] {
   });
 }
 
+/**
+ * Count of π bonds touching each atom: a double bond = 1, a triple = 2. Only
+ * bonds between described atoms — a metal's d-orbital π back-bonding is not a
+ * p orbital this model draws.
+ */
+function piBondCounts(molecule: Molecule): number[] {
+  const piBondsPerAtom: number[] = new Array(molecule.atoms.length).fill(0);
+  for (const bond of molecule.bonds) {
+    const a = molecule.atoms[bond.atom1Index].element;
+    const b = molecule.atoms[bond.atom2Index].element;
+    if (!isVseprElement(a) || !isVseprElement(b)) continue;
+    const piCount = Math.max(0, bond.order - 1);
+    piBondsPerAtom[bond.atom1Index] += piCount;
+    piBondsPerAtom[bond.atom2Index] += piCount;
+  }
+  return piBondsPerAtom;
+}
+
+/**
+ * How many of an atom's σ neighbours carry a π bond of their own — a π system
+ * its lone pair can delocalize into: furan O, aniline N, amide N, and H₂SO₄'s
+ * OH oxygen (its lone pair donates into S=O π*). Only C, N, O and S neighbours
+ * count as π sources, and a π bond to the atom itself does not.
+ */
+function conjugatingNeighborCount(molecule: Molecule, atomIdx: number, neighborIndices: number[], piBondsPerAtom: number[]): number {
+  const PI_SOURCE_ELEMENTS = new Set(['C', 'N', 'O', 'S']);
+  return neighborIndices.filter((ni) => {
+    if (!PI_SOURCE_ELEMENTS.has(molecule.atoms[ni].element)) return false;
+    const sharedPi = molecule.bonds
+      .filter((b) => (b.atom1Index === atomIdx && b.atom2Index === ni)
+                   || (b.atom1Index === ni && b.atom2Index === atomIdx))
+      .reduce((s, b) => s + Math.max(0, b.order - 1), 0);
+    return (piBondsPerAtom[ni] - sharedPi) > 0;
+  }).length;
+}
+
+const STERIC_NUMBER: Record<string, number> = { s: 1, sp: 2, sp2: 3, sp3: 4, sp3d: 5, sp3d2: 6 };
+
+/**
+ * Each atom's electron-domain count — σ bonds plus lone pairs — from the bond
+ * graph alone, for the structure builder (place3d.ts), which has no geometry
+ * yet. The same count the orbital picture makes, so the builder starts water
+ * bent, NH₃ pyramidal, SF₄ a seesaw and XeF₄ square planar: the shapes the
+ * VSEPR picture will name. A lone pair next to a π system is counted as the p
+ * orbital it becomes (an amide N or an ester O starts trigonal, as it ends);
+ * the picture's geometric veto on that promotion needs coordinates, and the
+ * optimiser settles the few centres it catches (a pyramidal carbanion). Zero
+ * for an atom the model does not describe — a transition metal, whose shape
+ * the builder takes from its neighbour count instead.
+ */
+export function electronDomainCounts(molecule: Molecule): number[] {
+  const neighborsOf = sigmaNeighbors(molecule);
+  const piBondsPerAtom = piBondCounts(molecule);
+  return molecule.atoms.map((atom, atomIdx) => {
+    if (!isVseprElement(atom.element)) return 0;
+    const neighborIndices = neighborsOf[atomIdx];
+    const hybrid = assignHybridization(atom.element, neighborIndices.length, piBondsPerAtom[atomIdx], atom.charge ?? 0);
+    const steric = STERIC_NUMBER[hybrid.hybridization] ?? 4;
+    const lonePairs = Math.max(0, steric - neighborIndices.length);
+    const conjugated = lonePairs > 0 && piBondsPerAtom[atomIdx] === 0
+      && conjugatingNeighborCount(molecule, atomIdx, neighborIndices, piBondsPerAtom) > 0;
+    return conjugated && steric === 4 ? 3 : steric;
+  });
+}
+
 // Takes a molecule with 3D coordinates and assigns the orbitals of every
 // heavy atom.  Returns the same number of entries as molecule.atoms
 // (hydrogen included: one σ bond and no lone pair is steric number 1, which
@@ -83,18 +148,7 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
 
   const neighborsOf = sigmaNeighbors(molecule);
 
-  // Count of π bonds touching each atom: a double bond = 1, a triple = 2.
-  // Only bonds between described atoms — a metal's d-orbital π back-bonding
-  // is not a p orbital this model draws.
-  const piBondsPerAtom: number[] = new Array(atomCount).fill(0);
-  for (const bond of molecule.bonds) {
-    const a = molecule.atoms[bond.atom1Index].element;
-    const b = molecule.atoms[bond.atom2Index].element;
-    if (!isVseprElement(a) || !isVseprElement(b)) continue;
-    const piCount = Math.max(0, bond.order - 1);
-    piBondsPerAtom[bond.atom1Index] += piCount;
-    piBondsPerAtom[bond.atom2Index] += piCount;
-  }
+  const piBondsPerAtom = piBondCounts(molecule);
 
   const result: AtomOrbitals[] = [];
 
@@ -131,29 +185,13 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
 
     // Step 2: count σ lone pairs from steric number − σ bonds.
     // (Steric number = σ bonds + lone pairs, by VSEPR)
-    const stericNumber = hybrid.hybridization === 's' ? 1
-      : hybrid.hybridization === 'sp' ? 2
-      : hybrid.hybridization === 'sp2' ? 3
-      : hybrid.hybridization === 'sp3d' ? 5
-      : hybrid.hybridization === 'sp3d2' ? 6
-      : 4;
+    const stericNumber = STERIC_NUMBER[hybrid.hybridization] ?? 4;
     const sigmaBonds = neighborIndices.length;
     let lonePairs = Math.max(0, stericNumber - sigmaBonds);
 
     // Step 3: conjugation detection — can a σ lone pair delocalize into
-    // a neighbor's π system?  This happens for furan O, aniline N, amide N,
-    // and H₂SO₄ OH oxygen (lone pair donates into S=O π*).
-    // Only C, N, O, S neighbors count as π sources.
-    const PI_SOURCE_ELEMENTS = new Set(['C', 'N', 'O', 'S']);
-    const conjugatingNeighbors = neighborIndices.filter((ni) => {
-      if (!PI_SOURCE_ELEMENTS.has(molecule.atoms[ni].element)) return false;
-      // π bonds in the bond between this atom and the neighbor shouldn't count
-      const sharedPi = molecule.bonds
-        .filter((b) => (b.atom1Index === atomIdx && b.atom2Index === ni)
-                     || (b.atom1Index === ni && b.atom2Index === atomIdx))
-        .reduce((s, b) => s + Math.max(0, b.order - 1), 0);
-      return (piBondsPerAtom[ni] - sharedPi) > 0;
-    }).length;
+    // a neighbor's π system?
+    const conjugatingNeighbors = conjugatingNeighborCount(molecule, atomIdx, neighborIndices, piBondsPerAtom);
 
     const atomPos: [number, number, number] = [atom.x, atom.y, atom.z];
 
