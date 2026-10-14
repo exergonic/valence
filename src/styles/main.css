@@ -2027,6 +2027,48 @@ body .mosaic-WindowPanel button:first-of-type:hover { background: var(--accent-h
 
 #mo-list .orb-group:first-child { margin-top: 0; }
 
+/* A degenerate set: its rows held together by a rail in the list's left
+   gutter, with a little air above and below. Every row keeps the gutter, so a
+   set's rows line up with the singles around them. In the localized list the
+   rail is a button that draws the whole set; in the ladder it only marks it. */
+#mo-list { padding-left: 12px; }
+
+.orb-set {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 3px 0;
+}
+
+.orb-rail {
+  position: absolute;
+  left: -12px;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.orb-rail::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--border-strong);
+}
+
+button.orb-rail { cursor: pointer; }
+button.orb-rail:hover::before,
+button.orb-rail:focus-visible::before,
+.orb-set.drawn .orb-rail::before { background: var(--accent); }
+button.orb-rail:focus-visible { outline: none; }
+
 .orb-item {
   display: flex;
   align-items: baseline;

@@ -98,6 +98,24 @@ const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
 
+/**
+ * Split an ascending run of orbitals into degenerate sets: each set is the
+ * orbitals within DEGENERATE_TOLERANCE_EV of its first. Both lists group by
+ * this — the Delocalized ladder's symmetry-degenerate MOs and the localized
+ * list's equivalent bonds and lone pairs — and draw a set's rail from it. The
+ * tolerance (5 meV) is avo_ibo's 2×10⁻⁴ Ha, so the two programs agree on what
+ * counts as one set.
+ */
+function degenerateRuns<T>(ascending: T[], energy: (item: T) => number): T[][] {
+  const runs: T[][] = [];
+  for (const item of ascending) {
+    const last = runs[runs.length - 1];
+    if (last && Math.abs(energy(last[0]) - energy(item)) < DEGENERATE_TOLERANCE_EV) last.push(item);
+    else runs.push([item]);
+  }
+  return runs;
+}
+
 /** What the rest of the UI may ask of the MO panel (the model views, which
  *  own the inspector it sits in). */
 export interface MoPanel {
@@ -131,6 +149,17 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     ctx.display.localizedSelection = selected.includes(index)
       ? selected.filter((i) => i !== index)
       : [...selected, index];
+    draw();
+    ctx.rerender();
+  };
+
+  /** A degenerate set's rail: draw every member, or, when all are already
+   *  drawn, take them all away. Members already up keep their colours. */
+  const toggleLocalizedSet = (members: number[]) => {
+    const selected = ctx.display.localizedSelection;
+    ctx.display.localizedSelection = members.every((i) => selected.includes(i))
+      ? selected.filter((i) => !members.includes(i))
+      : [...selected, ...members.filter((i) => !selected.includes(i))];
     draw();
     ctx.rerender();
   };
@@ -321,23 +350,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
 
     const selection = ctx.display.localizedSelection;
     const occupiedCount = orbitals.filter((o) => o.occupied).length;
-    let section: 'occupied' | 'empty' | null = null;
-    // bottom-up: the array ascends, the panel descends, so the highest-lying
-    // orbital (the empties) sits at the top and the deepest at the bottom. The
-    // rows are walked by INDEX, reversed — `data-index` must stay the array
-    // index, which is what the selection and the click handler speak.
-    list.innerHTML = orbitals.map((_, i) => i).reverse().map((index) => {
+    const row = (index: number) => {
       const orbital = orbitals[index];
-      let html = '';
-      const tag = orbital.occupied ? 'occupied' : 'empty';
-      if (tag !== section) {
-        section = tag;
-        const spin = shown.spin ? ` (${shown.spin === 'alpha' ? 'α' : 'β'})` : '';
-        const header = orbital.occupied
-          ? `Occupied${spin} · ${occupiedCount}`
-          : `Empty${spin} — valence-virtual · ${orbitals.length - occupiedCount}`;
-        html += `<div class="orb-group">${header}</div>`;
-      }
       const slot = selection.indexOf(index);
       const classes = slot >= 0 ? 'orb-item selected' : 'orb-item';
       // the dot carries the phase colour the orbital is drawn in, so the list
@@ -347,14 +361,52 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         : '<span class="orb-dot"></span>';
       // one Type column, as avo_ibo's table has — the class IS the type's tail —
       // then the energy, written as the Delocalized ladder writes an MO's
-      return html + `<button class="${classes}" data-index="${index}">`
+      return `<button class="${classes}" data-index="${index}">`
         + dot
         + `<span class="orb-type">${localizedType(molecule, orbital)}`
         + ` · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}</span>`
         + '</button>';
+    };
+    // Degenerate sets within each section — the two O–H bonds of water, the
+    // four C–H of methane. A set never spans the occupied/empty split.
+    const indices = orbitals.map((_, i) => i);
+    const energyOf = (i: number) => orbitals[i].energy;
+    const runs = [
+      ...degenerateRuns(indices.filter((i) => orbitals[i].occupied), energyOf),
+      ...degenerateRuns(indices.filter((i) => !orbitals[i].occupied), energyOf),
+    ];
+    let section: 'occupied' | 'empty' | null = null;
+    // bottom-up: the array ascends, the panel descends, so the highest-lying
+    // orbital (the empties) sits at the top and the deepest at the bottom. The
+    // rows are walked by INDEX, reversed — `data-index` must stay the array
+    // index, which is what the selection and the click handler speak.
+    list.innerHTML = [...runs].reverse().map((run) => {
+      let html = '';
+      const tag = orbitals[run[0]].occupied ? 'occupied' : 'empty';
+      if (tag !== section) {
+        section = tag;
+        const spin = shown.spin ? ` (${shown.spin === 'alpha' ? 'α' : 'β'})` : '';
+        const header = tag === 'occupied'
+          ? `Occupied${spin} · ${occupiedCount}`
+          : `Empty${spin} — valence-virtual · ${orbitals.length - occupiedCount}`;
+        html += `<div class="orb-group">${header}</div>`;
+      }
+      const rows = [...run].reverse().map(row).join('');
+      if (run.length === 1) return html + rows;
+      // the rail draws the whole set at once: the equivalent bonds of a
+      // molecule are read together, and one click beats n
+      const drawn = run.every((i) => selection.includes(i));
+      return html + `<div class="orb-set${drawn ? ' drawn' : ''}">`
+        + `<button class="orb-rail" data-members="${run.join(',')}" `
+        + `title="${run.length} orbitals at one energy — click to ${drawn ? 'hide' : 'draw'} them together" `
+        + `aria-label="${drawn ? 'Hide' : 'Draw'} the ${run.length} orbitals at this energy together"></button>`
+        + rows + '</div>';
     }).join('');
     list.querySelectorAll<HTMLButtonElement>('button.orb-item').forEach((node) => {
       node.addEventListener('click', () => toggleLocalized(Number(node.dataset.index)));
+    });
+    list.querySelectorAll<HTMLButtonElement>('button.orb-rail').forEach((node) => {
+      node.addEventListener('click', () => toggleLocalizedSet(node.dataset.members!.split(',').map(Number)));
     });
 
     if (selection.length > 0) {
@@ -365,7 +417,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         .map((orbital) => `${localizedType(molecule, orbital)} · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}`
           + (orbital.occupied ? '' : ' (empty)'))
         .join('  +  ')
-        + (selection.length > 1 ? ' — click either again to drop it' : ' — click it again to hide');
+        + (selection.length > 2 ? ' — click any again to drop it'
+          : selection.length > 1 ? ' — click either again to drop it' : ' — click it again to hide');
       // the composition line describes the LAST orbital picked: two orbitals
       // have no joint composition, and the latest pick is the one being read
       const latest = orbitals[selection[selection.length - 1]];
@@ -453,12 +506,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     // on purpose: two levels a few meV apart read as one set. The
     // canonicalization note below is gated on the solver's own tolerance, so a
     // near-miss is not described as a symmetry degeneracy.
-    const groups: typeof levels[] = [];
-    for (const level of levels) {
-      const last = groups[groups.length - 1];
-      if (last && Math.abs(last[0].energy - level.energy) < DEGENERATE_TOLERANCE_EV) last.push(level);
-      else groups.push([level]);
-    }
+    const groups = degenerateRuns(levels, (level) => level.energy);
     const labels = ladder.labels;
     const rows: string[] = [];
     const emptyCount = occupations ? levels.filter((l) => !l.occupied).length : 0;
@@ -483,22 +531,24 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       // Degenerate partners simply share an energy; a ×n marker beside the
       // number read as a multiplier on the orbital and was dropped.
       const tag = group.some((l) => l.homo) ? 'HOMO' : group.some((l) => l.lumo) ? 'LUMO' : '';
-      for (const level of group) {
+      const members = group.map((level) => {
         const drawn = ctx.display.moIndex === level.index;
         const phase = drawn
           ? ` style="background:#${MO_PHASE_PAIRS[0][0].toString(16).padStart(6, '0')}"`
           : '';
         const irrep = labels[level.index];
-        rows.push(
-          `<button class="orb-item${drawn ? ' selected' : ''}" data-index="${level.index}">`
+        return `<button class="orb-item${drawn ? ' selected' : ''}" data-index="${level.index}">`
           + `<span class="orb-dot"${phase}></span>`
           + `<span class="orb-type">MO ${level.index + 1}`
           + (irrep ? ` · ${irrep}` : '')
           + ` · ${formatEnergy(level.energy)} ${ENERGY_UNIT}</span>`
           + (tag ? `<span class="orb-tag">${tag}</span>` : '')
-          + '</button>',
-        );
-      }
+          + '</button>';
+      }).join('');
+      // A degenerate set carries the same rail as the localized list's. It
+      // only marks the set here: this view draws one MO at a time.
+      rows.push(group.length === 1 ? members
+        : `<div class="orb-set"><span class="orb-rail" title="A degenerate set: ${group.length} orbitals at one energy"></span>${members}</div>`);
     }
     list.innerHTML = rows.join('');
     list.querySelectorAll<HTMLButtonElement>('button.orb-item').forEach((node) => {
