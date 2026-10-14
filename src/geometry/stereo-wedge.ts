@@ -1,11 +1,9 @@
 import type { Molecule } from '../mol-parser';
-import { vecSub, vecDot, crossProduct, vecNormalize, rotateRodrigues, findPerpendicular } from '../utils/vec3';
+import {
+  vecSub, vecDot, crossProduct, vecNormalize, rotateRodrigues, findPerpendicular,
+  vecScale as scale, vecAdd as add, vecLength as length, type Vec3,
+} from '../utils/vec3';
 
-type Vec3 = [number, number, number];
-
-const scale = (v: Vec3, k: number): Vec3 => [v[0] * k, v[1] * k, v[2] * k];
-const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-const length = (v: Vec3) => Math.hypot(v[0], v[1], v[2]);
 const sign = (x: number) => (x > 0 ? 1 : x < 0 ? -1 : 0);
 
 /**

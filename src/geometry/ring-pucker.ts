@@ -15,7 +15,7 @@ import { assignHybridization } from '../chem/vsepr/hybridize';
  * chemistry: a trigonal centre in a small ring is planar.
  *
  * The app does not move the atoms — the engine's geometry is what is shown.
- * The GFN2 tier gets these centres right on its own, and a post-hoc repair is
+ * The local GFN2-xTB engine gets these centres right on its own, and a post-hoc repair is
  * the kind of silent chemistry this app refuses; the geometry correction that
  * used to live here was removed 2026-10-02 for exactly that reason. What
  * remains is the report: one status line when a displayed non-GFN2 geometry

@@ -38,6 +38,7 @@
 import type { Molecule } from '../../mol-parser';
 import { jacobiSymmetric } from '../../utils/eigen';
 import { ATOMIC_MASS } from '../assign-mass';
+import { crossProduct as cross, vecDot as dot, type Vec3 } from '../../utils/vec3';
 
 export interface PrincipalFrame {
   /** The frame's x, y, z axes expressed in the molecule's coordinates. */
@@ -50,16 +51,6 @@ export interface PrincipalFrame {
    *  molecule's own coordinates. */
   origin: [number, number, number];
 }
-
-type Vec3 = [number, number, number];
-
-const cross = (a: Vec3, b: Vec3): Vec3 => [
-  a[1] * b[2] - a[2] * b[1],
-  a[2] * b[0] - a[0] * b[2],
-  a[0] * b[1] - a[1] * b[0],
-];
-
-const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 
 /** Flip an axis so its largest component is positive — a deterministic sign,
  *  so the same molecule always yields the same frame (and the same labels). */

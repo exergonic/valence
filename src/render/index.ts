@@ -1,13 +1,9 @@
+// The render layer's face to the UI: what the panels, the controls and the
+// exports reach for. Its drawing modules are internal to rebuild.ts.
 export { initScene, activeIsoValue, setActiveIsoValue } from './setup';
-export type { SceneContext, DisplaySettings, ColorSettings, ColorScheme, LocalizedList } from './setup';
-export { renderAtoms } from './atoms';
-export { applyAtomStyle, atomEnvMap, atomLayer, makeAtomMaterial, ATOM_LAYER } from './atom-styles';
+export type { SceneContext, ColorScheme, LocalizedList } from './setup';
+export { ATOM_LAYER } from './atom-styles';
 export type { AtomStyle } from './atom-styles';
-export { renderBonds } from './bonds';
-export { renderHybridOrbitals } from './hybrid-orbitals';
-export { renderLabels, renderChargeLabels, renderHybridizationLabels } from './labels';
-export { renderOrbitalLabels } from './orbital-labels';
-export { renderPiSystems } from './pi-systems';
-export { renderDipole } from './dipole';
-export { renderEsp } from './esp';
-export { rebuildDisplay, buildScene, syncChargeModelControl, gfn2LadderOnScreen, gfn2PropertiesOnScreen, localizedOnScreen } from './rebuild';
+export {
+  rebuildDisplay, buildScene, frameCamera, syncChargeModelControl, gfn2LadderOnScreen, gfn2PropertiesOnScreen, localizedOnScreen,
+} from './rebuild';

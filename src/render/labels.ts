@@ -10,7 +10,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 // atom) can never occlude it, while any genuinely nearer geometry can.
 const LABEL_PUSH = 1.25;
 
-export function makeTextSprite(text: string): THREE.Sprite {
+function makeTextSprite(text: string): THREE.Sprite {
   const canvas = document.createElement('canvas');
   canvas.width = 80;
   canvas.height = 80;
@@ -74,7 +74,7 @@ export function renderBondOrderLabels(group: THREE.Group, molecule: Molecule, bo
 
 /** A spin population: "0.83", "−0.12" (U+2212 minus) — where the unpaired
  *  electrons sit, and the small opposite spin polarisation leaves behind. */
-export function formatSpin(s: number): string {
+function formatSpin(s: number): string {
   if (Math.abs(s) < 0.005) return '0.00';
   return s > 0 ? s.toFixed(2) : `−${Math.abs(s).toFixed(2)}`;
 }

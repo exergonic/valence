@@ -7,11 +7,11 @@
  * beyond the contour, |f| is "inside" at both ends and the lobes fuse, while
  * f = +c and f = −c each cross that edge once and the gap stays empty.
  *
- * Two users: the MO isosurfaces (extended-huckel/mo-surface.ts) and the π-cloud
- * highlight (render/pi-systems.ts).
+ * Its users: the extended-Hückel MO isosurfaces (extended-huckel/mo-surface.ts),
+ * the π-cloud highlight (render/pi-systems.ts), and in the GFN2-xTB worker the
+ * orbital surfaces and the 0.001 au density surface the ESP is drawn on.
  */
-
-export type Vec3 = [number, number, number];
+import type { Vec3 } from './vec3';
 
 /** A field sampled on a uniform grid, x fastest. */
 export interface SignedGrid {

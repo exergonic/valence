@@ -88,3 +88,10 @@ export function lowestMultiplicity(atoms: Array<{ element: string; charge?: numb
   for (const a of atoms) electrons += atomicNumber(a.element) - (a.charge ?? 0);
   return electrons % 2 === 0 ? 1 : 2;
 }
+
+const SPIN_NAMES = ['', 'singlet', 'doublet', 'triplet', 'quartet', 'quintet', 'sextet'];
+
+/** The name a chemist reads for a spin multiplicity: "triplet" for 3. */
+export function spinName(multiplicity: number): string {
+  return SPIN_NAMES[multiplicity] ?? `multiplicity-${multiplicity}`;
+}

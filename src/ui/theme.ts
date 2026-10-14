@@ -43,7 +43,7 @@ function write(key: string, value: string): void {
   }
 }
 
-export function storedThemeChoice(): ThemeChoice {
+function storedThemeChoice(): ThemeChoice {
   const stored = read(STORAGE_KEY);
   return stored === 'steel' || stored === 'light' || stored === 'system' || stored === 'graphite' ? stored : 'graphite';
 }

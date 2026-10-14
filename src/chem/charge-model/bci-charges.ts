@@ -3,16 +3,17 @@
  *
  * Halgren's bond-charge increments (`assign_bci_charges` in the vendored
  * mmff94-ts), computed locally on the molecule as drawn so every geometry
- * path (PubChem, CACTVS, local) gets the same values and the charges always
+ * path (PubChem, CIR, local) gets the same values and the charges always
  * match the bond graph actually shown. The geometry provider's own partial
  * charges (PubChem's PUBCHEM_MMFF94_PARTIAL_CHARGES) are deliberately
  * ignored.
  *
- * Everything charged in the app resolves through here — the dipole arrow,
- * the per-atom charge labels and the ESP surface — so ONE refusal rule
+ * Under the MMFF94 charge model — the user's choice, or the stand-in when
+ * GFN2-xTB cannot treat the molecule — the dipole arrow, the per-atom charge
+ * labels and the ESP surface all resolve through here, so ONE refusal rule
  * covers all three: an element outside the MMFF94 type space gets no
- * charges, and each consumer says so rather than printing a fallback
- * number ("no arrow, no lie").
+ * charges, and each consumer says so rather than printing a fallback number
+ * ("no arrow, no lie").
  */
 import { assign_atom_types, assign_bci_charges } from 'mmff94-ts';
 import type { Molecule } from '../../mol-parser';

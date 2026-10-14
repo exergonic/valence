@@ -26,10 +26,11 @@
  */
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { atomicNumber, lowestMultiplicity } from '../chem/elements';
-import { normalModes, type NormalMode } from '../chem/gfn2-xtb/normal-modes';
+import { normalModes, HESSIAN_SADDLE_THRESHOLD, type NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { alignToPrincipalAxes, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
 import { levelForFraction } from '../chem/extended-huckel/mo-surface';
 import { marchSignedField } from '../utils/march-tetrahedra';
+import type { Vec3 } from '../utils/vec3';
 import { jacobiSymmetric } from '../utils/eigen';
 import { fitChargesToPotential, mkFitPoints, fibonacciSphere } from '../chem/charge-model/esp-fit';
 import { cm5Corrections, cm5Covers, hirshfeldCharges, type RadialDensity } from '../chem/charge-model/cm5';
@@ -135,11 +136,6 @@ const BERNY_GRADIENT_MAX = 4.5e-4;
 const MAX_HESSIAN_ATOMS = 16;
 /** Finite-difference step for the numerical Hessian, in bohr. */
 const HESSIAN_STEP_BOHR = 0.005;
-/** Below this lowest Hessian eigenvalue (Eh/bohr²) the stationary point is a
- *  saddle: the noise floor is ±0.003, a real imaginary mode of the planar
- *  cyclopropenyl anion −0.16 (the measurements are in NOTES.md, and
- *  gfn2-refine.ts carries the same number for the display). */
-const SADDLE_THRESHOLD = -0.02;
 /** How far a saddle is pushed down its imaginary mode before re-optimising, in
  *  bohr (the length of the 3N displacement). Measured 2026-10-02 on the planar
  *  cyclopropenyl anion: 0.30 bohr along the mode lowers the energy by 4.15
@@ -241,13 +237,67 @@ function elementToZ(element: string): number {
   return z;
 }
 
-const toMat3N = (M: any, flatBohr: number[], count: number) => {
+/** Flat x y z triples as the engine's 3×N matrix, values as given. */
+const toMat3N = (M: any, flat: ArrayLike<number>) => {
+  const count = flat.length / 3;
   const m = M.Mat3N.create(count);
   for (let a = 0; a < count; a++) {
-    for (let c = 0; c < 3; c++) m.set(c, a, flatBohr[3 * a + c]);
+    for (let c = 0; c < 3; c++) m.set(c, a, flat[3 * a + c]);
   }
   return m;
 };
+
+/** Points in Å as the engine's 3×N matrix in bohr — what every method but
+ *  the Molecule constructor takes. */
+const bohrPoints = (M: any, flatAngstrom: ArrayLike<number>) =>
+  toMat3N(M, Array.from(flatAngstrom, (v) => v / ANGSTROM_PER_BOHR));
+
+/** An engine Molecule. Its constructor is the one place OCC takes Å. */
+const occMolecule = (M: any, atoms: Array<{ element: string }>, flatAngstrom: number[]) =>
+  new M.Molecule(M.IVec.fromArray(atoms.map((a) => elementToZ(a.element))), toMat3N(M, flatAngstrom));
+
+/** The calculator's energy and gradient at a geometry (Å). The gradient is
+ *  read out (Eh/bohr, [atom][x y z]) and the engine's copies released — an
+ *  optimisation makes thousands of these calls. */
+function evaluate(M: any, calc: any, flatAngstrom: number[], numerical: boolean): { energy: number; gradient: number[][] } {
+  const positions = bohrPoints(M, flatAngstrom);
+  try {
+    calc.updateStructure(positions);
+  } finally {
+    positions.delete?.();
+  }
+  // the second argument is the finite-difference step, read only when the
+  // gradient is numerical
+  const result = calc.energyAndGradient(numerical, NUMERICAL_GRADIENT_STEP_BOHR);
+  const count = flatAngstrom.length / 3;
+  const gradient = Array.from({ length: count }, (_, a) => [0, 1, 2].map((c) => result.gradient.get(c, a) as number));
+  result.gradient.delete?.();
+  return { energy: result.energy, gradient };
+}
+
+/**
+ * A uniform grid over the box lo–hi (Å), x fastest, as the engine's points in
+ * bohr: the step as fine as `maxPoints` allows, between 0.15 and 0.25 Å.
+ */
+function boxGrid(M: any, lo: number[], hi: number[], maxPoints: number) {
+  const volume = (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
+  const spacing = Math.max(0.15, Math.min(0.25, Math.cbrt(volume / maxPoints)));
+  const dimensions = [0, 1, 2].map((c) => Math.ceil((hi[c] - lo[c]) / spacing) + 1) as Vec3;
+  const count = dimensions[0] * dimensions[1] * dimensions[2];
+  const points = M.Mat3N.create(count);
+  let index = 0;
+  for (let gz = 0; gz < dimensions[2]; gz++) {
+    for (let gy = 0; gy < dimensions[1]; gy++) {
+      for (let gx = 0; gx < dimensions[0]; gx++) {
+        points.set(0, index, (lo[0] + gx * spacing) / ANGSTROM_PER_BOHR);
+        points.set(1, index, (lo[1] + gy * spacing) / ANGSTROM_PER_BOHR);
+        points.set(2, index, (lo[2] + gz * spacing) / ANGSTROM_PER_BOHR);
+        index++;
+      }
+    }
+  }
+  return { points, origin: lo as Vec3, dimensions, spacing, count };
+}
 
 /** The library's energy container. Only `total` is meaningful here: OCC's
  *  decomposition (SCC, repulsion, dispersion) does not map onto MMFF94's
@@ -294,14 +344,9 @@ export async function optimizeWithGfn2(
   const multiplicity = molecule.multiplicity ?? lowestMultiplicity(molecule.atoms);
   const unpaired = multiplicity - 1;
 
-  // Angstrom in, for the constructor only.
   const startAngstrom = molecule.atoms.flatMap((a) => [a.x, a.y, a.z]);
-  const toBohrMat = (flatAngstrom: number[]) =>
-    toMat3N(M, flatAngstrom.map((v) => v / ANGSTROM_PER_BOHR), count);
   const buildCalculator = () => {
-    const calc = M.XtbCalculator.fromMolecule(
-      new M.Molecule(M.IVec.fromArray(molecule.atoms.map((a) => elementToZ(a.element))), toMat3N(M, startAngstrom, count)),
-    );
+    const calc = M.XtbCalculator.fromMolecule(occMolecule(M, molecule.atoms, startAngstrom));
     calc.charge = totalCharge;
     calc.numUnpairedElectrons = unpaired;
     return calc;
@@ -340,12 +385,8 @@ export async function optimizeWithGfn2(
       if (performance.now() > deadline) throw new Error('GFN2: aborting — out of time');
       evaluations += 1;
       if (evaluations % PROGRESS_EVERY === 0) report();
-      const flatAngstrom = work.atoms.flatMap((a) => [a.x, a.y, a.z]);
       try {
-        calc.updateStructure(toBohrMat(flatAngstrom));
-        // the second argument is the finite-difference step, read only when
-        // the gradient is numerical
-        const result = calc.energyAndGradient(numerical, NUMERICAL_GRADIENT_STEP_BOHR);
+        const result = evaluate(M, calc, work.atoms.flatMap((a) => [a.x, a.y, a.z]), numerical);
         if (!Number.isFinite(result.energy) || calc.lastResult()?.converged === false) {
           throw new Error('GFN2: the SCC did not converge at a trial geometry');
         }
@@ -353,16 +394,9 @@ export async function optimizeWithGfn2(
           if (++spuriousDrops > budgets.spuriousDrops) throw new Error('GFN2: aborting on spurious SCF solutions');
           throw new Error('GFN2: spurious SCF solution (implausible energy drop)');
         }
-        const gradient: number[][] = [];
-        for (let a = 0; a < count; a++) {
-          const row = [
-            result.gradient.get(0, a) * FORCE_UNIT,
-            result.gradient.get(1, a) * FORCE_UNIT,
-            result.gradient.get(2, a) * FORCE_UNIT,
-          ];
-          if (!row.every(Number.isFinite)) throw new Error('GFN2: non-finite gradient');
-          gradient.push(row);
-        }
+        // to the library's unit, kcal/mol/Å
+        const gradient = result.gradient.map((row) => row.map((g) => g * FORCE_UNIT));
+        if (!gradient.every((row) => row.every(Number.isFinite))) throw new Error('GFN2: non-finite gradient');
         hasValidEvaluation = true;
         bestEnergy = Math.min(bestEnergy, result.energy);
         lowestEnergy = lowestEnergy === null ? result.energy : Math.min(lowestEnergy, result.energy);
@@ -417,7 +451,7 @@ export async function optimizeWithGfn2(
    */
   const ladder = (start: Molecule) => {
     // a holder, not a bare let: the rungs assign it from inside a closure
-    const ladder: { best: OptimizationResult | null } = { best: null };
+    const found: { best: OptimizationResult | null } = { best: null };
     let iterations = 0;
     let calc = buildCalculator();
     const rung = (run: (c: ReturnType<typeof buildCalculator>) => OptimizationResult) => {
@@ -427,7 +461,7 @@ export async function optimizeWithGfn2(
         const result = run(calc);
         iterations += result.iterations;
         // a converged result always wins; otherwise keep the lowest point seen
-        if (result.converged || !ladder.best || result.energy.total < ladder.best.energy.total) ladder.best = result;
+        if (result.converged || !found.best || result.energy.total < found.best.energy.total) found.best = result;
       } catch {
         // this rung refused the start; the next one gets its turn
       }
@@ -435,18 +469,18 @@ export async function optimizeWithGfn2(
     rung((c) => optimize_lbfgs(toMMFFMol(start), makeOracle(c, {
       engineFailures: MAX_ENGINE_FAILURES.lbfgs, spuriousDrops: MAX_SPURIOUS_DROPS, calls: MAX_CALLS.lbfgs,
     }), options));
-    if (!ladder.best?.converged) {
+    if (!found.best?.converged) {
       rung((c) => optimize_steepest_descent(toMMFFMol(start), makeOracle(c, {
         engineFailures: MAX_ENGINE_FAILURES.fallback, spuriousDrops: MAX_SPURIOUS_DROPS, calls: MAX_CALLS.fallback,
       }), { ...options, initial_step_size: FALLBACK_STEP_ANGSTROM }));
     }
-    if (!ladder.best?.converged && count <= MAX_NUMERICAL_GRADIENT_ATOMS) {
-      const from = ladder.best ? at(ladder.best) : start;
+    if (!found.best?.converged && count <= MAX_NUMERICAL_GRADIENT_ATOMS) {
+      const from = found.best ? at(found.best) : start;
       rung((c) => optimize_lbfgs(toMMFFMol(from), makeOracle(c, {
         engineFailures: MAX_ENGINE_FAILURES.lbfgs, spuriousDrops: MAX_SPURIOUS_DROPS, calls: MAX_NUMERICAL_CALLS,
       }, true), options));
     }
-    const result = ladder.best;
+    const result = found.best;
     if (!result || result.molecule.atoms.length !== count) {
       release(calc);
       return null;
@@ -455,8 +489,7 @@ export async function optimizeWithGfn2(
     let energy = result.energy.total;
     let evaluates = true;
     try {
-      calc.updateStructure(toBohrMat(geometry.atoms.flatMap((a) => [a.x, a.y, a.z])));
-      energy = calc.energyAndGradient(false, NUMERICAL_GRADIENT_STEP_BOHR).energy;
+      energy = evaluate(M, calc, geometry.atoms.flatMap((a) => [a.x, a.y, a.z]), false).energy;
     } catch {
       // The accepted point itself did not evaluate: the geometry and the
       // optimiser's energy stand, but nothing read from the cache would.
@@ -479,7 +512,7 @@ export async function optimizeWithGfn2(
   const berny = (start: Molecule, numerical: boolean): Relaxed | null => {
     const startAngstrom = start.atoms.flatMap((a) => [a.x, a.y, a.z]);
     const calc = buildCalculator();
-    const shape = new M.Molecule(M.IVec.fromArray(start.atoms.map((a) => elementToZ(a.element))), toMat3N(M, startAngstrom, count));
+    const shape = occMolecule(M, start.atoms, startAngstrom);
     const optimiser = new M.BernyOptimizer(shape);
     let positions = startAngstrom;
     let energy = Number.NaN;
@@ -487,8 +520,7 @@ export async function optimizeWithGfn2(
     let converged = false;
     try {
       for (; steps < BERNY_MAX_STEPS && performance.now() < deadline; steps++) {
-        calc.updateStructure(toBohrMat(positions));
-        const result = calc.energyAndGradient(numerical, NUMERICAL_GRADIENT_STEP_BOHR);
+        const result = evaluate(M, calc, positions, numerical);
         if (!Number.isFinite(result.energy) || calc.lastResult()?.converged === false) {
           throw new Error('GFN2: the SCC did not converge at a Berny step');
         }
@@ -496,13 +528,18 @@ export async function optimizeWithGfn2(
         energy = result.energy;
         lowestEnergy = lowestEnergy === null ? energy : Math.min(lowestEnergy, energy);
         report();
-        optimiser.update(result.energy, result.gradient);
+        const gradient = toMat3N(M, result.gradient.flat());
+        optimiser.update(result.energy, gradient);
+        gradient.delete?.();
         if (optimiser.step()) {
           converged = true;
           break;
         }
-        const next = optimiser.getNextGeometry().positions(); // Angstrom
+        const nextGeometry = optimiser.getNextGeometry();
+        const next = nextGeometry.positions(); // Angstrom
         positions = Array.from({ length: 3 * count }, (_, k) => next.get(k % 3, Math.floor(k / 3)));
+        next.delete?.();
+        nextGeometry.delete?.();
       }
     } catch {
       release(calc);
@@ -528,17 +565,11 @@ export async function optimizeWithGfn2(
    *  Eh/bohr — and the cache put back at that point afterwards, since the
    *  charges and the Hessian are read from it. */
   const exactGradientMax = (relaxed: Relaxed): number => {
-    const flatBohr = toBohrMat(relaxed.geometry.atoms.flatMap((a) => [a.x, a.y, a.z]));
-    relaxed.calc.updateStructure(flatBohr);
-    const exact = relaxed.calc.energyAndGradient(true, NUMERICAL_GRADIENT_STEP_BOHR);
+    const flatAngstrom = relaxed.geometry.atoms.flatMap((a) => [a.x, a.y, a.z]);
+    const exact = evaluate(M, relaxed.calc, flatAngstrom, true);
     evaluations += 1 + 6 * count;
-    let largest = 0;
-    for (let a = 0; a < count; a++) {
-      for (let c = 0; c < 3; c++) largest = Math.max(largest, Math.abs(exact.gradient.get(c, a)));
-    }
-    relaxed.calc.updateStructure(toBohrMat(relaxed.geometry.atoms.flatMap((a) => [a.x, a.y, a.z])));
-    relaxed.calc.energyAndGradient(false, NUMERICAL_GRADIENT_STEP_BOHR);
-    return largest;
+    evaluate(M, relaxed.calc, flatAngstrom, false);
+    return Math.max(...exact.gradient.flat().map(Math.abs));
   };
 
   /**
@@ -614,7 +645,7 @@ export async function optimizeWithGfn2(
   // lead to different minima — re-optimise each, and keep the lower converged
   // result. Its curvature is checked again: a higher-order saddle may need
   // another push.
-  while (lowest && lowest.value < SADDLE_THRESHOLD && saddleEscapes < MAX_SADDLE_ESCAPES
+  while (lowest && lowest.value < HESSIAN_SADDLE_THRESHOLD && saddleEscapes < MAX_SADDLE_ESCAPES
     && performance.now() < deadline) {
     saddleEscapes += 1;
     stage = 'saddle';
@@ -678,7 +709,7 @@ export async function optimizeWithGfn2(
     saddleEscapes,
     // the vibrations come free with the curvature check: the same Hessian,
     // mass-weighted — and only mean something at a minimum
-    vibrations: lowest && lowest.value >= SADDLE_THRESHOLD ? normalModes(best.geometry.atoms, lowest.matrix) : null,
+    vibrations: lowest && lowest.value >= HESSIAN_SADDLE_THRESHOLD ? normalModes(best.geometry.atoms, lowest.matrix) : null,
   };
 }
 
@@ -704,9 +735,6 @@ export interface Gfn2OrbitalSet {
   energies: number[];
   /** Occupations: 0–2 for a closed shell, 0–1 for one spin channel. */
   occupations: number[];
-  /** Each orbital's Mulliken share on each atom, [orbital][atom], summing to
-   *  1 over the atoms — which atoms an orbital lives on. */
-  atomShares: number[][];
 }
 
 /**
@@ -741,7 +769,7 @@ export interface Gfn2Properties {
    *  cloud beyond its offset (a π cloud's two lobes). For the ESP. */
   atomicQuadrupoles: Array<[number, number, number, number, number, number]> | null;
   /** The molecular orbitals: one set for a closed shell, α and β for an open
-   *  one. Their shapes are drawn by `orbitalField`, which needs this run's
+   *  one. Their shapes are drawn by `orbitalSurface`, which needs this run's
    *  calculator, so it is kept alive under `key` until the next run. */
   alpha: Gfn2OrbitalSet;
   beta: Gfn2OrbitalSet | null;
@@ -863,20 +891,6 @@ function vector(v: any): number[] {
   return Array.from({ length: v.size() }, (_, i) => v.get(i) as number);
 }
 
-/** Each orbital's Mulliken share per atom: Σ over the atom's AOs of c_μ (S c)_μ. */
-function atomShares(orbitals: number[][], overlap: any, aoAtom: number[], atomCount: number): number[][] {
-  const n = aoAtom.length;
-  return orbitals.map((c) => {
-    const shares = new Array(atomCount).fill(0);
-    for (let mu = 0; mu < n; mu++) {
-      let sc = 0;
-      for (let nu = 0; nu < n; nu++) sc += overlap.get(mu, nu) * c[nu];
-      shares[aoAtom[mu]] += c[mu] * sc;
-    }
-    return shares;
-  });
-}
-
 export async function propertiesAt(
   molecule: Molecule,
   locateFile?: (path: string) => string,
@@ -889,14 +903,12 @@ export async function propertiesAt(
   // degenerate-set canonicalization can be shared. Energies, charges and bond
   // orders do not care; the dipole is turned back below.
   const frame = alignToPrincipalAxes(molecule);
-  const angstrom = frame.atoms.flatMap((a) => [a.x, a.y, a.z]);
-  const calc = M.XtbCalculator.fromMolecule(
-    new M.Molecule(M.IVec.fromArray(molecule.atoms.map((a) => elementToZ(a.element))), toMat3N(M, angstrom, count)),
-  );
+  const calc = M.XtbCalculator.fromMolecule(occMolecule(M, molecule.atoms, frame.atoms.flatMap((a) => [a.x, a.y, a.z])));
+  const netCharge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
   let keep = false;
   try {
     const multiplicity = molecule.multiplicity ?? lowestMultiplicity(molecule.atoms);
-    calc.charge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
+    calc.charge = netCharge;
     calc.numUnpairedElectrons = multiplicity - 1;
     const energy = calc.singlePointEnergy();
     const result = calc.lastResult();
@@ -918,7 +930,6 @@ export async function propertiesAt(
       const mu = calc.dipoleMoment();
       const inFrame = [mu.x(), mu.y(), mu.z()].map((v) => v * DEBYE_PER_E_BOHR);
       const [ax, ay, az] = frame.axes;
-      const netCharge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
       dipole = [0, 1, 2].map((k) =>
         inFrame[0] * ax[k] + inFrame[1] * ay[k] + inFrame[2] * az[k]
         + netCharge * frame.origin[k] * DEBYE_PER_E_ANGSTROM,
@@ -960,22 +971,18 @@ export async function propertiesAt(
       }
     }
 
-    // The AO → atom map comes from the patch too; without it the shares are
-    // left empty rather than guessed.
-    const aoAtom = typeof calc.aoAtoms === 'function' ? vector(calc.aoAtoms()) : null;
     const overlap = result.overlapMatrix;
-    const orbitalSet = (energies: any, occupations: any, coefficients: number[][]): Gfn2OrbitalSet => ({
+    const orbitalSet = (energies: any, occupations: any): Gfn2OrbitalSet => ({
       energies: vector(energies).map((e) => e * EV_PER_HARTREE),
       occupations: vector(occupations),
-      atomShares: aoAtom ? atomShares(coefficients, overlap, aoAtom, count) : [],
     });
     const alphaC = columns(result.orbitalCoefficients);
-    const alpha = orbitalSet(result.orbitalEnergies, result.orbitalOccupations, alphaC);
+    const alpha = orbitalSet(result.orbitalEnergies, result.orbitalOccupations);
     let beta: Gfn2OrbitalSet | null = null;
     let betaC: number[][] | null = null;
     if (result.unrestricted) {
       betaC = columns(result.orbitalCoefficientsBeta);
-      beta = orbitalSet(result.orbitalEnergiesBeta, result.orbitalOccupationsBeta, betaC);
+      beta = orbitalSet(result.orbitalEnergiesBeta, result.orbitalOccupationsBeta);
     }
 
     const described = describeBasis(M, calc, frame.atoms);
@@ -990,7 +997,7 @@ export async function propertiesAt(
     }
 
     if (kept) release(kept.calc);
-    kept = { key: nextKey++, calc, signs, frame, netCharge: molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0), fields: new Map() };
+    kept = { key: nextKey++, calc, signs, frame, netCharge, fields: new Map() };
     keep = true;
     return {
       energy, charges, bondOrders, spin, multiplicity, dipole, atomicDipoles, atomicQuadrupoles, alpha, beta, key: kept.key,
@@ -1054,22 +1061,7 @@ function orbitalGrid(M: any, request: OrbitalSurfaceRequest): OrbitalGrid | null
     const p = [atoms[i].x, atoms[i].y, atoms[i].z];
     for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], p[c] - ORBITAL_PAD); hi[c] = Math.max(hi[c], p[c] + ORBITAL_PAD); }
   }
-  const volume = (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
-  const spacing = Math.max(0.15, Math.min(0.25, Math.cbrt(volume / ORBITAL_GRID_POINTS)));
-  const dims = [0, 1, 2].map((c) => Math.ceil((hi[c] - lo[c]) / spacing) + 1) as [number, number, number];
-  const count = dims[0] * dims[1] * dims[2];
-  const points = M.Mat3N.create(count);
-  let index = 0;
-  for (let gz = 0; gz < dims[2]; gz++) {
-    for (let gy = 0; gy < dims[1]; gy++) {
-      for (let gx = 0; gx < dims[0]; gx++) {
-        points.set(0, index, (lo[0] + gx * spacing) / ANGSTROM_PER_BOHR);
-        points.set(1, index, (lo[1] + gy * spacing) / ANGSTROM_PER_BOHR);
-        points.set(2, index, (lo[2] + gz * spacing) / ANGSTROM_PER_BOHR);
-        index++;
-      }
-    }
-  }
+  const { points, origin, dimensions, spacing, count } = boxGrid(M, lo, hi, ORBITAL_GRID_POINTS);
   const coefficients = M.Vec.create(request.coefficients.length);
   request.coefficients.forEach((c, mu) => coefficients.set(mu, c * kept!.signs[mu]));
   const out = kept.calc.orbitalValues(points, coefficients);
@@ -1083,7 +1075,7 @@ function orbitalGrid(M: any, request: OrbitalSurfaceRequest): OrbitalGrid | null
   points.delete?.();
   out.delete?.();
   coefficients.delete?.();
-  const grid: OrbitalGrid = { values, origin: lo as [number, number, number], dimensions: dims, spacing, peak };
+  const grid: OrbitalGrid = { values, origin, dimensions, spacing, peak };
   if (kept.fields.size >= 8) kept.fields.clear();
   kept.fields.set(request.orbital, grid);
   return grid;
@@ -1095,21 +1087,16 @@ function orbitalGrid(M: any, request: OrbitalSurfaceRequest): OrbitalGrid | null
  * for direction, for the reason given in marchMoField. Then from the frame back
  * to the molecule's coordinates.
  */
-export async function orbitalSurface(request: OrbitalSurfaceRequest): Promise<OrbitalSurface | null> {
+async function orbitalSurface(request: OrbitalSurfaceRequest): Promise<OrbitalSurface | null> {
   const M = await loadGfn2();
   const grid = orbitalGrid(M, request);
   if (!grid || !kept) return null;
-  const level = request.mode === 'percentile'
-    ? levelForFraction(grid as unknown as Parameters<typeof levelForFraction>[0], request.value)
-    : request.value;
+  const level = request.mode === 'percentile' ? levelForFraction(grid, request.value) : request.value;
   const sheets = marchSignedField(grid, level, () => [0, 0, 0]);
   const vertexCount = sheets.positions.length / 3;
   const normals = new Float32Array(sheets.positions.length);
   if (vertexCount > 0) {
-    const points = M.Mat3N.create(vertexCount);
-    for (let v = 0; v < vertexCount; v++) {
-      for (let c = 0; c < 3; c++) points.set(c, v, sheets.positions[3 * v + c] / ANGSTROM_PER_BOHR);
-    }
+    const points = bohrPoints(M, sheets.positions);
     const coefficients = M.Vec.create(request.coefficients.length);
     request.coefficients.forEach((c, mu) => coefficients.set(mu, c * kept!.signs[mu]));
     const out = kept.calc.orbitalValues(points, coefficients);
@@ -1204,22 +1191,7 @@ export async function espSurface(key: number): Promise<Gfn2EspSurface | null> {
   const atoms = kept.frame.atoms;
   const lo = [0, 1, 2].map((c) => Math.min(...atoms.map((a) => [a.x, a.y, a.z][c])) - ESP_DENSITY_PAD);
   const hi = [0, 1, 2].map((c) => Math.max(...atoms.map((a) => [a.x, a.y, a.z][c])) + ESP_DENSITY_PAD);
-  const volume = (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
-  const spacing = Math.max(0.15, Math.min(0.25, Math.cbrt(volume / ESP_GRID_POINTS)));
-  const dims = [0, 1, 2].map((c) => Math.ceil((hi[c] - lo[c]) / spacing) + 1) as [number, number, number];
-  const count = dims[0] * dims[1] * dims[2];
-  const grid = M.Mat3N.create(count);
-  let index = 0;
-  for (let gz = 0; gz < dims[2]; gz++) {
-    for (let gy = 0; gy < dims[1]; gy++) {
-      for (let gx = 0; gx < dims[0]; gx++) {
-        grid.set(0, index, (lo[0] + gx * spacing) / ANGSTROM_PER_BOHR);
-        grid.set(1, index, (lo[1] + gy * spacing) / ANGSTROM_PER_BOHR);
-        grid.set(2, index, (lo[2] + gz * spacing) / ANGSTROM_PER_BOHR);
-        index++;
-      }
-    }
-  }
+  const { points: grid, origin, dimensions, spacing, count } = boxGrid(M, lo, hi, ESP_GRID_POINTS);
   const rho = kept.calc.densityValues(grid);
   const values = new Float32Array(count);
   for (let i = 0; i < count; i++) values[i] = rho.get(i);
@@ -1227,7 +1199,7 @@ export async function espSurface(key: number): Promise<Gfn2EspSurface | null> {
   rho.delete?.();
 
   // a density has one sign, so only the positive sheet comes back
-  const sheets = marchSignedField({ values, origin: lo as [number, number, number], dimensions: dims, spacing }, ESP_DENSITY_LEVEL, () => [0, 0, 0]);
+  const sheets = marchSignedField({ values, origin, dimensions, spacing }, ESP_DENSITY_LEVEL, () => [0, 0, 0]);
   const vertexCount = sheets.positions.length / 3;
   if (vertexCount === 0) return null;
 
@@ -1270,8 +1242,7 @@ export async function espSurface(key: number): Promise<Gfn2EspSurface | null> {
   around.delete?.();
 
   // the exact potential, once per point; Eh/e to the app's e/Å
-  const at = M.Mat3N.create(n);
-  for (let u = 0; u < n; u++) for (let c = 0; c < 3; c++) at.set(c, u, points[3 * u + c] / ANGSTROM_PER_BOHR);
+  const at = bohrPoints(M, points);
   const phi = kept.calc.electrostaticPotential(at);
   at.delete?.();
   const uniquePotentials = Array.from({ length: n }, (_, u) => (phi.get(u) as number) / ANGSTROM_PER_BOHR);
@@ -1322,8 +1293,7 @@ export async function chargeSets(key: number): Promise<Gfn2ChargeSets | null> {
   if (typeof calc.electrostaticPotential === 'function') {
     const points = mkFitPoints(atoms);
     const n = points.length / 3;
-    const at = M.Mat3N.create(n);
-    for (let p = 0; p < n; p++) for (let c = 0; c < 3; c++) at.set(c, p, points[3 * p + c] / ANGSTROM_PER_BOHR);
+    const at = bohrPoints(M, points);
     const phi = calc.electrostaticPotential(at);
     at.delete?.();
     // Eh/e to the app's e/Å
@@ -1341,8 +1311,7 @@ export async function chargeSets(key: number): Promise<Gfn2ChargeSets | null> {
       const bohr = atoms.map((a) => ({ x: a.x / ANGSTROM_PER_BOHR, y: a.y / ANGSTROM_PER_BOHR, z: a.z / ANGSTROM_PER_BOHR }));
       const density = (points: Float64Array) => {
         const n = points.length / 3;
-        const at = M.Mat3N.create(n);
-        for (let p = 0; p < n; p++) for (let c = 0; c < 3; c++) at.set(c, p, points[3 * p + c]);
+        const at = toMat3N(M, points); // already bohr
         const rho = calc.densityValues(at);
         at.delete?.();
         const out = new Float64Array(n);
@@ -1379,7 +1348,7 @@ const freeAtoms = new Map<string, RadialDensity | null>();
 function freeAtomDensity(M: any, element: string): RadialDensity | null {
   if (freeAtoms.has(element)) return freeAtoms.get(element)!;
   let result: RadialDensity | null = null;
-  const calc = M.XtbCalculator.fromMolecule(new M.Molecule(M.IVec.fromArray([elementToZ(element)]), toMat3N(M, [0, 0, 0], 1)));
+  const calc = M.XtbCalculator.fromMolecule(occMolecule(M, [{ element }], [0, 0, 0]));
   try {
     calc.charge = 0;
     calc.numUnpairedElectrons = lowestMultiplicity([{ element }]) - 1;
@@ -1415,22 +1384,25 @@ function freeAtomDensity(M: any, element: string): RadialDensity | null {
   return result;
 }
 
-self.onmessage = async (e: MessageEvent<{ id: number; molecule?: Molecule; task?: 'optimise' | 'properties' | 'surface' | 'esp' | 'charges' | 'load'; surface?: OrbitalSurfaceRequest; key?: number }>) => {
-  const { id, molecule, task, surface, key } = e.data;
+type Task = 'optimise' | 'properties' | 'surface' | 'esp' | 'charges' | 'load';
+
+async function run(task: Task, id: number, molecule?: Molecule, surface?: OrbitalSurfaceRequest, key?: number) {
+  switch (task) {
+    // instantiate the engine and nothing else — the page asks at startup, so
+    // the first optimisation does not wait on the download
+    case 'load': await loadGfn2(); return true;
+    case 'properties': return propertiesAt(molecule!);
+    case 'surface': return orbitalSurface(surface!);
+    case 'esp': return espSurface(key!);
+    case 'charges': return chargeSets(key!);
+    case 'optimise': return optimizeWithGfn2(molecule!, undefined, (progress) => self.postMessage({ id, progress }));
+  }
+}
+
+self.onmessage = async (e: MessageEvent<{ id: number; task: Task; molecule?: Molecule; surface?: OrbitalSurfaceRequest; key?: number }>) => {
+  const { id, task, molecule, surface, key } = e.data;
   try {
-    // 'load' instantiates the engine and nothing else — the page asks for it
-    // at startup, so the first optimisation does not wait on the download
-    const result = task === 'load'
-      ? (await loadGfn2(), true)
-      : task === 'properties'
-        ? await propertiesAt(molecule!)
-        : task === 'surface'
-          ? await orbitalSurface(surface!)
-          : task === 'esp'
-            ? await espSurface(key!)
-            : task === 'charges'
-              ? await chargeSets(key!)
-        : await optimizeWithGfn2(molecule!, undefined, (progress) => self.postMessage({ id, progress }));
+    const result = await run(task, id, molecule, surface, key);
     self.postMessage({ id, result });
   } catch (error) {
     // Never fail silently: the caller surfaces this, and a console line keeps

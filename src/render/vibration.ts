@@ -20,7 +20,7 @@ const PERIOD_AT_2000 = 0.8;
 const UP = new THREE.Vector3(0, 1, 0);
 
 /** Start (or restart, after a rebuild made new meshes) the selected mode. */
-export function startVibration(ctx: SceneContext, mode: NormalMode): void {
+function startVibration(ctx: SceneContext, mode: NormalMode): void {
   const molecule = ctx.currentMolecule;
   if (!molecule) return;
   const base = molecule.atoms.map((a) => new THREE.Vector3(a.x, a.y, a.z));
@@ -74,7 +74,7 @@ export function startVibration(ctx: SceneContext, mode: NormalMode): void {
 /** Stop the animation. The rebuild that follows puts every mesh and the
  *  orbital groups back; the atom layer belongs to its own toggle, so it goes
  *  back to what that says. */
-export function stopVibration(ctx: SceneContext): void {
+function stopVibration(ctx: SceneContext): void {
   if (!ctx.frame.onFrame) return;
   ctx.frame.onFrame = null;
   const toggle = document.getElementById('ctrl-show-mol') as HTMLInputElement | null;

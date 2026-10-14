@@ -32,7 +32,7 @@ const MK_SHELLS = [1.4, 1.6, 1.8, 2.0];
  *  fit steadier at no real cost at these sizes. */
 const POINTS_PER_SQUARE_ANGSTROM = 5;
 
-export function mkRadius(element: string): number {
+function mkRadius(element: string): number {
   return MK_RADII[element] ?? getVdwRadius(element);
 }
 

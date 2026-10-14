@@ -74,19 +74,20 @@ export interface DisplaySettings {
   colors: ColorSettings;
   viewPreset: 'all' | 'sigma-only' | 'pi-only' | 'lone-pairs-only';
   spaceFilling: boolean;
-  autoRotate: boolean;
   highlightPiSystems: boolean;
-  /** Which extended-Hückel MO is shown over the molecule (null = none).
-   *  Selecting one is what "click a level" does in the MO tab. */
+  /** Which MO of the Delocalized ladder on screen (GFN2-xTB's or extended
+   *  Hückel's) is drawn over the molecule (null = none) — what clicking a
+   *  level does. */
   moIndex: number | null;
   /** The MO panel's view: the energy ladder, or the localized orbitals
    *  (Pipek–Mezey). Only one of the two selections draws at a time. */
   orbitalView: 'delocalized' | 'localized';
-  /** Which calculation the delocalized ladder shows: extended Hückel (the
-   *  textbook picture, and the only one with localized orbitals) or GFN2-xTB
-   *  (self-consistent, so its ordering is the trustworthy one). */
+  /** Which calculation the delocalized ladder shows: GFN2-xTB (the default —
+   *  self-consistent, so its ordering is the trustworthy one) or extended
+   *  Hückel (the textbook picture). */
   moMethod: 'eh' | 'gfn2';
-  /** For an open-shell GFN2 ladder, which spin channel is listed. */
+  /** For an open shell's GFN2 orbitals — the ladder or the localized list —
+   *  which spin channel is listed. */
   moSpin: 'alpha' | 'beta';
   /** Which vibration is animated (an index into ctx.vibrations), or null. */
   vibrationIndex: number | null;
@@ -95,15 +96,14 @@ export interface DisplaySettings {
    *  picture: a filled orbital and the empty one it reaches into, each with
    *  its own phase colours. */
   localizedSelection: number[];
-  /** VSEPR/hybrid orbitals visible — the checkbox in the Build tab. The MO
+  /** VSEPR/hybrid orbitals visible (the VSEPR view's checkbox). The MO
    *  picture takes precedence: an MO and the hybrid lobes are two different
    *  answers to the same question, so they never draw together. */
   showOrbitals: boolean;
-  /** Charge-model ESP surface (translucent vdW spheres colored by V). */
+  /** The ESP surface: GFN2-xTB's density surface, or the fused van der Waals
+   *  surface under MMFF94 (see rebuildDisplay). */
   showEsp: boolean;
-  /** Which partial-charge model the charge labels and the ESP surface draw.
-   *  GFN2-xTB's own charges are offered only for a structure the GFN2 tier
-   *  produced; the dipole arrow stays on MMFF94 either way. */
+  /** Which partial charges the labels print (see ChargeModel). */
   chargeModel: ChargeModel;
   /** ESP surface translucency — 0.05..0.95 (1 − opacity reads as see-through). */
   espOpacity: number;
@@ -182,7 +182,8 @@ export interface SceneContext {
   piSystemGroup: THREE.Group;
   dipoleGroup: THREE.Group;
   espGroup: THREE.Group;
-  /** Extended-Hückel MO lobes for the selected level (see display.moIndex). */
+  /** The selected orbitals' surfaces or lobes (see display.moIndex and
+   *  display.localizedSelection). */
   moGroup: THREE.Group;
   atomRig: { key: THREE.DirectionalLight; fill: THREE.DirectionalLight; rim: THREE.DirectionalLight };
   display: DisplaySettings;
@@ -191,14 +192,13 @@ export interface SceneContext {
   /** The dipole of the charges on display (computed in rebuildDisplay from
    *  the same array as the labels and the ESP). */
   dipole: DipoleResult | null;
-  /** Resolved per-atom partial charges for the current molecule — the same
-   *  values the dipole arrow uses (BCI + residual placement). Feeds the
-   *  charge label mode and, at the charge model the control selects, the ESP
-   *  surface. */
+  /** The MMFF94 BCI charges for the current molecule (BCI + residual
+   *  placement), for when that model is chosen or GFN2 cannot treat the
+   *  molecule; null outside the MMFF94 type space. */
   charges: ResolvedCharges | null;
-  /** GFN2-xTB's own per-atom charges for the displayed structure, when it
-   *  came out of the GFN2 tier — the second charge model the display can
-   *  offer. Paired with its molecule: buildScene drops the bundle when it does
+  /** The GFN2 optimiser's own Mulliken charges, when the structure on screen
+   *  is its result — shown under Mulliken without waiting for the single
+   *  point. Paired with its molecule: buildScene drops the bundle when it does
    *  not describe the molecule on screen, so a stale array can never be read. */
   gfn2Charges: Gfn2Charges | null;
   /** What GFN2's single point at the displayed geometry knows — charges,
@@ -236,8 +236,9 @@ export interface SceneContext {
   gfn2ChargeSets: { key: number; sets: Gfn2ChargeSets } | null;
   /** Those charges, asked of the worker, and whether that failed. */
   gfn2ChargeSetsRequest: { key: number; failed: boolean } | null;
-  /** Extracted isosurfaces, keyed `mo:<index>` / `localized:<index>`. Each
-   *  costs ~50 ms to extract, and the same orbital can be picked, dropped and
+  /** Extracted isosurfaces, keyed by orbital and level (`mo:<index>@…`,
+   *  `localized:<index>@…`, `gfn2:<run>:<orbital>@…`). Each costs ~50 ms to
+   *  extract, and the same orbital can be picked, dropped and
    *  picked again while comparing orbitals — so they are kept until the
    *  isovalue or the molecule changes. */
   moSurfaces: Map<string, MoSurfaceData>;
@@ -246,8 +247,7 @@ export interface SceneContext {
    *  is already in hand (see computeMoField). */
   moFields: Map<string, MoFieldData>;
   /** Cached extended-Hückel result for the current molecule (computed once in
-   *  buildScene, like the dipole); null when an element is outside the
-   *  parameter table. */
+   *  buildScene); null when an element is outside the parameter table. */
   ehResult: ExtendedHuckelResult | null;
   /** The Localized view's list, built on first ask from the orbitals it names
    *  (see localizedOnScreen) and kept until they change. */
@@ -291,9 +291,7 @@ export function initScene(container: HTMLElement): SceneContext {
 
   // Auto-rotate stops on first user interaction
   controls.addEventListener('start', () => {
-    if (autoRotate) {
-      autoRotate = false;
-    }
+    autoRotate = false;
   });
 
   const light = new THREE.AmbientLight(0xffffff, 0.5);
@@ -339,7 +337,7 @@ export function initScene(container: HTMLElement): SceneContext {
   dipoleGroup.visible = false;
   scene.add(dipoleGroup);
   const moGroup = new THREE.Group();
-  // Nothing to show until a level is picked in the MO tab.
+  // Nothing to show until an orbital is picked.
   moGroup.visible = false;
   scene.add(moGroup);
   const espGroup = new THREE.Group();
@@ -365,8 +363,8 @@ export function initScene(container: HTMLElement): SceneContext {
     }
     controls.update();
     // Forward-push the atom labels against the (moved) camera. The dipole
-    // group is all meshes now (its δ+ tail cross is geometry, not a sprite),
-    // so it needs no per-frame push.
+    // group is all meshes (its δ+ tail cross is geometry, not a sprite), so it
+    // needs no per-frame push.
     updateLabels(labelGroup, camera);
     renderer.render(scene, camera);
   }
@@ -392,7 +390,6 @@ export function initScene(container: HTMLElement): SceneContext {
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
       viewPreset: 'all',
       spaceFilling: false,
-      autoRotate: false,
       highlightPiSystems: false,
       moIndex: null,
       orbitalView: 'delocalized',

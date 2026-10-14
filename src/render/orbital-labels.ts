@@ -5,7 +5,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 // Small text sprite for orbital/hybridization labels in the 3D scene.
 // No background circle — just crisp text that always faces the camera.
 // Colors come from the LabelPalette that matches the current background.
-export function makeLabelSprite(text: string, color: string = '#ffffff'): THREE.Sprite {
+function makeLabelSprite(text: string, color: string = '#ffffff'): THREE.Sprite {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 64;

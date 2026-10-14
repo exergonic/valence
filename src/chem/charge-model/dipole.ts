@@ -6,8 +6,7 @@
  * display draws the full dipole instead (`dipoleFromFullGfn2`), and this one
  * only when the engine could not give it; under MMFF94 it is the BCI charges'
  * (chem/charge-model/bci-charges.ts), one distribution for the labels, the
- * ESP surface and the dipole. `computeDipole` is the MMFF94 path;
- * `dipoleFromCharges` takes any.
+ * ESP surface and the dipole.
  *
  * Physics: p = Σᵢ qᵢ(rᵢ − r_com). The sum is origin-independent for a
  * neutral molecule but not for an ion, so the origin sits at the center of
@@ -22,7 +21,6 @@
  */
 import type { Molecule } from '../../mol-parser';
 import { ATOMIC_MASS } from '../assign-mass';
-import { resolveCharges } from './bci-charges';
 
 /** 1 e·Å = 4.80320427 D. */
 const EA_TO_DEBYE = 4.80320427;
@@ -55,48 +53,9 @@ export const DIPOLE_RESIDUAL_CHARGE =
   'Dipole (MMFF94 charge model) is approximate — MMFF94 has no atom type for this drawn ion ' +
   '(e.g. carbanion C⁻); its net charge was placed on the atom(s) carrying it.';
 
-export function computeDipole(molecule: Molecule): DipoleResult | null {
-  if (molecule.atoms.length === 0) return null;
-  try {
-    return computeDipoleOrThrow(molecule);
-  } catch {
-    // The typing/charge machinery must never take the render down (the
-    // local pipeline wraps its library calls the same way) — no dipole
-    // rather than a crash.
-    return null;
-  }
-}
-
-function computeDipoleOrThrow(molecule: Molecule): DipoleResult | null {
-  // BCI charges are geometry-independent (connectivity + types only), so
-  // this is computed once per molecule, not per frame. resolveCharges
-  // returns the final displayed values — BCI plus any residual placement,
-  // the same numbers the charge labels will show.
-  const resolved = resolveCharges(molecule);
-  if (!resolved) return null;
-  return dipoleFromCharges(molecule, resolved.charges, resolved.residualCharge);
-}
-
-/**
- * The point-charge dipole of any set of per-atom charges, indexed like
- * `molecule.atoms` — the MMFF94 BCI charges above, or GFN2-xTB's Mulliken
- * charges, whichever the display shows, so the arrow, the labels and the ESP
- * describe one charge distribution. Null when a charge is not finite or the
- * array does not match the atoms.
- */
-export function dipoleFromCharges(
-  molecule: Molecule,
-  charges: number[],
-  residualCharge = false,
-): DipoleResult | null {
-  if (charges.length !== molecule.atoms.length) return null;
-  for (const q of charges) {
-    if (!Number.isFinite(q)) return null;
-  }
-
-  // Center of mass from standard atomic weights. An element the table does
-  // not know contributes 0 — it is skipped (see assign-mass.ts for the
-  // documented fallback).
+/** The centre of mass (Å), standard atomic weights — the dipole's origin. An
+ *  element the table does not know contributes 0 (see assign-mass.ts). */
+function centreOfMass(molecule: Molecule): [number, number, number] {
   let totalMass = 0;
   for (const a of molecule.atoms) totalMass += ATOMIC_MASS[a.element] ?? 0;
   const com: [number, number, number] = [0, 0, 0];
@@ -108,7 +67,27 @@ export function dipoleFromCharges(
       com[2] += (m * a.z) / totalMass;
     }
   }
+  return com;
+}
 
+/**
+ * The point-charge dipole of any set of per-atom charges, indexed like
+ * `molecule.atoms`: the MMFF94 BCI charges (`resolveCharges`) under that
+ * model, or GFN2-xTB's point charges when the engine could not give its full
+ * dipole. Null for no atoms, a charge that is not finite, or an array that
+ * does not match the atoms.
+ */
+export function dipoleFromCharges(
+  molecule: Molecule,
+  charges: number[],
+  residualCharge = false,
+): DipoleResult | null {
+  if (molecule.atoms.length === 0 || charges.length !== molecule.atoms.length) return null;
+  for (const q of charges) {
+    if (!Number.isFinite(q)) return null;
+  }
+
+  const com = centreOfMass(molecule);
   const physics: [number, number, number] = [0, 0, 0];
   for (let i = 0; i < molecule.atoms.length; i++) {
     const a = molecule.atoms[i];
@@ -140,17 +119,7 @@ export function dipoleFromFullGfn2(
   molecule: Molecule,
   aboutOriginDebye: [number, number, number],
 ): DipoleResult {
-  let totalMass = 0;
-  for (const a of molecule.atoms) totalMass += ATOMIC_MASS[a.element] ?? 0;
-  const com: [number, number, number] = [0, 0, 0];
-  if (totalMass > 0) {
-    for (const a of molecule.atoms) {
-      const m = ATOMIC_MASS[a.element] ?? 0;
-      com[0] += (m * a.x) / totalMass;
-      com[1] += (m * a.y) / totalMass;
-      com[2] += (m * a.z) / totalMass;
-    }
-  }
+  const com = centreOfMass(molecule);
   const netCharge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
   const physics: [number, number, number] = [0, 1, 2].map(
     (k) => aboutOriginDebye[k] / EA_TO_DEBYE - netCharge * com[k],

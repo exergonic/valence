@@ -5,10 +5,11 @@
  * Why. The geometry we display is a chemical statement, and a symmetric
  * molecule's should read as symmetric. Every source we have is a little off:
  * measured on the app's benzene, PubChem's MMFF94 conformer spreads its C–C
- * bonds by 0.16 mÅ and holds the ring planar to 0.08 mÅ; our own local
- * pipeline gives 0.08 and 0.18 mÅ — but its atoms still sit 1.1 mÅ from exact
- * D6h, because MMFF94 converges on the energy and a ring's angular positions
- * are a soft mode that costs almost nothing to slide. That is arithmetic, not
+ * bonds by 0.16 mÅ and holds the ring planar to 0.08 mÅ; the local pipeline
+ * (MMFF94 when this was measured) gave 0.08 and 0.18 mÅ — but its atoms still
+ * sat 1.1 mÅ from exact D6h, because an optimiser converges on the energy and
+ * a ring's angular positions are a soft mode that costs almost nothing to
+ * slide. That is arithmetic, not
  * chemistry: a student looking at benzene expects D6h, and a 1e-4 Å wobble
  * reads as a distorted molecule. WebMO symmetrizes before its MO calculation
  * for the same reason, which is why its degenerate pairs are exactly
@@ -44,20 +45,23 @@
  * symmetric subspace itself.
  */
 import type { Atom, Molecule } from '../mol-parser';
+import {
+  vecDot as dot, vecSub as sub, vecAdd as add, vecScale as scale, crossProduct as cross, vecLength as length, type Vec3,
+} from '../utils/vec3';
 
 /**
  * Distance (Å) within which an atom counts as mapped onto another. Measured
  * on the app's molecules, the noise we are removing comes in two regimes:
  * stiff coordinates are tight (benzene's C–C bonds spread 0.2 mÅ, its ring is
  * planar to 0.2 mÅ) while soft ones — a ring's angular positions, an O–H
- * torsion — drift to 1–20 mÅ, because MMFF94 converges on the energy and a
- * soft mode costs almost nothing to slide. This is a *permission*, not a
+ * torsion — drift to 1–20 mÅ, because an optimiser converges on the energy
+ * and a soft mode costs almost nothing to slide. This is a *permission*, not a
  * force: an operation is only accepted if the geometry already satisfies it
  * this well, so the actual movement is the geometry's own deviation (1 mÅ for
  * benzene, not 20). The margin below real chemistry is a factor of ~2.5: a
  * Jahn–Teller bond difference, a puckered ring, a twisted biaryl are all
- * ≥0.05 Å, and none of our sources (all force-field geometries) produces a
- * meaningful distortion in the 0.005–0.05 Å band.
+ * ≥0.05 Å, and none of our sources (optimised geometries, converged to a
+ * gradient) produces a meaningful distortion in the 0.005–0.05 Å band.
  */
 export const SYMMETRY_TOLERANCE = 0.02;
 
@@ -70,7 +74,6 @@ const MAX_ROTATION_ORDER = 6;
  *  than average a geometry over a set we do not trust. */
 const MAX_GROUP_ORDER = 120;
 
-type Vec3 = [number, number, number];
 type Mat3 = [Vec3, Vec3, Vec3];
 
 interface Operation {
@@ -106,17 +109,6 @@ export interface SymmetrizedGeometry {
   /** largest distance any atom moved (Å) */
   maxShift: number;
 }
-
-const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const add = (a: Vec3, b: Vec3): Vec3 => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-const scale = (a: Vec3, k: number): Vec3 => [a[0] * k, a[1] * k, a[2] * k];
-const cross = (a: Vec3, b: Vec3): Vec3 => [
-  a[1] * b[2] - a[2] * b[1],
-  a[2] * b[0] - a[0] * b[2],
-  a[0] * b[1] - a[1] * b[0],
-];
-const length = (a: Vec3) => Math.hypot(a[0], a[1], a[2]);
 
 function unit(a: Vec3): Vec3 {
   const n = length(a);

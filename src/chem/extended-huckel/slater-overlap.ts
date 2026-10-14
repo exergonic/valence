@@ -21,6 +21,7 @@
 import type { Molecule } from '../../mol-parser';
 import { D_FUNCTIONS, type BasisFunction } from './assign-basis';
 import { slaterTerms } from './parameters';
+import { vecDot as dot } from '../../utils/vec3';
 
 /** A(1..n) and B(1..n) as above. `maxIndex` must cover n₁+n₂+1. */
 export function abFunctions(zeta1: number, zeta2: number, R: number, maxIndex: number): { A: number[]; B: number[] } {
@@ -259,7 +260,6 @@ function singleOverlap(a: BasisFunction, b: BasisFunction, zetaA: number, zetaB:
     const r = Math.hypot(dx, dy, dz);
     return [dx / r, dy / r, dz / r];
   };
-  const dot = (u: [number, number, number], v: [number, number, number]) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
 
   if (a.angular === 's' && b.angular === 's') {
     return radialComponent(a.n, 0, b.n, 0, 0, zetaA, zetaB, R);

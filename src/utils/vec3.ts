@@ -1,5 +1,19 @@
-export function vecSub(a: [number, number, number], b: [number, number, number]): [number, number, number] {
+export type Vec3 = [number, number, number];
+
+export function vecSub(a: Vec3, b: Vec3): Vec3 {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+export function vecAdd(a: Vec3, b: Vec3): Vec3 {
+  return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+}
+
+export function vecScale(v: Vec3, k: number): Vec3 {
+  return [v[0] * k, v[1] * k, v[2] * k];
+}
+
+export function vecLength(v: Vec3): number {
+  return Math.hypot(v[0], v[1], v[2]);
 }
 
 export function vecDot(a: [number, number, number], b: [number, number, number]): number {
@@ -81,4 +95,13 @@ export function rotateToward(
     from[0] * to[1] - from[1] * to[0],
   ]);
   return rotateRodrigues(v, axis, dot, Math.sqrt(1 - dot * dot));
+}
+
+/** The dihedral a–b–c–d (radians), looking down b→c: positive when a turns
+ *  clockwise onto d, the IUPAC sign. */
+export function dihedralAngle(a: Vec3, b: Vec3, c: Vec3, d: Vec3): number {
+  const axis = vecNormalize(vecSub(c, b));
+  const u = projectPerpendicular(vecSub(a, b), axis);
+  const v = projectPerpendicular(vecSub(d, c), axis);
+  return Math.atan2(vecDot(crossProduct(u, v), axis), vecDot(u, v));
 }

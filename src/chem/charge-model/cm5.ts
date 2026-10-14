@@ -104,7 +104,7 @@ export interface RadialDensity {
   rho: Float64Array;
 }
 
-export function radialDensityAt(atom: RadialDensity, r: number): number {
+function radialDensityAt(atom: RadialDensity, r: number): number {
   const t = r / atom.step;
   const i = Math.floor(t);
   if (i >= atom.rho.length - 1) return 0;

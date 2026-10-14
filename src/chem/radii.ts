@@ -1,5 +1,5 @@
 // Van der Waals radii (Å), H–Rn — the chemistry data the space-filling
-// renderer, the atom balls (0.3 ×), the MMFF94 ESP surface and the
+// renderer, the atom balls (0.3 ×), the van der Waals ESP surface and the
 // Merz–Kollman fallback share. Lives here (the chem layer) so the ESP field
 // construction doesn't reach into render. The 26 elements the app always had
 // keep their values (Bondi and Mantina's extension of it for the main group;

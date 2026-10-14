@@ -7,17 +7,18 @@ import '@fontsource/ibm-plex-sans/500.css';
 import '@fontsource/ibm-plex-sans/600.css';
 import '@fontsource/ibm-plex-mono/400.css';
 import '@fontsource/ibm-plex-mono/500.css';
+import * as THREE from 'three';
 import type { SceneContext } from './render';
 import { initScene, buildScene, ATOM_LAYER } from './render';
-import { mountJsmePanel, toggleJsmeCollapsed, setJsmeCollapsed, snapToSymmetry, showInfoLog, resetGfn2Spin } from './ui/jsme-panel';
-import { setupControls } from './ui/controls';
+import { mountJsmePanel, toggleJsmeCollapsed, setJsmeCollapsed, snapToSymmetry, showMoleculeHeader, resetGfn2Spin } from './ui/jsme-panel';
+import { setupControls, type MeasureTool } from './ui/controls';
 import { setupTooltip } from './ui/tooltip';
 import { setupContextMenu } from './ui/context-menu';
 import { setupMoPanel } from './ui/mo-diagram';
 import { setupModelViews } from './ui/model-views';
 import { setupAnnotations } from './ui/annotations';
 import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, applyViewState } from './ui/view-state';
-import { parseMolBlock } from './mol-parser';
+import { parseMolBlock, type Molecule } from './mol-parser';
 import { EXAMPLES } from './ui/examples';
 import { isVseprElement } from './chem/vsepr/assign-orbitals';
 import { preloadGfn2 } from './geometry/gfn2-refine';
@@ -54,8 +55,7 @@ function setupSplitter() {
   });
 }
 
-function loadMolecule(ctx: SceneContext, molBlock: string, multiplicity = 1): string[] {
-  const parsed = parseMolBlock(molBlock);
+function loadMolecule(ctx: SceneContext, parsed: Molecule, multiplicity = 1): string[] {
   if (parsed.atoms.length === 0) return [];
   // An example is snapped like any rendered structure: its stored coordinates
   // are a little off their point group (benzene's by 0.1 mÅ), which is enough
@@ -87,14 +87,17 @@ function setupExamples(ctx: SceneContext) {
     if (!ex) return;
 
     resetGfn2Spin();
-    const notes = loadMolecule(ctx, ex.mol, ex.multiplicity ?? 1);
-    showInfoLog(ex.note ? [ex.note, ...notes] : notes);
+    const parsed = parseMolBlock(ex.mol);
+    const notes = loadMolecule(ctx, parsed, ex.multiplicity ?? 1);
+    if (ctx.currentMolecule) {
+      // examples are loaded from disk, not PubChem: no record, no warnings
+      showMoleculeHeader(ctx.currentMolecule, { source: 'example', name: ex.name, info: ex.note ? [ex.note, ...notes] : notes });
+    }
 
     // The valence model has nothing to say about a metal centre, so a complex
     // drawn from it has no orbital lobes to show — and the app's default hides
     // the atom layer in favour of those lobes, which would leave an example
     // like NiCl4(2-) opening to bare element labels. Show the molecule.
-    const parsed = parseMolBlock(ex.mol);
     if (parsed.atoms.some((a) => !isVseprElement(a.element))) {
       const toggle = document.getElementById('ctrl-show-mol') as HTMLInputElement | null;
       if (toggle && !toggle.checked) {
@@ -102,29 +105,6 @@ function setupExamples(ctx: SceneContext) {
         toggle.dispatchEvent(new Event('change', { bubbles: true }));
       }
     }
-
-    // Populate the molecule info header for examples
-    const molecule = parseMolBlock(ex.mol);
-    const counts: Record<string, number> = {};
-    for (const a of molecule.atoms) counts[a.element] = (counts[a.element] || 0) + 1;
-    const rest = Object.keys(counts).filter((e) => e !== 'C' && e !== 'H').sort();
-    let formula = '';
-    if (counts['C']) formula += `C${counts['C'] > 1 ? counts['C'] : ''}`;
-    if (counts['H']) formula += `H${counts['H'] > 1 ? counts['H'] : ''}`;
-    for (const el of rest) formula += `${el}${counts[el] > 1 ? counts[el] : ''}`;
-
-    const container = document.getElementById('molecule-info')!;
-    container.classList.remove('hidden');
-    document.getElementById('mol-formula')!.textContent = formula;
-    document.getElementById('mol-name')!.textContent = ` · ${ex.name}`;
-    document.getElementById('mol-weight')!.textContent = '';
-    const sourceEl = document.getElementById('mol-source')!;
-    sourceEl.textContent = 'Example';
-    sourceEl.className = 'pubchem';
-    document.getElementById('mol-link')!.style.display = 'none';
-    document.getElementById('mol-warnings')!.classList.add('hidden');
-    // Examples are loaded from disk, not PubChem — no record to show.
-    document.getElementById('mol-data')!.classList.add('hidden');
 
     // Reset to the placeholder so the dropdown never reads as the molecule's
     // permanent label and the same example can be picked again.
@@ -171,7 +151,7 @@ function setupKeyboardShortcuts() {
   });
 }
 
-function setupMeasureMode(ctx: SceneContext) {
+function setupMeasureMode(ctx: SceneContext, measure: MeasureTool) {
   const raycaster = new THREE.Raycaster();
   // Atom meshes of the lit styles sit on the atom layer; picking must see them.
   raycaster.layers.enable(ATOM_LAYER);
@@ -179,8 +159,7 @@ function setupMeasureMode(ctx: SceneContext) {
   const container = document.getElementById('canvas-container')!;
 
   container.addEventListener('click', (e) => {
-    const measureState = (ctx as any)._measureState;
-    if (!measureState?.mode) return;
+    if (!measure.active) return;
 
     const rect = container.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -198,7 +177,7 @@ function setupMeasureMode(ctx: SceneContext) {
       const hit = hits[0].object;
       const atomIndex = hit.userData?.atomIndex;
       if (atomIndex !== undefined) {
-        measureState.addPoint(atomIndex);
+        measure.addAtom(atomIndex);
       }
     }
   });
@@ -244,30 +223,27 @@ function setupAnnotationsUI(annotations: ReturnType<typeof setupAnnotations>) {
   clearBtn.addEventListener('click', () => annotations.clear());
 }
 
-// Need THREE for raycaster
-import * as THREE from 'three';
-
 async function main() {
-  const scene = initScene(document.getElementById('canvas-container')!);
+  const ctx = initScene(document.getElementById('canvas-container')!);
   const annotations = setupAnnotations(document.getElementById('canvas-container')!);
-  mountJsmePanel(scene);
-  setupControls(scene);
+  mountJsmePanel(ctx);
+  const { measure } = setupControls(ctx);
   // after the controls: a theme sets the scene background through their Background input
-  setupTheme(scene);
+  setupTheme(ctx);
   setupSplitter();
-  setupExamples(scene);
+  setupExamples(ctx);
   setupTooltip(
     document.getElementById('canvas-container')!,
-    scene.camera,
-    scene.orbitalGroup,
+    ctx.camera,
+    ctx.orbitalGroup,
   );
-  setupContextMenu(scene, document.getElementById('canvas-container')!);
+  setupContextMenu(ctx, document.getElementById('canvas-container')!);
   setupSketcherToolbar();
-  const moPanel = setupMoPanel(scene);
-  setupModelViews(scene, moPanel);
+  const moPanel = setupMoPanel(ctx);
+  setupModelViews(ctx, moPanel);
   setupKeyboardShortcuts();
-  setupMeasureMode(scene);
-  setupViewStateUI(scene, annotations);
+  setupMeasureMode(ctx, measure);
+  setupViewStateUI(ctx, annotations);
   setupAnnotationsUI(annotations);
 
   // The GFN2-xTB engine streams in while the user draws, so the first
@@ -280,7 +256,7 @@ async function main() {
   const state = parseShareLink(window.location.hash);
   if (state) {
     try {
-      applyViewState(scene, state, annotations);
+      applyViewState(ctx, state, annotations);
     } catch (err) {
       console.error('Failed to restore shared view:', err);
     }

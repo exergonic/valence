@@ -1,5 +1,5 @@
 /**
- * The electrostatic potential surface — charge-model ESP, Phase 1 of PLAN.md.
+ * The electrostatic potential surface of a set of point charges.
  *
  * Surface: the united vdW molecular surface, extracted by marching
  * tetrahedra over the signed-distance field of the union of the atoms' vdW
@@ -16,7 +16,7 @@
  * distribution, both built in the engine's worker (gfn2-refine.worker.ts,
  * `espSurface`). This file is the surface for everything else — the MMFF94
  * charge model, or an engine that cannot build it — and the point-charge
- * potential the "full electron density" toggle compares against.
+ * potential the tests compare the exact one against.
  *
  * Potential: the electric potential of the molecule's point charges at a
  * surface vertex, V(r) = Σ qᵢ/|r − rᵢ|. `espPotentialAt` also takes GFN2's

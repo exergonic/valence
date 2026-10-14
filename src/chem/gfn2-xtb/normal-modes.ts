@@ -15,6 +15,17 @@
 import { jacobiSymmetric } from '../../utils/eigen';
 import { ATOMIC_MASS } from '../assign-mass';
 
+/**
+ * Below this lowest Hessian eigenvalue (Eh/bohr²) a converged geometry is a
+ * saddle, not a minimum. A gradient-based stop cannot tell the two apart — a
+ * saddle has zero gradient too — so the curvature is what makes the claim.
+ * The numerical Hessian's noise floor measures ±0.003 (step-independent,
+ * 2026-10-02), while a real imaginary mode of the planar cyclopropenyl anion
+ * sits at −0.16, so 0.02 separates them cleanly. The optimiser pushes a
+ * saddle off below it, and the Info log calls the verdict by it.
+ */
+export const HESSIAN_SADDLE_THRESHOLD = -0.02;
+
 /** √(Eh / (bohr² · u)) in cm⁻¹: ω = this × √λ for λ in Eh/(bohr² u). */
 const WAVENUMBER_PER_ROOT_HESSIAN = 5140.4871;
 

@@ -10,7 +10,8 @@ export interface PubChemInfo {
   name?: string; // Title from the PubChem property record
   formula?: string; // computed from the parsed molecule (all sources)
   weight?: string;
-  /** Generic-parameter warnings for the local MMFF94 path (see parameter-warnings.ts). */
+  /** Structural warnings for the header (a fetched structure carries none of
+   *  its own; the caller fills these in). */
   warnings?: string[];
   /** Curated PubChem record (source === 'pubchem'): the properties we pulled. */
   pubchem?: {

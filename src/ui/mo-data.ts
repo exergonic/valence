@@ -6,9 +6,9 @@
  * Everything needed to reproduce the numbers is in the header — the model,
  * the basis order, and the calculation frame — because the same MO looks
  * different in another program's frame, and a coefficient vector is only
- * comparable when both sides agree on what "pz" means. The AO order is the
- * same one YAeHMOP prints (per atom: s, px, py, pz), so the vectors line up
- * with an oracle's wavefunction block line for line.
+ * comparable when both sides agree on what "pz" means. Extended Hückel's AO
+ * order is the one YAeHMOP prints (per atom: s, px, py, pz), so its vectors
+ * line up with an oracle's wavefunction block line for line.
  */
 import type { Molecule } from '../mol-parser';
 import type { BasisFunction } from '../chem/extended-huckel/assign-basis';
@@ -19,9 +19,11 @@ import { closedShellOccupations } from '../chem/extended-huckel/solve';
 import { MO_SIGNIFICANT } from '../render/mo-lobes';
 import { ENERGY_UNIT, KCAL_PER_EV } from './units';
 
-/** Coefficients below this are left out of the printout (they are rounding
- *  noise, not chemistry) — the same threshold the picture is drawn with. */
+/** Coefficients below this are left out of the printout: rounding noise, not
+ *  chemistry. (The picture's own cut, MO_SIGNIFICANT, is relative and far
+ *  higher; the printout marks the coefficients above it.) */
 const PRINT_THRESHOLD = 0.001;
+const SIGNIFICANT_LEGEND = `(* marks the coefficients at least ${MO_SIGNIFICANT} of the MO's largest: the cut the composition line and extended Hückel's lobes use)`;
 
 export function moDataText(molecule: Molecule, result: ExtendedHuckelResult): string {
   const occupations = closedShellOccupations(
@@ -39,7 +41,7 @@ export function moDataText(molecule: Molecule, result: ExtendedHuckelResult): st
   lines.push(`orbitals — energy (${ENERGY_UNIT}, ${KCAL_PER_EV} per eV), occupation, then coefficients with |c| >= ${PRINT_THRESHOLD}:`);
   orbitalBlock(lines, result.energies, occupations, result.coefficients, result.basis);
   lines.push('');
-  lines.push(`(* marks the coefficients the app draws lobes for — |c| >= ${MO_SIGNIFICANT} of the MO's largest)`);
+  lines.push(SIGNIFICANT_LEGEND);
   return lines.join('\n') + '\n';
 }
 
@@ -77,6 +79,7 @@ export function gfn2MoDataText(
     orbitalBlock(lines, ladder.energies, ladder.occupations, ladder.coefficients, ladder.basis);
     lines.push('');
   }
+  lines.push(SIGNIFICANT_LEGEND);
   return lines.join('\n') + '\n';
 }
 

@@ -803,6 +803,7 @@ button, input, select, textarea { font-family: inherit; }
 }
 
 #mol-source.pubchem,
+#mol-source.example,
 #mol-source.gfn2 { background: var(--accent-soft); color: var(--accent); }
 #mol-source.cir { background: rgba(255, 136, 68, 0.18); color: #e8823f; }
 #mol-source.local { background: rgba(100, 200, 100, 0.18); color: #4fae4f; }

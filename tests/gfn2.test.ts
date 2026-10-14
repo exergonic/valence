@@ -22,6 +22,7 @@ import type { Molecule } from '../src/mol-parser';
 import { parseMolBlock } from '../src/mol-parser';
 import { HESSIAN_SADDLE_THRESHOLD } from '../src/geometry/gfn2-refine';
 import { EXAMPLES } from '../src/ui/examples';
+import { gfn2Ladders } from '../src/chem/gfn2-xtb/orbital-ladder';
 
 beforeAll(() => {
   // The worker module registers `self.onmessage` at import time.
@@ -182,7 +183,7 @@ describe('GFN2-xTB', () => {
     expect(p!.alpha.energies[homo]).toBeCloseTo(-12.18, 1);
     expect(p!.alpha.energies[homo + 1]).toBeCloseTo(2.47, 1);
     // the HOMO is oxygen's lone pair: nearly all of it on O
-    expect(p!.alpha.atomShares[homo][0]).toBeGreaterThan(0.9);
+    expect(gfn2Ladders(water, p!)!.alpha.atomShares[homo][0]).toBeGreaterThan(0.9);
     expect(p!.spin).toBeNull();
     expect(p!.beta).toBeNull();
   }, 180_000);

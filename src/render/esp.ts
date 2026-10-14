@@ -3,13 +3,12 @@ import type { EspSurfaceData } from '../chem/charge-model/esp';
 import { espColor } from '../chem/charge-model/esp';
 
 /**
- * The charge-model ESP surface: render the fused (united) vdW molecular
- * surface computed by chem/charge-model/esp.ts — non-indexed triangle soup whose per-
- * vertex normals come from the union field's gradient and whose colors come
- * from the potential probed at each surface vertex. This function only turns
- * the cached surface data into Three.js geometry; the surface itself is
- * computed once per molecule (see rebuild.ts), so opacity changes never
- * re-extract it.
+ * The ESP surface: GFN2-xTB's 0.001 au density surface (built in its worker)
+ * or the fused van der Waals surface (chem/charge-model/esp.ts) — either way a
+ * non-indexed triangle soup with a normal and a potential per vertex, coloured
+ * here by the potential. This function only turns the cached surface data into
+ * Three.js geometry; the surface itself is built once per molecule (see
+ * rebuild.ts), so opacity changes never re-extract it.
  *
  * Translucent overlay on the default layer (the user asks to see the atoms
  * beneath it). Depth writes are off so the surface doesn't occlude itself.

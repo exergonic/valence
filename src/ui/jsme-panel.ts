@@ -5,7 +5,7 @@ import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
 import { writeNote, type InfoNote } from './info-note';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
-import { isMetal, lowestMultiplicity } from '../chem/elements';
+import { isMetal, lowestMultiplicity, spinName } from '../chem/elements';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import {
@@ -98,8 +98,8 @@ function hideRenderError() {
 
 /**
  * Snap the resolved geometry to the point group it nearly has — the last step
- * of the pipeline, after the source (PubChem, CIR, or our own MMFF94) has had
- * its say. Every source leaves a symmetric molecule a little asymmetric
+ * of the pipeline, after the source (PubChem, CIR, or the local GFN2-xTB
+ * engine) has had its say. Every source leaves a symmetric molecule a little asymmetric
  * (measured: 0.2 mÅ in the stiff coordinates, up to 20 mÅ in the soft ones),
  * which reads as a distorted molecule and splits degenerate orbitals. The
  * snap is reported, never silent, and can be turned off.
@@ -119,27 +119,20 @@ export function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: 
 }
 
 /**
- * The structural warnings and the model caveats for a displayed structure.
- * `source` is where the GEOMETRY came from. Only PubChem's structures are
- * MMFF94 conformers, so only they get the MMFF94 caveats: the parameter-gap
- * report ("geometry approximate") and the 3-ring pucker check (ring-pucker.ts:
- * MMFF94's reference-angle artifact, reported, never repaired). CIR builds its
- * 3D by rule (CORINA) and MMFF94 never touches it — "Ni has no MMFF94 type" on
- * a CIR structure left the reader asking what MMFF94 had to do with anything.
- * A local structure is GFN2's or the unoptimised start, neither MMFF94's. The
- * dipole's caveats depend on which charge model is on screen, so the dipole
- * readout carries them (render/rebuild.ts).
+ * The caveats on a PubChem structure, for the Info log. Only PubChem's
+ * structures are MMFF94 conformers, so only they get the MMFF94 caveats: the
+ * parameter-gap report ("geometry approximate") and the 3-ring pucker check
+ * (ring-pucker.ts: MMFF94's reference-angle artifact, reported, never
+ * repaired). CIR builds its 3D by rule (CORINA) and MMFF94 never touches it —
+ * "Ni has no MMFF94 type" on a CIR structure left the reader asking what
+ * MMFF94 had to do with anything — and a local structure is GFN2's or the
+ * unoptimised start, neither MMFF94's. The dipole's caveats depend on which
+ * charge model is on screen, so the dipole readout carries them
+ * (render/rebuild.ts).
  */
-function composeNotes(
-  warnings: string[],
-  molecule: Molecule,
-  source: 'pubchem' | 'cir' | 'local',
-): { warnings: string[]; info: (string | InfoNote)[] } {
-  const info: (string | InfoNote)[] = source === 'pubchem' ? [...parameterGapWarnings(molecule), ...ringPuckerWarnings(molecule)] : [];
-  return { warnings, info };
+function mmff94ConformerCaveats(molecule: Molecule): (string | InfoNote)[] {
+  return [...parameterGapWarnings(molecule), ...ringPuckerWarnings(molecule)];
 }
-
-const SPIN_NAMES = ['', 'singlet', 'doublet', 'triplet', 'quartet', 'quintet', 'sextet'];
 
 /** The spin control under Refine: back to the lowest allowed spin, for a new
  *  structure — a triplet chosen for one molecule says nothing of the next. */
@@ -152,7 +145,7 @@ export function resetGfn2Spin(): void {
  *  never silently one: which spin, and why that one. */
 function gfn2SpinNote(run: Gfn2Result, molecule: Molecule, chosen: boolean): string[] {
   if (run.multiplicity === 1) return [];
-  const name = SPIN_NAMES[run.multiplicity] ?? `multiplicity ${run.multiplicity}`;
+  const name = spinName(run.multiplicity);
   if (chosen) return [`GFN2-xTB ran as a ${name}, the spin chosen under Refine.`];
   if (run.multiplicity === lowestMultiplicity(molecule.atoms)) {
     return [`GFN2-xTB ran as a ${name}: the electron count is odd, so a singlet is impossible and a doublet `
@@ -221,7 +214,7 @@ function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number
  * there is unreadable). The log exists only while a molecule has notes to
  * show, and every new molecule replaces them.
  */
-export function showInfoLog(notes: (string | InfoNote)[]) {
+function showInfoLog(notes: (string | InfoNote)[]) {
   const infoEl = document.getElementById('panel-info')!;
   const itemsEl = document.getElementById('panel-info-items')!;
   itemsEl.replaceChildren();
@@ -234,7 +227,25 @@ export function showInfoLog(notes: (string | InfoNote)[]) {
   infoEl.classList.toggle('hidden', notes.length === 0);
 }
 
-function updateMoleculeInfo(info: PubChemInfo & { info?: (string | InfoNote)[] }) {
+/** What the header shows besides the formula and weight, which are read off
+ *  the molecule itself. */
+type HeaderInfo = Omit<PubChemInfo, 'source' | 'formula' | 'weight'> & {
+  source: PubChemInfo['source'] | 'example';
+  info?: (string | InfoNote)[];
+};
+
+const SOURCE_LABEL: Record<HeaderInfo['source'], string> = {
+  pubchem: 'PubChem 3D', cir: 'CIR', gfn2: 'GFN2-xTB', local: 'Unoptimised', example: 'Example',
+};
+
+/**
+ * The molecule header over the scene — formula, name, weight, where the
+ * structure came from, its warnings — and the Info log beneath the inspector.
+ * Every path that puts a structure on screen (a build, a refinement, an
+ * example) comes through here.
+ */
+export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
+  const { formula, weight } = computeFormula(molecule.atoms.map((a) => a.element));
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
   const nameEl = document.getElementById('mol-name')!;
@@ -243,13 +254,10 @@ function updateMoleculeInfo(info: PubChemInfo & { info?: (string | InfoNote)[] }
   const linkEl = document.getElementById('mol-link') as HTMLAnchorElement;
 
   container.classList.remove('hidden');
-  formulaEl.textContent = info.formula || '';
+  formulaEl.textContent = formula;
   nameEl.textContent = info.name ? ` · ${info.name}` : '';
-  weightEl.textContent = info.weight ? ` · MW ${info.weight}` : '';
-  sourceEl.textContent = info.source === 'pubchem' ? 'PubChem 3D' :
-    info.source === 'cir' ? 'CIR' :
-    info.source === 'gfn2' ? 'GFN2-xTB' :
-    'Unoptimised';
+  weightEl.textContent = weight ? ` · MW ${weight}` : '';
+  sourceEl.textContent = SOURCE_LABEL[info.source];
   sourceEl.className = info.source;
 
   if (info.cid) {
@@ -333,8 +341,8 @@ export function mountJsmePanel(ctx: SceneContext) {
       const molBlock = applet.molFile();
       const t1 = performance.now();
       let molecule = parseMolBlock(molBlock);
-      // The GFN2 tier hands back its own charges with the geometry; the fetch
-      // and MMFF94 paths have none to offer.
+      // A GFN2 optimisation hands back its own charges and vibrations with the
+      // geometry; a fetched structure has neither.
       let gfn2Charges: number[] | null = null;
       let vibrations: NormalMode[] | null = null;
       const t2 = performance.now();
@@ -353,16 +361,8 @@ export function mountJsmePanel(ctx: SceneContext) {
         molecule = result.molecule;
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
-        const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-        const notes = composeNotes(result.info.warnings ?? [], molecule, result.info.source === 'pubchem' ? 'pubchem' : 'cir');
-        notes.info.push(...snapped.info);
-        updateMoleculeInfo({
-          ...result.info,
-          formula,
-          weight: `${weight}`,
-          warnings: notes.warnings,
-          info: notes.info,
-        });
+        const caveats = result.info.source === 'pubchem' ? mmff94ConformerCaveats(molecule) : [];
+        showMoleculeHeader(molecule, { ...result.info, info: [...caveats, ...snapped.info] });
       } else {
         // GFN2 is the only local engine (preloaded at startup), and a larger
         // molecule takes tens of seconds, so the overlay counts as it goes and
@@ -384,8 +384,9 @@ export function mountJsmePanel(ctx: SceneContext) {
         vibrations = local.gfn2?.vibrations ?? null;
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
-        const { formula, weight } = computeFormula(molecule.atoms.map(a => a.element));
-        const notes = composeNotes(local.warnings, molecule, 'local');
+        // the header keeps the structural warnings (a drawn wedge the engine
+        // could not keep among them); the verbose caveats go to the Info log
+        const notes: { warnings: string[]; info: (string | InfoNote)[] } = { warnings: [...local.warnings], info: [] };
         if (local.engine === 'gfn2' && local.gfn2) {
           if (!local.gfn2.converged) notes.warnings.unshift('GFN2-xTB structure, not fully converged.');
           notes.info.push(GFN2_NOTE, ...gfn2RunNotes(local.gfn2), ...gfn2SpinNote(local.gfn2, local.molecule, false));
@@ -403,16 +404,7 @@ export function mountJsmePanel(ctx: SceneContext) {
             + 'PubChem has no 3D structure for most metal compounds, and CIR builds them by rule, roughly.');
         }
         notes.info.push(...snapped.info);
-        updateMoleculeInfo({
-          source: local.engine === 'gfn2' ? 'gfn2' : 'local',
-          formula,
-          weight: `${weight}`,
-          // The stereo-enforcement failures ride out of the worker with the
-          // molecule; the parameter-gap report is composed here (the header keeps the structural warnings, the
-          // verbose caveats go to the panel's Info log).
-          warnings: notes.warnings,
-          info: notes.info,
-        });
+        showMoleculeHeader(molecule, { source: local.engine === 'gfn2' ? 'gfn2' : 'local', ...notes });
         console.log('[render-timing]', {
           jsme: +(t1 - t0).toFixed(1),
           parse: +(t2 - t1).toFixed(1),
@@ -444,7 +436,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       const chosenSpin = spinChoice === 'auto' ? null : Number(spinChoice);
       if (chosenSpin !== null && chosenSpin % 2 !== lowestMultiplicity(current.atoms) % 2) {
         const odd = lowestMultiplicity(current.atoms) === 2;
-        showRenderError(`A ${SPIN_NAMES[chosenSpin]} needs an ${odd ? 'even' : 'odd'} number of electrons, and this `
+        showRenderError(`A ${spinName(chosenSpin)} needs an ${odd ? 'even' : 'odd'} number of electrons, and this `
           + `structure has an ${odd ? 'odd' : 'even'} number — choose ${odd ? 'a doublet, quartet or sextet' : 'a singlet, triplet or quintet'}.`);
         return;
       }
@@ -468,12 +460,11 @@ export function mountJsmePanel(ctx: SceneContext) {
         const snapped = snapToSymmetry(refined.molecule);
         const next = snapped.molecule;
         showMolecule(ctx, next, refined.charges, refined.vibrations);
-        const { formula, weight } = computeFormula(next.atoms.map(a => a.element));
         // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
         // the geometry no longer comes from MMFF94, so calling it "approximate"
         // would be stale.
         const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info];
-        updateMoleculeInfo({ source: 'gfn2', formula, weight: `${weight}`, warnings: refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'], info });
+        showMoleculeHeader(next, { source: 'gfn2', warnings: refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'], info });
       } catch (error) {
         showRenderError(error instanceof Gfn2Cancelled
           ? 'GFN2-xTB refinement cancelled — the geometry is unchanged.'

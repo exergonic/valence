@@ -21,16 +21,7 @@ import { breakSymmetry } from './embed';
 import type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets } from './gfn2-refine.worker';
 
 export type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets };
-
-/**
- * Below this lowest Hessian eigenvalue (Eh/bohr²) a converged geometry is a
- * saddle, not a minimum. A gradient-based stop cannot tell the two apart — a
- * saddle has zero gradient too — so the curvature is what makes the claim.
- * The numerical Hessian's noise floor measures ±0.003 (step-independent,
- * 2026-10-02), while a real imaginary mode of the planar cyclopropenyl anion
- * sits at −0.16, so 0.02 separates them cleanly.
- */
-export const HESSIAN_SADDLE_THRESHOLD = -0.02;
+export { HESSIAN_SADDLE_THRESHOLD } from '../chem/gfn2-xtb/normal-modes';
 
 /**
  * The honest label for a GFN2-optimised geometry, shown in the Info log:
@@ -45,7 +36,7 @@ export const GFN2_NOTE = {
     + 'the same physics as ethane.',
   link: {
     label: 'Bannwarth, Ehlert & Grimme, JCTC 2019',
-    href: 'https://pubs.acs.org/jctcce/article/15/3/1652/975266/GFN2-xTB-An-Accurate-and-Broadly-Parametrized-Self',
+    href: 'https://doi.org/10.1021/acs.jctc.8b01176',
   },
 };
 
@@ -67,7 +58,7 @@ export class Gfn2Unavailable extends Error {
 let worker: Worker | null = null;
 let nextId = 1;
 interface PendingRun {
-  // an optimisation resolves a Gfn2Result, a properties request Gfn2Properties
+  // each task resolves its own type (see `ask`)
   resolvers: PromiseWithResolvers<any>;
   onProgress?: (progress: Gfn2Progress) => void;
 }
@@ -113,6 +104,18 @@ function ensureWorker(): Worker | null {
   return worker;
 }
 
+/** Send the worker one task; the promise settles with its answer. Rejects with
+ *  Gfn2Unavailable when there is no Worker. */
+function ask<T>(message: object, onProgress?: (progress: Gfn2Progress) => void): Promise<T> {
+  const w = ensureWorker();
+  if (!w) return Promise.reject(new Gfn2Unavailable());
+  const resolvers = Promise.withResolvers<T>();
+  const id = nextId++;
+  pending.set(id, { resolvers, onProgress });
+  w.postMessage({ id, ...message });
+  return resolvers.promise;
+}
+
 /**
  * Optimise a structure with GFN2-xTB. Resolves with the result, or null when
  * the engine ran and no optimiser rung produced a geometry; rejects with
@@ -123,16 +126,10 @@ export function refineWithGfn2(
   molecule: Molecule,
   onProgress?: (progress: Gfn2Progress) => void,
 ): Promise<Gfn2Result | null> {
-  const w = ensureWorker();
-  if (!w) return Promise.reject(new Gfn2Unavailable());
-  const resolvers = Promise.withResolvers<Gfn2Result | null>();
-  const id = nextId++;
-  pending.set(id, { resolvers, onProgress });
   // The embedder emits exact symmetries and a symmetric start traps the
   // descent at a spurious stationary point (drawn water arrives exactly
   // linear and comes back exactly linear) — a deterministic kick first.
-  w.postMessage({ id, molecule: breakSymmetry(molecule) });
-  return resolvers.promise;
+  return ask({ task: 'optimise', molecule: breakSymmetry(molecule) }, onProgress);
 }
 
 /**
@@ -145,13 +142,7 @@ export function refineWithGfn2(
  * with the optimisations.
  */
 export function gfn2PropertiesAt(molecule: Molecule): Promise<Gfn2Properties | null> {
-  const w = ensureWorker();
-  if (!w) return Promise.reject(new Gfn2Unavailable());
-  const resolvers = Promise.withResolvers<Gfn2Properties | null>();
-  const id = nextId++;
-  pending.set(id, { resolvers });
-  w.postMessage({ id, molecule, task: 'properties' });
-  return resolvers.promise;
+  return ask({ task: 'properties', molecule });
 }
 
 /**
@@ -161,13 +152,7 @@ export function gfn2PropertiesAt(molecule: Molecule): Promise<Gfn2Properties | n
  * newer molecule replaced it).
  */
 export function gfn2OrbitalSurface(request: OrbitalSurfaceRequest): Promise<OrbitalSurface | null> {
-  const w = ensureWorker();
-  if (!w) return Promise.reject(new Gfn2Unavailable());
-  const resolvers = Promise.withResolvers<OrbitalSurface | null>();
-  const id = nextId++;
-  pending.set(id, { resolvers });
-  w.postMessage({ id, task: 'surface', surface: request });
-  return resolvers.promise;
+  return ask({ task: 'surface', surface: request });
 }
 
 /**
@@ -178,13 +163,7 @@ export function gfn2OrbitalSurface(request: OrbitalSurfaceRequest): Promise<Orbi
  * binding.
  */
 export function gfn2EspSurface(key: number): Promise<Gfn2EspSurface | null> {
-  const w = ensureWorker();
-  if (!w) return Promise.reject(new Gfn2Unavailable());
-  const resolvers = Promise.withResolvers<Gfn2EspSurface | null>();
-  const id = nextId++;
-  pending.set(id, { resolvers });
-  w.postMessage({ id, task: 'esp', key });
-  return resolvers.promise;
+  return ask({ task: 'esp', key });
 }
 
 /**
@@ -194,13 +173,7 @@ export function gfn2EspSurface(key: number): Promise<Gfn2EspSurface | null> {
  * latest.
  */
 export function gfn2ChargeSets(key: number): Promise<Gfn2ChargeSets | null> {
-  const w = ensureWorker();
-  if (!w) return Promise.reject(new Gfn2Unavailable());
-  const resolvers = Promise.withResolvers<Gfn2ChargeSets | null>();
-  const id = nextId++;
-  pending.set(id, { resolvers });
-  w.postMessage({ id, task: 'charges', key });
-  return resolvers.promise;
+  return ask({ task: 'charges', key });
 }
 
 /**
@@ -209,13 +182,7 @@ export function gfn2ChargeSets(key: number): Promise<Gfn2ChargeSets | null> {
  * then reports the failure where the user is looking.
  */
 export function preloadGfn2(): void {
-  const w = ensureWorker();
-  if (!w) return;
-  const resolvers = Promise.withResolvers<boolean>();
-  resolvers.promise.catch(() => {});
-  const id = nextId++;
-  pending.set(id, { resolvers });
-  w.postMessage({ id, task: 'load' });
+  ask<boolean>({ task: 'load' }).catch(() => {});
 }
 
 /** Stop every GFN2 run in flight. The engine is synchronous inside its worker,

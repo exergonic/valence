@@ -3,7 +3,7 @@
  * molecule, atom by atom, from the AO coefficients.
  *
  * This is the *second* orbital picture in the app, and it is deliberately a
- * different one from the VSEPR lobes in `orbitals.ts`: those follow
+ * different one from the VSEPR lobes in `hybrid-orbitals.ts`: those follow
  * hybridisation and lone-pair directions, while an EH MO hands Cartesian
  * px/py/pz coefficients. So an MO lobe is an axis-aligned dumbbell — the p
  * axis it was computed on — with its two halves in opposite PHASES, which is
@@ -11,7 +11,7 @@
  * in phase, an antibonding one has them out of phase.
  *
  * Sizes are relative to the largest coefficient in the MO (an MO is a
- * *shape*, not a scale drawing), and contributions below `SIGNIFICANT` are
+ * *shape*, not a scale drawing), and contributions below `MO_SIGNIFICANT` are
  * left out so a delocalised MO does not turn into fuzz.
  */
 import * as THREE from 'three';

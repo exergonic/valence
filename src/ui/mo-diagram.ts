@@ -1,23 +1,25 @@
 /**
  * The MO panel, in two views of the same calculation. **Delocalized** lists the
- * canonical orbitals — one row per level, ascending, lowest at the bottom —
- * and clicking a row draws that MO over the molecule. **Localized** lists the
- * Pipek–Mezey orbitals — GFN2-xTB's, or extended Hückel's when GFN2 has none
- * to give — also ascending by ⟨φ|H|φ⟩. Both are rows of the same
- * kind, because they describe the same electrons.
+ * canonical orbitals — GFN2-xTB's by default, extended Hückel's beside them —
+ * one row per level, ascending, lowest at the bottom, and clicking a row draws
+ * that MO over the molecule. **Localized** lists the Pipek–Mezey orbitals —
+ * GFN2-xTB's, or extended Hückel's when GFN2 has none to give — also ascending
+ * by ⟨φ|H|φ⟩. Both are rows of the same kind, because they describe the same
+ * electrons.
  *
  * The delocalized rows are RANKED, not placed by energy: true spacing is
  * didactic but squashes a dense virtual block into a single line, and a line is
- * a poor click target. Each row carries its energy and irrep instead, and
- * degenerate sets are marked (×2, ×3) with their members adjacent.
+ * a poor click target. Each row carries its energy and irrep instead, with the
+ * members of a degenerate set adjacent.
  *
- * The rows only ever show what the calculation produced, and say so: the
- * caption reads "extended Hückel (semiempirical)". An element outside the
- * parameter table gets a note instead of a list. An open shell still gets the
- * levels — they are real — with no occupancy and a note saying why: the
- * occupation comes from `closedShellOccupations`, which refuses an odd electron
- * count and a degenerate set the count would only partly fill (O₂'s π* pair).
- * The levels are real; the filling would be a lie.
+ * The rows only ever show what the calculation produced, and the note says
+ * which calculation that was. An element a calculation cannot treat gets a
+ * note instead of a list. GFN2-xTB treats an open shell, one spin channel at a
+ * time. Extended Hückel as built here has no spin, so an open shell gets its
+ * levels — they are real — with no occupancy and a note saying why: its
+ * filling, `closedShellOccupations`, refuses an odd electron count and a
+ * degenerate set the count would only partly fill (O₂'s π* pair). The levels
+ * are real; the filling would be a lie.
  */
 import type { SceneContext } from '../render';
 import { activeIsoValue, setActiveIsoValue, gfn2LadderOnScreen, localizedOnScreen, type LocalizedList } from '../render';
@@ -30,7 +32,9 @@ import { labelIrreps } from '../chem/extended-huckel/irrep-labels';
 import { MO_PHASE_PAIRS, MO_SIGNIFICANT } from '../render/mo-lobes';
 import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import { SP_ONLY_METALS } from '../chem/extended-huckel/parameters';
+import { spinName } from '../chem/elements';
 import { ENERGY_UNIT, formatEnergy } from './units';
+import { GFN2_NOTE } from '../geometry/gfn2-refine';
 import { writeNote } from './info-note';
 
 /** The Localized view's note, naming the calculation it localized. */
@@ -55,7 +59,7 @@ const GFN2_ORBITAL_NOTE = {
     + 'extended Hückel’s fixed parameters leave out — so where the two ladders disagree on ORDER, GFN2’s is the one '
     + 'to trust. Its energies are its own: the empty orbitals sit low (formaldehyde’s LUMO near −8 eV), so read the '
     + 'gaps and the order, not the absolute numbers. The Localized view localizes these orbitals.',
-  link: { label: 'Bannwarth, Ehlert & Grimme, JCTC 2019', href: 'https://pubs.acs.org/doi/10.1021/acs.jctc.8b01176' },
+  link: GFN2_NOTE.link,
 };
 
 /** One delocalized ladder, from whichever calculation the method row picks:
@@ -90,12 +94,6 @@ const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
 };
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
-
-// Wider than the solver's exactness cut, on purpose: two levels a few meV
-// apart would land on the same pixel and only the last would be clickable.
-// The canonicalization note below is gated on the solver's own tolerance,
-// so a near-miss is not described as a symmetry degeneracy.
-const DEGENERATE_TOLERANCE = DEGENERATE_TOLERANCE_EV;
 
 /** What the rest of the UI may ask of the MO panel (the model views, which
  *  own the inspector it sits in). */
@@ -290,10 +288,10 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   /**
    * The localized list: one row per orbital, ordered as an energy ladder —
    * lowest at the bottom of the panel, rising as you read up, which is how the
-   * Ladder tab and other programs draw an orbital list. The order is ⟨φ|H|φ⟩
-   * within each section (see orderLocalizedOrbitals); the number itself is not
-   * printed, because a localized orbital is not an eigenstate and a number
-   * here would inherit the extended-Hückel parameters (PLAN.md Phase 4).
+   * Delocalized ladder and other programs draw an orbital list. The order is
+   * ⟨φ|H|φ⟩ within each section (see orderLocalizedOrbitals); the number
+   * itself is not printed, because a localized orbital is not an eigenstate
+   * and the number would inherit the model's parameter sensitivity.
    */
   function drawLocalized(): void {
     const shown = localizedOnScreen(ctx);
@@ -446,10 +444,14 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     // onto the row, where it reads as well as it did on an axis. Ascending,
     // lowest at the bottom, matching the localized ladder — which means the DOM
     // runs the other way round, since a column starts at the top.
+    // Grouped by DEGENERATE_TOLERANCE_EV, wider than the solver's exactness cut
+    // on purpose: two levels a few meV apart read as one set. The
+    // canonicalization note below is gated on the solver's own tolerance, so a
+    // near-miss is not described as a symmetry degeneracy.
     const groups: typeof levels[] = [];
     for (const level of levels) {
       const last = groups[groups.length - 1];
-      if (last && Math.abs(last[0].energy - level.energy) < DEGENERATE_TOLERANCE) last.push(level);
+      if (last && Math.abs(last[0].energy - level.energy) < DEGENERATE_TOLERANCE_EV) last.push(level);
       else groups.push([level]);
     }
     const labels = ladder.labels;
@@ -514,7 +516,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       const occupancy = occupations ? occupations[selected] : null;
       const partners = ladder.energies
         .map((e, i) => ({ e, i }))
-        .filter(({ e, i }) => i !== selected && Math.abs(e - energy) < DEGENERATE_TOLERANCE)
+        .filter(({ e, i }) => i !== selected && Math.abs(e - energy) < DEGENERATE_TOLERANCE_EV)
         .map(({ i }) => i + 1);
       const irrep = labels[selected];
       readout.textContent = `MO ${selected + 1} · ${formatEnergy(energy)} ${ENERGY_UNIT}`
@@ -563,9 +565,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         : 'Load a molecule to see its orbitals.';
       return null;
     }
-    const occupations = closedShellOccupations(
-      result.electronCount, result.energies.length, result.energies, ctx.currentMolecule?.multiplicity ?? 1,
-    );
+    const occupations = ehOccupations();
     return {
       identity: result,
       energies: result.energies,
@@ -584,7 +584,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         if (occupations === null) {
           const multiplicity = ctx.currentMolecule?.multiplicity ?? 1;
           note.textContent = multiplicity > 1
-            ? `Open shell (a ${SPIN_NAME[multiplicity] ?? `multiplicity-${multiplicity}`}): extended `
+            ? `Open shell (a ${spinName(multiplicity)}): extended `
               + 'Hückel as built here is closed-shell and has no spin, so no occupancy arrows. '
               + 'GFN2-xTB above treats the spin, and the Localized view localizes its orbitals.'
             : `Open shell (${result.electronCount} electrons): extended Hückel as built here has no spin, so occupancies `
@@ -592,6 +592,15 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         }
       },
     };
+  }
+
+  /** Extended Hückel's closed-shell filling, or null for an open shell. */
+  function ehOccupations(): number[] | null {
+    const result = ctx.ehResult;
+    if (!result) return null;
+    return closedShellOccupations(
+      result.electronCount, result.energies.length, result.energies, ctx.currentMolecule?.multiplicity ?? 1,
+    );
   }
 
   /** GFN2-xTB's ladder in the channel the spin row picks, or null (with the
@@ -651,20 +660,16 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         let homo = -1;
         for (let i = 0; i < orbitals.length; i++) if (orbitals[i].occupied) homo = i;
         if (homo >= 0) ctx.display.localizedSelection = [homo];
-      } else if (ctx.display.moMethod === 'gfn2' ? gfn2LadderOnScreen(ctx) : ctx.ehResult) {
+      } else {
         const gfn2 = ctx.display.moMethod === 'gfn2' ? gfn2LadderOnScreen(ctx) : null;
-        const energies = gfn2 ? gfn2.energies : ctx.ehResult!.energies;
-        const occupations = gfn2
-          ? gfn2.occupations
-          : closedShellOccupations(
-            ctx.ehResult!.electronCount, energies.length, energies, ctx.currentMolecule?.multiplicity ?? 1,
-          );
+        const energies = gfn2 ? gfn2.energies : ctx.ehResult?.energies ?? [];
+        const occupations = gfn2 ? gfn2.occupations : ehOccupations();
         const homo = occupations ? occupations.filter((o) => o > 0).length - 1 : -1;
         // the first member of the HOMO's group, grouped as the ladder groups
         // its rows: a level joins a group within tolerance of its first member
         let first = 0;
         for (let i = 1; i <= homo; i++) {
-          if (Math.abs(energies[first] - energies[i]) >= DEGENERATE_TOLERANCE) first = i;
+          if (Math.abs(energies[first] - energies[i]) >= DEGENERATE_TOLERANCE_EV) first = i;
         }
         if (homo >= 0) ctx.display.moIndex = first;
       }
@@ -687,9 +692,6 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
 
   return panelApi;
 }
-
-/** The spin names a chemist reads, for the open-shell note. */
-const SPIN_NAME: Record<number, string> = { 2: 'doublet', 3: 'triplet', 4: 'quartet', 5: 'quintet' };
 
 /** The elements in this molecule the table carries s+p only for (Zn, Cd). */
 function spOnlyMetals(molecule: Molecule | null | undefined): string[] {
@@ -772,7 +774,7 @@ function localizedType(molecule: Molecule, orbital: LocalizedOrbital): string {
     });
     return `${joined(sorted)} ${kind}`;
   }
-  // a two-centre bond, in index order; a one-atom virtual keeps its own form
+  // a two-centre bond (or antibond), its atoms in index order
   const pair = orbital.atoms.slice(0, 2).sort((a, b) => a - b);
-  return pair.length === 1 ? `${joined(pair)} ${kind}` : `${joined(pair)} ${kind}`;
+  return `${joined(pair)} ${kind}`;
 }

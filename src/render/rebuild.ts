@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { activeIsoValue, type LocalizedList, type SceneContext } from './setup';
+import { activeIsoValue, isGfn2ChargeModel, type ChargeModel, type LocalizedList, type SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
@@ -19,11 +19,12 @@ import {
   dipoleFromCharges, dipoleFromFullGfn2, DIPOLE_APPROXIMATE, DIPOLE_RESIDUAL_CHARGE, type DipoleResult,
 } from '../chem/charge-model/dipole';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
-import { gfn2PropertiesAt, gfn2OrbitalSurface, gfn2EspSurface, gfn2ChargeSets, type Gfn2EspSurface, type Gfn2ChargeSets } from '../geometry/gfn2-refine';
+import {
+  gfn2PropertiesAt, gfn2OrbitalSurface, gfn2EspSurface, gfn2ChargeSets,
+  type Gfn2EspSurface, type Gfn2ChargeSets, type Gfn2Properties,
+} from '../geometry/gfn2-refine';
 import { gfn2Ladders, gfn2OrbitalSpace, type Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import { syncVibration } from './vibration';
-import { isGfn2ChargeModel, type ChargeModel } from './setup';
-import type { Gfn2Properties } from '../geometry/gfn2-refine';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
 import { extendedHuckelSpace, localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../chem/localized-orbitals/order-localized';
@@ -143,7 +144,7 @@ export function syncChargeModelControl(ctx: SceneContext) {
  * the run, but the bond orders, the spin and the orbitals did not, and one SCC
  * costs milliseconds at these sizes.
  */
-export function requestGfn2Properties(ctx: SceneContext): void {
+function requestGfn2Properties(ctx: SceneContext): void {
   const molecule = ctx.currentMolecule;
   if (!molecule || ctx.gfn2Properties?.molecule === molecule) return;
   if (ctx.gfn2PropertiesRequest?.molecule === molecule) return;
@@ -241,25 +242,25 @@ export function localizedOnScreen(ctx: SceneContext): LocalizedList | 'pending' 
   // triplet NiCl₄²⁻).
   const kept = ctx.localizedLists.find((list) => list.from === from);
   if (kept) return (ctx.localized = kept);
-  if (ladder) {
-    const space = gfn2OrbitalSpace(ladder);
-    const sets = space && localizeOrbitals(space, molecule.atoms.length);
-    ctx.localized = {
-      source: 'gfn2', spin: ladder.spin, basis: ladder.basis, from,
-      orbitals: space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null,
-    };
-  } else {
-    const result = ctx.ehResult!;
-    const space = extendedHuckelSpace(molecule, result);
-    const sets = space && localizeOrbitals(space, molecule.atoms.length);
-    ctx.localized = {
-      source: 'eh', spin: null, basis: result.basis, from,
-      orbitals: sets ? orderLocalizedOrbitals(molecule, result, sets) : null,
-    };
-  }
+  const space = ladder ? gfn2OrbitalSpace(ladder) : extendedHuckelSpace(molecule, ctx.ehResult!);
+  const sets = space && localizeOrbitals(space, molecule.atoms.length);
+  ctx.localized = {
+    source: ladder ? 'gfn2' : 'eh',
+    spin: ladder?.spin ?? null,
+    basis: from.basis,
+    from,
+    orbitals: space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null,
+  };
   ctx.localizedLists.push(ctx.localized);
   return ctx.localized;
 }
+
+/** An orbital's field is sampled around the atoms holding more than this
+ *  share of it (Mulliken): enough to box the surface at any level offered,
+ *  without sampling empty space around atoms it barely touches. */
+const SURFACE_ATOM_SHARE = 0.02;
+
+const atomsHolding = (shares: number[]) => shares.flatMap((share, atom) => (share > SURFACE_ATOM_SHARE ? [atom] : []));
 
 /** One GFN2 orbital to draw: any coefficient vector in its basis — a canonical
  *  MO or a localized one — under a name the worker caches its field by. */
@@ -315,7 +316,7 @@ function drawSelectedGfn2Orbitals(ctx: SceneContext, localized: LocalizedList | 
       picks.push({
         orbital: `localized:${localized.spin ?? 'alpha'}:${index}`,
         coefficients: orbital.coefficients,
-        atoms: orbital.populations.flatMap((share, atom) => (share > 0.02 ? [atom] : [])),
+        atoms: atomsHolding(orbital.populations),
         phase: MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length],
       });
     });
@@ -326,7 +327,7 @@ function drawSelectedGfn2Orbitals(ctx: SceneContext, localized: LocalizedList | 
       picks.push({
         orbital: `${ladder.spin ?? 'alpha'}:${index}`,
         coefficients: ladder.coefficients[index],
-        atoms: ladder.atomShares[index].flatMap((share, atom) => (share > 0.02 ? [atom] : [])),
+        atoms: atomsHolding(ladder.atomShares[index]),
         phase: MO_PHASE_PAIRS[0],
       });
     }
@@ -481,7 +482,6 @@ function redrawScene(ctx: SceneContext) {
   // the dipole (see displayedCharges).
   const shown = displayedCharges(ctx);
   const charges = shown.charges;
-  syncChargeModelControl(ctx);
   // GFN2's single point at this geometry: bond orders, spin (null while it runs)
   const properties = gfn2PropertiesOnScreen(ctx);
   syncLabelModeControl(properties);
@@ -534,13 +534,12 @@ function redrawScene(ctx: SceneContext) {
     ctx.piSystemGroup.visible = false;
   }
 
-  // Charge-model dipole arrow — nothing to render when the molecule is
-  // untypeable (computeDipole returned null) or the model gives ~0 D.
-  // Visibility belongs to the #ctrl-show-dipole checkbox, so a rebuild
-  // never flips the user's choice back on (or off).
-  // Under GFN2 the dipole is the full density's: the charges plus the atomic
-  // dipoles, which add up to it exactly. Until the single point lands nothing;
-  // if it failed, the charges' own.
+  // The dipole arrow. Under GFN2 it is the full density's — the charges plus
+  // the atomic dipoles, which add up to it exactly: nothing until the single
+  // point lands, and the charges' own if it failed. Under MMFF94 it is the BCI
+  // charges' own, and nothing when the molecule is untypeable. Visibility
+  // belongs to the #ctrl-show-dipole checkbox, so a rebuild never flips the
+  // user's choice.
   const gfn2Dipole = isGfn2ChargeModel(shown.model);
   const fullDipole = gfn2Dipole ? properties?.dipole ?? null : null;
   ctx.dipole = fullDipole
@@ -560,7 +559,6 @@ function redrawScene(ctx: SceneContext) {
   // Under MMFF94, or when the engine cannot build it, the fused van der Waals
   // surface coloured by the charges (see chem/charge-model/esp.ts), cached by
   // charges since a model switch changes them.
-  // Under GFN2 the surface needs the single point, not the labels' charges.
   if (ctx.display.showEsp) {
     const gfn2 = isGfn2ChargeModel(shown.model) && properties;
     const esp = gfn2 ? gfn2EspOnScreen(ctx, properties) : null;
@@ -582,14 +580,14 @@ function redrawScene(ctx: SceneContext) {
     ctx.espGroup.visible = false;
   }
 
-  // Extended-Hückel MO, or localized orbitals: whatever is selected, from the
-  // cached results. One picture at a time — orbitals and the VSEPR hybrid
-  // lobes answer the same question differently, so an orbital takes the stage
-  // while it is selected. The localized view draws SEVERAL at once (a filled
-  // orbital and the empty one it reaches into is the hyperconjugation
-  // picture), so each takes its own phase colours, in the order it was picked.
-  // asked only with a localized orbital selected: off the Localized view
-  // nothing is, and the list is not built for a view nobody is looking at
+  // The selected orbitals — a canonical MO, or localized ones. One picture at
+  // a time: orbitals and the VSEPR hybrid lobes answer the same question
+  // differently, so an orbital takes the stage while it is selected. The
+  // localized view draws SEVERAL at once (a filled orbital and the empty one
+  // it reaches into is the hyperconjugation picture), so each takes its own
+  // phase colours, in the order it was picked. The localized list is asked
+  // for only with one of its orbitals selected — it is not built for a view
+  // nobody is looking at.
   const localizedShown = ctx.display.orbitalView === 'localized' && ctx.display.localizedSelection.length > 0
     ? localizedOnScreen(ctx) : null;
   const localized = localizedShown === 'pending' ? null : localizedShown;
@@ -600,6 +598,7 @@ function redrawScene(ctx: SceneContext) {
     return;
   }
 
+  // extended Hückel's: computed on the main thread, cached by field and level
   const picks: Array<{ key: string; coefficients: number[]; phase: [number, number] }> = [];
   if (ctx.display.orbitalView === 'localized' && localized?.orbitals) {
     ctx.display.localizedSelection.forEach((index, slot) => {
@@ -717,7 +716,13 @@ export function buildScene(ctx: SceneContext) {
   ctx.display.moIndex = null;
   ctx.display.localizedSelection = [];
   rebuildDisplay(ctx);
+  frameCamera(ctx);
+  ctx.onSceneBuilt();
+}
 
+/** Point the camera at the molecule from in front, far enough back to see all
+ *  of it — on a new molecule, and when the view is reset. */
+export function frameCamera(ctx: SceneContext) {
   const center = new THREE.Vector3();
   ctx.moleculeGroup.children.forEach((child) => {
     if (child instanceof THREE.Mesh) {
@@ -733,5 +738,4 @@ export function buildScene(ctx: SceneContext) {
   ctx.camera.lookAt(center);
   ctx.controls.target.set(center.x, center.y, center.z);
   ctx.controls.update();
-  ctx.onSceneBuilt();
 }

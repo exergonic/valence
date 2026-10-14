@@ -1,13 +1,21 @@
 import * as THREE from 'three';
 import type { SceneContext, ColorScheme, AtomStyle } from '../render';
-import { syncChargeModelControl } from '../render';
+import { frameCamera, syncChargeModelControl } from '../render';
 import { asChargeModel } from '../render/setup';
 import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { espColor } from '../chem/charge-model/esp';
 import { collectSdfData, sdfDataFields, type SdfField } from './sdf-data';
+import { vecSub, vecDot, vecLength, dihedralAngle, type Vec3 } from '../utils/vec3';
 
-export function setupControls(ctx: SceneContext) {
+/** The measuring tool's state, which the canvas click handler (main.ts) adds
+ *  picked atoms to. */
+export interface MeasureTool {
+  readonly active: boolean;
+  addAtom(index: number): void;
+}
+
+export function setupControls(ctx: SceneContext): { measure: MeasureTool } {
   let rafScheduled = false;
   const rerender = () => {
     if (rafScheduled) return;
@@ -57,8 +65,8 @@ export function setupControls(ctx: SceneContext) {
     ctx.dipoleGroup.visible = dipoleToggle.checked;
   });
 
-  // Charge-model ESP surface — rebuilt per molecule by rebuildDisplay; the
-  // checkbox shows it and the slider sets the translucency.
+  // The ESP surface — rebuilt per molecule by rebuildDisplay; the checkbox
+  // shows it and the slider sets the translucency.
   const espToggle = document.querySelector<HTMLInputElement>('#ctrl-show-esp')!;
   espToggle.checked = ctx.display.showEsp;
   espToggle.addEventListener('change', () => {
@@ -76,9 +84,10 @@ export function setupControls(ctx: SceneContext) {
     rerender();
   });
 
-  // Charge model — which partial charges the charge labels, the ESP surface
-  // and the dipole draw. The selection is intent only: syncChargeModelControl
-  // re-reads it per molecule, because either model can lack charges for one.
+  // Charge model — which partial charges the labels print (under MMFF94 the
+  // ESP surface and the dipole are those charges' too). The selection is
+  // intent only: syncChargeModelControl re-reads it per molecule, because any
+  // model can lack charges for one.
   const chargeModelSelect = document.querySelector<HTMLSelectElement>('#ctrl-charge-model')!;
   chargeModelSelect.value = ctx.display.chargeModel;
   chargeModelSelect.addEventListener('change', () => {
@@ -96,7 +105,7 @@ export function setupControls(ctx: SceneContext) {
 
   // Atom Scale — drives the ball-and-stick spheres and the bond cylinders.
   // Orbital lobes intentionally do NOT scale here: their size is the
-  // covalent radius (orbits.ts atomScale = getCovalentRadius + 0.2),
+  // covalent radius (hybrid-orbitals.ts: the covalent radius + 0.2 Å),
   // which sets the lobe length so lobes overlap bonds at the right
   // atomic centers. Making them track this slider would decouple the
   // lobes from the bond endpoints.
@@ -113,17 +122,11 @@ export function setupControls(ctx: SceneContext) {
     rerender();
   });
 
-  // Force local lookup
   // A vibration of the GFN2 minimum on screen, played until switched off.
   const vibration = document.querySelector<HTMLSelectElement>('#ctrl-vibration');
   vibration?.addEventListener('change', () => {
     ctx.display.vibrationIndex = vibration.value === '' ? null : Number(vibration.value);
     ctx.rerender();
-  });
-
-  const forceLocal = document.querySelector<HTMLInputElement>('#ctrl-force-fallback')!;
-  forceLocal.addEventListener('change', () => {
-    // The render button reads this on click; no immediate action needed.
   });
 
   // Space-filling toggle
@@ -294,12 +297,10 @@ export function setupControls(ctx: SceneContext) {
     measureClear.classList.add('hidden');
   });
 
-  // Expose measure state for the canvas click handler
-  (ctx as any)._measureState = {
-    get mode() { return measureMode; },
-    get points() { return measureAtomIndices; },
-    addPoint(idx: number) {
-      measureAtomIndices.push(idx);
+  const measure: MeasureTool = {
+    get active() { return measureMode; },
+    addAtom(index: number) {
+      measureAtomIndices.push(index);
       updateMeasureDisplay();
     },
   };
@@ -313,17 +314,18 @@ export function setupControls(ctx: SceneContext) {
       return `<div>Point ${pts.indexOf(i) + 1}: ${a.element} (${a.x.toFixed(2)}, ${a.y.toFixed(2)}, ${a.z.toFixed(2)})</div>`;
     }).join('');
 
+    const [a, b, c, d] = pts.slice(0, 4).map((i): Vec3 => [mol.atoms[i].x, mol.atoms[i].y, mol.atoms[i].z]);
     if (pts.length >= 2) {
-      const d = distance(mol.atoms[pts[0]], mol.atoms[pts[1]]);
-      measureResult.innerHTML = `Distance: ${d.toFixed(3)} Å`;
+      measureResult.innerHTML = `Distance: ${vecLength(vecSub(a, b)).toFixed(3)} Å`;
     }
     if (pts.length >= 3) {
-      const a = angle(mol.atoms[pts[0]], mol.atoms[pts[1]], mol.atoms[pts[2]]);
-      measureResult.innerHTML += `<br>Angle: ${a.toFixed(2)}°`;
+      const ba = vecSub(a, b);
+      const bc = vecSub(c, b);
+      const cos = Math.max(-1, Math.min(1, vecDot(ba, bc) / (vecLength(ba) * vecLength(bc))));
+      measureResult.innerHTML += `<br>Angle: ${(Math.acos(cos) * 180 / Math.PI).toFixed(2)}°`;
     }
     if (pts.length >= 4) {
-      const dih = dihedral(mol.atoms[pts[0]], mol.atoms[pts[1]], mol.atoms[pts[2]], mol.atoms[pts[3]]);
-      measureResult.innerHTML += `<br>Dihedral: ${dih.toFixed(2)}°`;
+      measureResult.innerHTML += `<br>Dihedral: ${(dihedralAngle(a, b, c, d) * 180 / Math.PI).toFixed(2)}°`;
     }
     measureClear.classList.toggle('hidden', pts.length === 0);
   }
@@ -354,27 +356,15 @@ export function setupControls(ctx: SceneContext) {
   // ── Reset view ──
   const resetBtn = document.getElementById('reset-view-btn')!;
   resetBtn.addEventListener('click', () => {
-    if (ctx.currentMolecule) {
-      // Re-frame the camera on the current molecule
-      const center = new THREE.Vector3();
-      ctx.moleculeGroup.children.forEach((child) => {
-        if (child instanceof THREE.Mesh) center.add(child.position);
-      });
-      center.divideScalar(ctx.moleculeGroup.children.length || 1);
-      const box = new THREE.Box3().setFromObject(ctx.moleculeGroup);
-      const size = box.getSize(new THREE.Vector3()).length();
-      const dist = size * 1.5;
-      ctx.camera.position.set(center.x, center.y, center.z + dist);
-      ctx.camera.lookAt(center);
-      ctx.controls.target.set(center.x, center.y, center.z);
-      ctx.controls.update();
-    }
+    if (ctx.currentMolecule) frameCamera(ctx);
   });
+
+  return { measure };
 }
 
 // ── Helpers ──
 
-function downloadFile(content: string, filename: string, mimeType: string) {
+export function downloadFile(content: string, filename: string, mimeType: string) {
   downloadBlob(new Blob([content], { type: mimeType }), filename);
 }
 
@@ -480,40 +470,4 @@ export function moleculeToXYZ(mol: { atoms: any[] }): string {
     lines.push(`${a.element}  ${a.x.toFixed(6)}  ${a.y.toFixed(6)}  ${a.z.toFixed(6)}`);
   }
   return lines.join('\n') + '\n';
-}
-
-function distance(a: any, b: any): number {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
-}
-
-function angle(a: any, b: any, c: any): number {
-  const v1 = [a.x - b.x, a.y - b.y, a.z - b.z];
-  const v2 = [c.x - b.x, c.y - b.y, c.z - b.z];
-  const d1 = Math.hypot(...v1);
-  const d2 = Math.hypot(...v2);
-  const dot = (v1[0] * v2[0] + v1[1] * v2[1] + v1[2] * v2[2]) / (d1 * d2);
-  return Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI;
-}
-
-function dihedral(a: any, b: any, c: any, d: any): number {
-  const b1 = [b.x - a.x, b.y - a.y, b.z - a.z];
-  const b2 = [c.x - b.x, c.y - b.y, c.z - b.z];
-  const b3 = [d.x - c.x, d.y - c.y, d.z - c.z];
-  
-  const n1 = cross(b1, b2);
-  const n2 = cross(b2, b3);
-  const m1 = cross(n1, [b2[0] / Math.hypot(...b2), b2[1] / Math.hypot(...b2), b2[2] / Math.hypot(...b2)]);
-  
-  const x = dot(n1, n2);
-  const y = dot(m1, n2);
-  
-  return Math.atan2(y, x) * 180 / Math.PI;
-}
-
-function cross(a: number[], b: number[]): number[] {
-  return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-}
-
-function dot(a: number[], b: number[]): number {
-  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }

@@ -11,7 +11,7 @@ export interface HybridizationResult {
 
 // VSEPR: steric number = (σ bonds) + (lone pairs).
 // 1 = s (hydrogen, no hybridization), 2 = sp, 3 = sp², 4 = sp³, 5 = sp³d, 6 = sp³d².
-export function assignBySteric(steric: number): HybridizationResult {
+function assignBySteric(steric: number): HybridizationResult {
   switch (steric) {
     case 1: return { hybridization: 's', geometry: 'linear' };
     case 2: return { hybridization: 'sp', geometry: 'linear' };

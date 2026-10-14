@@ -29,11 +29,13 @@ export interface Molecule {
   atoms: Atom[];
   bonds: Bond[];
   /**
-   * Spin multiplicity — 1 (a singlet) when absent, which is every sketch and
-   * every MOL block: V2000 has no field for it. A caller that KNOWS better sets
-   * it (an example whose reference calculation was a triplet, say), and the
-   * extended-Hückel layer then refuses to fill the orbitals rather than
-   * inventing a closed shell the molecule does not have.
+   * Spin multiplicity — absent in every sketch and every MOL block (V2000 has
+   * no field for it), and then the lowest the electron count allows: a
+   * singlet, or a doublet for an odd count. A caller that KNOWS better sets
+   * it (an example whose reference calculation was a triplet, say, or the spin
+   * chosen under Refine): GFN2-xTB then runs at that spin, and the
+   * extended-Hückel layer refuses to fill the orbitals rather than inventing a
+   * closed shell the molecule does not have.
    */
   multiplicity?: number;
 }

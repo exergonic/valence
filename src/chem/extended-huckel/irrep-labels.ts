@@ -40,12 +40,8 @@ import { D_FUNCTIONS, type BasisFunction } from './assign-basis';
 import { alignToPrincipalAxes } from './align-principal-axes';
 import { detectPointGroup, mirrorNormal, type SymmetryOperation } from '../../geometry/symmetrize';
 import { CANONICAL_TOLERANCE_EV, DEGENERATE_TOLERANCE_EV } from './canonicalize-degenerate';
+import { vecDot as dot, vecSub as sub, vecLength as length, type Vec3 } from '../../utils/vec3';
 
-type Vec3 = [number, number, number];
-
-const dot = (a: Vec3, b: Vec3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const sub = (a: Vec3, b: Vec3): Vec3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const length = (a: Vec3) => Math.hypot(a[0], a[1], a[2]);
 const unit = (a: Vec3): Vec3 => { const n = length(a) || 1; return [a[0] / n, a[1] / n, a[2] / n]; };
 const determinant = (m: number[][]) =>
   m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])

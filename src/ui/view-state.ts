@@ -4,13 +4,22 @@
 // students open the exact same scene.
 import * as THREE from 'three';
 import type { SceneContext } from '../render';
+import type { Bond } from '../mol-parser';
 import { buildScene } from '../render';
 import { asChargeModel } from '../render/setup';
 import type { Annotation } from './annotations';
+import { downloadFile } from './controls';
 
 export interface ViewState {
   version: 1;
-  molecule: { atoms: { element: string; x: number; y: number; z: number }[]; bonds: { atom1Index: number; atom2Index: number; order: number }[] };
+  /** The structure. The formal charges, the drawn wedges and the spin are
+   *  absent from views saved before they were kept — such a view of an ion
+   *  reloads neutral. */
+  molecule: {
+    atoms: { element: string; x: number; y: number; z: number; charge?: number }[];
+    bonds: { atom1Index: number; atom2Index: number; order: number; stereo?: Bond['stereo'] }[];
+    multiplicity?: number;
+  };
   camera: { position: [number, number, number]; target: [number, number, number] };
   display: {
     atomScale: number;
@@ -30,13 +39,16 @@ export interface ViewState {
   annotations: Annotation[];
 }
 
-export function serializeView(ctx: SceneContext, annotations: Annotation[]): ViewState {
+function serializeView(ctx: SceneContext, annotations: Annotation[]): ViewState {
   if (!ctx.currentMolecule) throw new Error('No molecule to save');
   return {
     version: 1,
+    // the charges and the spin decide the electron count every calculation
+    // runs on, so a view without them would reload as another species
     molecule: {
-      atoms: ctx.currentMolecule.atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z })),
-      bonds: ctx.currentMolecule.bonds.map((b) => ({ atom1Index: b.atom1Index, atom2Index: b.atom2Index, order: b.order })),
+      atoms: ctx.currentMolecule.atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z, charge: a.charge })),
+      bonds: ctx.currentMolecule.bonds.map((b) => ({ atom1Index: b.atom1Index, atom2Index: b.atom2Index, order: b.order, stereo: b.stereo })),
+      multiplicity: ctx.currentMolecule.multiplicity,
     },
     camera: {
       position: [ctx.camera.position.x, ctx.camera.position.y, ctx.camera.position.z],
@@ -58,7 +70,7 @@ export function serializeView(ctx: SceneContext, annotations: Annotation[]): Vie
       },
       viewPreset: ctx.display.viewPreset,
       spaceFilling: ctx.display.spaceFilling,
-      autoRotate: ctx.display.autoRotate,
+      autoRotate: ctx.autoRotate,
       highlightPiSystems: ctx.display.highlightPiSystems,
     },
     annotations: annotations.map((a) => ({ ...a })),
@@ -68,9 +80,11 @@ export function serializeView(ctx: SceneContext, annotations: Annotation[]): Vie
 export function applyViewState(ctx: SceneContext, state: ViewState, annotations: { setAnnotations: (a: Annotation[]) => void }): void {
   if (state.version !== 1) return;
 
+  const { atoms, bonds, multiplicity } = state.molecule;
   ctx.currentMolecule = {
-    atoms: state.molecule.atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z })),
-    bonds: state.molecule.bonds.map((b) => ({ atom1Index: b.atom1Index, atom2Index: b.atom2Index, order: b.order })),
+    atoms: atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z, ...(a.charge ? { charge: a.charge } : {}) })),
+    bonds: bonds.map((b) => ({ atom1Index: b.atom1Index, atom2Index: b.atom2Index, order: b.order, ...(b.stereo === 1 || b.stereo === 6 ? { stereo: b.stereo } : {}) })),
+    ...(multiplicity && multiplicity > 1 ? { multiplicity } : {}),
   };
 
   const d = state.display;
@@ -106,14 +120,7 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
 }
 
 export function saveViewToFile(ctx: SceneContext, annotations: Annotation[]): void {
-  const state = serializeView(ctx, annotations);
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'valence-view.json';
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadFile(JSON.stringify(serializeView(ctx, annotations), null, 2), 'valence-view.json', 'application/json');
 }
 
 export function loadViewFromFile(ctx: SceneContext, file: File, annotations: { setAnnotations: (a: Annotation[]) => void }): Promise<void> {

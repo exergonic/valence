@@ -3,6 +3,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { Molecule } from '../mol-parser';
 import type { MoSurfaceData } from '../chem/extended-huckel/mo-surface';
 import { marchSignedField } from '../utils/march-tetrahedra';
+import type { Vec3 } from '../utils/vec3';
 import { renderMoIsosurface } from './mo-isosurface';
 
 // A π system: a set of connected atoms whose p orbitals are parallel and
@@ -133,8 +134,6 @@ const CLOUD_OPACITY = 0.55;
 const CLOUD_CUTOFF_SQ = 3.5 * 3.5;
 /** The member lobes stay visible inside the cloud, but the cloud leads. */
 const MEMBER_LOBE_OPACITY = 0.45;
-
-type Vec3 = [number, number, number];
 
 /** Each member atom's p direction that belongs to this system, all signed
  *  alike so the sum is in phase. An sp atom has two; only the parallel one

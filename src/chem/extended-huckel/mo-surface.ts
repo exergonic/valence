@@ -35,6 +35,7 @@ import { BOHR_RADIUS } from './slater-overlap';
 import { D_FUNCTIONS } from './assign-basis';
 import { slaterTerms } from './parameters';
 import { marchSignedField } from '../../utils/march-tetrahedra';
+import type { Vec3 } from '../../utils/vec3';
 
 /** The coarsest grid spacing (Å) — the caller's preference, used when the
  *  budget does not allow finer. The actual step adapts down from here: see
@@ -130,8 +131,6 @@ export interface MoSurfaceData {
   isovalue: number;
 }
 
-type Vec3 = [number, number, number];
-
 /**
  * The per-orbital constants, flattened: [x, y, z, zeta, c·norm, ax, ay, az,
  * angular] per contributing AO. The inner loop runs once per grid point per
@@ -139,7 +138,7 @@ type Vec3 = [number, number, number];
  * are folded in here rather than recomputed a million times — that alone is
  * the difference between a 150 ms stall and a usable toggle.
  */
-export function prepareOrbitals(
+function prepareOrbitals(
   atoms: Molecule['atoms'],
   basis: BasisFunction[],
   coefficients: number[],
@@ -228,7 +227,7 @@ export function evaluateMo(
 const STRIDE = 10;
 
 /** The hot loop: see prepareOrbitals for the layout. */
-export function evaluatePrepared(
+function evaluatePrepared(
   px: number, py: number, pz: number,
   prepared: Float64Array,
   out: { value: number; gx: number; gy: number; gz: number },
@@ -560,7 +559,7 @@ export function marchMoField(grid: MoFieldData, isovalue: number): MoSurfaceData
  * was asked (tested in mo-surface.test.ts). Interpolating between bins instead
  * missed by 1.6 % near an orbital's core, where the share moves fastest.
  */
-export function levelForFraction(grid: MoFieldData, fraction: number): number {
+export function levelForFraction(grid: Pick<MoFieldData, 'values' | 'peak'>, fraction: number): number {
   const { values, peak } = grid;
   if (peak <= 0) return 0;
   const bins = 4096;
@@ -608,30 +607,4 @@ export function levelForFraction(grid: MoFieldData, fraction: number): number {
     }
   }
   return 0;
-}
-
-/**
- * Build the MO isosurface at an absolute level — field and march together, for
- * callers with no field in hand. The app draws through the two halves
- * separately so the field survives a level change.
- */
-export function computeMoSurface(
-  molecule: Molecule,
-  basis: BasisFunction[],
-  coefficients: number[],
-  isovalue = MO_SURFACE_ISOVALUE,
-  spacing = MO_SURFACE_SPACING,
-  margin = MO_SURFACE_MARGIN,
-): MoSurfaceData {
-  const grid = computeMoField(molecule, basis, coefficients, spacing, margin);
-  if (!grid) {
-    return {
-      positions: new Float32Array(0),
-      normals: new Float32Array(0),
-      phases: new Float32Array(0),
-      vertexCount: 0,
-      isovalue: 0,
-    };
-  }
-  return marchMoField(grid, isovalue);
 }

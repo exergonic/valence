@@ -18,10 +18,23 @@ import { exampleGeometry } from './helpers/local-geometry';
 import { symmetrizeMolecule } from '../src/geometry/symmetrize';
 import { solveExtendedHuckel } from '../src/chem/extended-huckel/solve';
 import { alignToPrincipalAxes } from '../src/chem/extended-huckel/align-principal-axes';
-import { computeMoField, computeMoSurface, evaluateMo, levelForFraction, marchMoField } from '../src/chem/extended-huckel/mo-surface';
+import {
+  computeMoField, evaluateMo, levelForFraction, marchMoField, MO_SURFACE_ISOVALUE, type MoSurfaceData,
+} from '../src/chem/extended-huckel/mo-surface';
 import { extendedHuckelSpace, localizeOrbitals as localizeSpace } from '../src/chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../src/chem/localized-orbitals/order-localized';
 import type { BasisFunction } from '../src/chem/extended-huckel/assign-basis';
+
+/** The field and the march together, at an absolute level (the app keeps the
+ *  two halves apart, so a field survives a level change); empty when there is
+ *  no field to march. */
+function computeMoSurface(
+  molecule: Molecule, basis: BasisFunction[], coefficients: number[], isovalue = MO_SURFACE_ISOVALUE,
+): MoSurfaceData {
+  const grid = computeMoField(molecule, basis, coefficients);
+  if (grid) return marchMoField(grid, isovalue);
+  return { positions: new Float32Array(0), normals: new Float32Array(0), phases: new Float32Array(0), vertexCount: 0, isovalue: 0 };
+}
 
 /** CODATA Bohr radius in Å, written out rather than imported. The 1s value
  *  below is the pin that the surface and the overlap integrals share a unit;

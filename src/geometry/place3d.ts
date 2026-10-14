@@ -1,6 +1,6 @@
 import type { Molecule } from '../mol-parser';
 import { applyWedgeStereo } from './stereo-wedge';
-import { vecDot, vecSub, crossProduct, vecNormalize, rotateRodrigues, projectPerpendicular } from '../utils/vec3';
+import { vecSub, vecNormalize, rotateRodrigues, rotateToward, dihedralAngle, type Vec3 } from '../utils/vec3';
 import { vseprBondVectors, SQUARE_PLANAR_VECTORS } from '../chem/vsepr/ideal-vsepr-vectors';
 import { electronDomainCounts } from '../chem/vsepr/assign-orbitals';
 import { dElectronCount } from '../chem/d-electron-count';
@@ -25,35 +25,6 @@ function bondLengthFor(molecule: Molecule): (i: number, j: number) => number {
     const single = getCovalentRadius(molecule.atoms[i].element) + getCovalentRadius(molecule.atoms[j].element);
     return single * (MULTIPLE_BOND_SHORTENING[order.get(`${Math.min(i, j)}-${Math.max(i, j)}`) ?? 1] ?? 1);
   };
-}
-
-
-
-function alignVectors(from: [number, number, number], to: [number, number, number]): (v: [number, number, number]) => [number, number, number] {
-  const dot = vecDot(from, to);
-  if (Math.abs(dot - 1) < 1e-6) return (v) => v;
-  if (Math.abs(dot + 1) < 1e-6) return (v) => [-v[0], -v[1], -v[2]];
-
-  // Rotation axis (from × to), normalized, plus the cos/sin of the
-  // angle between them. The closure applies the shared Rodrigues
-  // rotation to each ideal vector.
-  const naxis = vecNormalize(crossProduct(from, to));
-  const cosA = dot;
-  const sinA = Math.sqrt(1 - dot * dot);
-
-  return (v) => rotateRodrigues(v, naxis, cosA, sinA);
-}
-
-
-
-type Vec3 = [number, number, number];
-
-/** The dihedral a–b–c–d (radians), looking down b→c. */
-function dihedral(a: Vec3, b: Vec3, c: Vec3, d: Vec3): number {
-  const axis = vecNormalize(vecSub(c, b));
-  const u = projectPerpendicular(vecSub(a, b), axis);
-  const v = projectPerpendicular(vecSub(d, c), axis);
-  return Math.atan2(vecDot(crossProduct(u, v), axis), vecDot(u, v));
 }
 
 /** Which side of the line p→q the point x lies on, in the sketch's plane. */
@@ -100,7 +71,7 @@ function setTorsion(
 
   // the free direction nearest the target, and the turn that puts it there
   const at = pos[atom];
-  const torsionOf = (v: Vec3) => dihedral(pos[reference], pos[parent], at, [at[0] + v[0], at[1] + v[1], at[2] + v[2]]);
+  const torsionOf = (v: Vec3) => dihedralAngle(pos[reference], pos[parent], at, [at[0] + v[0], at[1] + v[1], at[2] + v[2]]);
   const gap = (angle: number) => Math.atan2(Math.sin(target - angle), Math.cos(target - angle));
   const nearest = directions.reduce((best, v) => (Math.abs(gap(torsionOf(v))) < Math.abs(gap(torsionOf(best))) ? v : best));
   const turn = gap(torsionOf(nearest));
@@ -393,7 +364,8 @@ export function place3D(molecule: Molecule): [number, number, number][] {
       const dz = pos[anchor][2] - pos[curr][2];
       const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
       if (len > 1e-6) {
-        rotate = alignVectors(vectors[0], [dx / len, dy / len, dz / len]);
+        const toward: Vec3 = [dx / len, dy / len, dz / len];
+        rotate = (v) => rotateToward(v, vectors[0], toward);
       }
     }
 
