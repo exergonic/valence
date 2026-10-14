@@ -17,10 +17,11 @@
  *     and positions() take and return BOHR. Mixing them inflates a structure
  *     by 0.529^-1 and the optimiser walks off to garbage.
  *   - the gradient is Eh/bohr, coordinate-major: Mat3N.get(coordinate, atom).
- *   - setNumThreads(1) is load-bearing, not an optimisation. The wasm is built
- *     with pthreads, and a threaded build needs SharedArrayBuffer, which needs
- *     COOP/COEP headers, which GitHub Pages cannot set. Single-threaded is what
- *     makes this deployable at all.
+ *   - the engine is single-threaded by construction: the vendored build links
+ *     without -pthread (occ-valence.patch), because a threaded build needs
+ *     SharedArrayBuffer, which needs COOP/COEP headers, which GitHub Pages
+ *     cannot set. setNumThreads(1) below is a harmless leftover — TBB is
+ *     linked but never spawns a thread — not what keeps this deployable.
  *   - the preloaded share/ tree is mounted at '/'.
  */
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';

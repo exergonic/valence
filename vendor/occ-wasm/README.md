@@ -160,10 +160,10 @@ compiler (none does today).
 
 `occjs.wasm` (the engine), `occjs.js` (the emscripten glue) and `occjs.data`
 (the preloaded `share/` tree, mounted at `/`). Only the `occjs` target is
-built. The engine runs single-threaded (`setNumThreads(1)`); a threaded build
-needs `SharedArrayBuffer`, which needs COOP/COEP headers, which GitHub Pages
-cannot serve — single-threaded is what makes this deployable as a static site
-at all.
+built. The engine is single-threaded because the link carries no `-pthread`
+(see the threading note below); a threaded build needs `SharedArrayBuffer`,
+which needs COOP/COEP headers, which GitHub Pages cannot serve — single-threaded
+is what makes this deployable as a static site at all.
 
 Registered bindings: `core` (Molecule, Mat3N, IVec, logging, threading),
 `xtb` (the GFN2 engine) and a trimmed `opt` (the Berny optimiser the app
