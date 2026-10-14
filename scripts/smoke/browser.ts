@@ -130,6 +130,16 @@ export async function launchBrowser(width = 1600, height = 1000, scale = 1) {
       await pointer('mousePressed', x, y, { clickCount: 1, buttons: 1 });
       await pointer('mouseReleased', x, y, { clickCount: 1 });
     },
+    /** Press at `from`, move in small steps with the button held, let go at `to`. */
+    async drag(from: { x: number; y: number }, to: { x: number; y: number }) {
+      await this.moveTo(from.x, from.y);
+      await pointer('mousePressed', from.x, from.y, { clickCount: 1, buttons: 1 });
+      for (let i = 1; i <= 12; i++) {
+        await pointer('mouseMoved', from.x + ((to.x - from.x) * i) / 12, from.y + ((to.y - from.y) * i) / 12, { buttons: 1 });
+        await sleep(20);
+      }
+      await pointer('mouseReleased', to.x, to.y, { clickCount: 1 });
+    },
     /** A PNG of part of the page, as a data URL. */
     async capture(clip: { x: number; y: number; width: number; height: number }): Promise<string> {
       const r = await send('Page.captureScreenshot', { format: 'png', clip: { ...clip, scale: 1 } });

@@ -19,6 +19,9 @@
  * Any element past the nine buttons is JSME's X atom: "More…" opens our
  * periodic table, and the pick goes into JSME's X box and gets a button.
  *
+ * An element or a drawing tool can also be dragged onto the sketch; the drop
+ * does what a click with it does there (setupDragFromToolbar).
+ *
  * The codes, keys and the X box were mapped against jsme-editor 2024.04.29
  * (NOTES.md); a JSME upgrade must re-check them.
  */
@@ -175,6 +178,137 @@ function pressKey(stage: HTMLElement, key: string, ctrlKey = false): void {
   }
 }
 
+/** Tools that draw something when clicked on an empty sketch (measured: a
+ *  bond or the chain gives ethane, a ring its ring). Erase, stereo and charge
+ *  act only on an atom or bond already drawn. */
+const DRAWS_ON_EMPTY = new Set(['single', 'double', 'triple', 'chain', 'ring3', 'ring4', 'ring5', 'ring6', 'benzene']);
+
+/** How far a press on a button must move before it is a drag, not a click. */
+const DRAG_START_PX = 5;
+
+/**
+ * Drag an element or a drawing tool from our toolbar onto the sketch: the
+ * drop does what a click with that tool does there. A student reached for
+ * this unprompted (2026-10-14), so a drag and a click both work and mix
+ * freely — the dragged tool stays chosen.
+ *
+ * JSME follows the drag on its own: a mouse has no implicit capture, so the
+ * real moves reach its drawing and its hover box shows the atom or bond the
+ * drop will land on. What it never sees is a press — that happened on our
+ * button — so on the release a press is dispatched on the drawing at the drop
+ * point, and the real release follows it. Unlike a press on JSME's hidden
+ * menus, a press on its drawing leaves it responsive (NOTES.md). The press is
+ * sent from the document's capture phase, ahead of the toolbar's own
+ * listeners on the stage, which then treat it as any click.
+ *
+ * A drop that would add nothing — beside the molecule (one molecule at a
+ * time), off the sketch, or Esc — sends the chip back to its button.
+ */
+function setupDragFromToolbar(stage: HTMLElement, choose: (button: HTMLButtonElement) => void): void {
+  let pressed: { button: HTMLButtonElement; x: number; y: number } | null = null;
+  let dragged: HTMLButtonElement | null = null;
+  let chip: HTMLElement | null = null;
+  let sketchWasEmpty = false;
+  let pointer = { target: null as EventTarget | null, x: 0, y: 0 };
+  let frame = 0;
+
+  const dropWillAct = (target: EventTarget | null) => {
+    if (!dragged || !(target instanceof Node) || !stage.contains(target)) return false;
+    if (pointerIsOnStructure(stage)) return true;
+    return sketchWasEmpty && (!!dragged.dataset.element || DRAWS_ON_EMPTY.has(dragged.dataset.tool ?? ''));
+  };
+
+  // The chip sits below and right of the pointer, clear of JSME's hover box.
+  const placeChip = (x: number, y: number) => {
+    if (chip) chip.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
+  };
+
+  const begin = (button: HTMLButtonElement, x: number, y: number) => {
+    dragged = button;
+    choose(button);
+    sketchWasEmpty = !window.jsmeApplet?.smiles?.();
+    chip = button.cloneNode(true) as HTMLElement;
+    chip.removeAttribute('id');
+    chip.removeAttribute('title');
+    chip.removeAttribute('aria-pressed');
+    chip.setAttribute('aria-hidden', 'true');
+    chip.classList.add('sketch-drag-chip');
+    document.body.appendChild(chip);
+    placeChip(x, y);
+    document.documentElement.classList.add('sketch-dragging');
+  };
+
+  const finish = (snapBack: boolean) => {
+    const leaving = chip;
+    const home = dragged;
+    pressed = null;
+    dragged = null;
+    chip = null;
+    cancelAnimationFrame(frame);
+    document.documentElement.classList.remove('sketch-dragging');
+    if (!leaving) return;
+    if (snapBack && home) {
+      const r = home.getBoundingClientRect();
+      leaving.classList.add('returning');
+      leaving.style.transform = `translate(${r.left}px, ${r.top}px)`;
+      setTimeout(() => leaving.remove(), 200);
+    } else {
+      leaving.remove();
+    }
+  };
+
+  document.addEventListener('mousedown', (event) => {
+    if (event.button !== 0) return;
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('#sketch-tools [data-tool], #sketch-elements [data-element]');
+    const draggable = !!button?.dataset.element || (button?.dataset.tool ?? '') in TOOL_ACTIONS;
+    pressed = button && draggable && !button.disabled ? { button, x: event.clientX, y: event.clientY } : null;
+  });
+
+  document.addEventListener('mousemove', (event) => {
+    if (!pressed) return;
+    // The button was let go outside the window: no release ever came.
+    if ((event.buttons & 1) === 0) {
+      finish(true);
+      return;
+    }
+    if (!dragged) {
+      if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < DRAG_START_PX) return;
+      begin(pressed.button, event.clientX, event.clientY);
+    }
+    placeChip(event.clientX, event.clientY);
+    // JSME moves its hover box in its own handler for this move; read it after.
+    pointer = { target: event.target, x: event.clientX, y: event.clientY };
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => chip?.classList.toggle('will-drop', dropWillAct(pointer.target)));
+  });
+
+  document.addEventListener('mouseup', (event) => {
+    if (event.button !== 0 || !pressed) return;
+    if (!dragged) {
+      pressed = null; // a click: the button's own handler chooses it
+      return;
+    }
+    const { target, clientX, clientY, screenX, screenY } = event;
+    if (dropWillAct(target)) {
+      finish(false);
+      target!.dispatchEvent(new MouseEvent('mousedown', {
+        bubbles: true, cancelable: true, view: window, button: 0, buttons: 1, clientX, clientY, screenX, screenY,
+      }));
+    } else {
+      finish(true);
+      // A release with no press before it means nothing to JSME; keep it out.
+      if (target instanceof Node && stage.contains(target)) event.stopPropagation();
+    }
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && dragged) finish(true);
+  });
+  window.addEventListener('blur', () => {
+    if (dragged) finish(true);
+  });
+}
+
 export function setupSketcherToolbar(): void {
   const container = document.getElementById('jsme_container');
   const stage = document.getElementById('jsme-stage');
@@ -206,6 +340,14 @@ export function setupSketcherToolbar(): void {
     markSelected(button);
   };
 
+  // An element or a drawing tool; undo, redo and clear are commands, handled
+  // where they are clicked.
+  const choose = (button: HTMLButtonElement) => {
+    const tool = button.dataset.tool;
+    if (button.dataset.element) chooseElement(button.dataset.element, button);
+    else if (tool && tool in TOOL_ACTIONS) chooseTool(tool, button);
+  };
+
   // A pick from the periodic table: one of the nine selects its own button;
   // any other gets a button at the end of the row (the four most recent are
   // kept) and is chosen at once, so the next click on the sketch places it.
@@ -218,7 +360,7 @@ export function setupSketcherToolbar(): void {
       button.className = 'sketch-element';
       button.dataset.element = symbol;
       button.dataset.picked = '';
-      button.title = `${symbol}: click an atom to change it, or empty space to place one`;
+      button.title = `${symbol}: click or drag onto an atom to change it, or onto empty space to place one`;
       button.textContent = symbol;
       button.setAttribute('aria-pressed', 'false');
       elementRow.insertBefore(button, moreButton);
@@ -235,9 +377,7 @@ export function setupSketcherToolbar(): void {
       const applet = window.jsmeApplet;
       if (!button || !applet) return;
       const tool = button.dataset.tool;
-      if (button.dataset.element) {
-        chooseElement(button.dataset.element, button);
-      } else if (tool === 'undo' || tool === 'redo') {
+      if (tool === 'undo' || tool === 'redo') {
         pressKey(stage, tool === 'undo' ? 'z' : 'y', true);
       } else if (tool === 'clear') {
         // JSME's clear() empties the molecule but does not redraw, so the old
@@ -247,11 +387,12 @@ export function setupSketcherToolbar(): void {
         applet.clear();
         if (applet.smiles()) applet.clear();
         applet.repaint();
-      } else if (tool && tool in TOOL_ACTIONS) {
-        chooseTool(tool, button);
+      } else {
+        choose(button);
       }
     });
   }
+  setupDragFromToolbar(stage, choose);
 
   // An element chosen: a click on an atom becomes the element's key, and the
   // click itself is kept from JSME (its action, placing a carbon, would add a

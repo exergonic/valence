@@ -430,6 +430,33 @@ button, input, select, textarea { font-family: inherit; }
 .sketch-element[data-element="Br"],
 .sketch-element[data-element="I"] { color: var(--sketch-halogen); }
 
+.sketch-tool,
+.sketch-element { user-select: none; }
+
+/* A button dragged onto the sketch: a copy follows the pointer, dim until
+   letting go there would draw something (sketcher-toolbar.ts). */
+.sketch-drag-chip {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 70;
+  pointer-events: none;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow);
+  opacity: 0.55;
+}
+
+.sketch-drag-chip.will-drop { opacity: 1; border-color: var(--accent); }
+.sketch-drag-chip.returning { opacity: 0; transition: transform 180ms ease-out, opacity 180ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sketch-drag-chip.returning { transition: none; }
+}
+
+.sketch-dragging,
+.sketch-dragging * { cursor: grabbing !important; }
+
 .sketch-more { color: var(--text-muted); }
 .sketch-more:disabled { opacity: 0.5; cursor: default; }
 

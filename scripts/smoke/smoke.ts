@@ -198,6 +198,51 @@ async function sketcherFirstAtom(b: Browser) {
   check('an element from "More…" is placed by one click', xenon === '[Xe]', xenon || 'nothing placed');
 }
 
+/** Building by dragging toolbar buttons onto the sketch (asked for 2026-10-14,
+ *  after a student reached for it): C → CH4, a single bond onto it → ethane,
+ *  Cl onto the new carbon → methyl chloride; a drop beside the molecule adds
+ *  nothing. */
+async function sketcherDragAndDrop(b: Browser) {
+  await b.open(url);
+  const centre = (selector: string) => b.run(`const r = document.querySelector('${selector}').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+  const smiles = async () => { await sleep(800); return b.run(`return window.jsmeApplet.smiles();`); };
+  // Where each atom is drawn: the centre of its label's first letter, or the
+  // far end of a bond for a label-less carbon.
+  const atoms = () => b.run(`
+    const svgs = [...document.getElementById('jsme-stage').querySelectorAll('svg')];
+    const size = (s) => { const r = s.getBoundingClientRect(); return r.width * r.height; };
+    const drawing = svgs.reduce((a, s) => (size(a) >= size(s) ? a : s));
+    const labels = [...drawing.querySelectorAll('text')].filter((t) => t.getNumberOfChars() > 0 && /^[A-Z]/.test(t.textContent)).map((t) => {
+      const l = t.getExtentOfChar(0);
+      const p = new DOMPoint(l.x + l.width / 2, l.y + l.height / 2).matrixTransform(t.getScreenCTM());
+      return { x: p.x, y: p.y };
+    });
+    const ends = [...drawing.querySelectorAll('line')].flatMap((l) => {
+      const m = l.getScreenCTM();
+      return [[l.x1, l.y1], [l.x2, l.y2]].map(([x, y]) => { const p = new DOMPoint(x.baseVal.value, y.baseVal.value).matrixTransform(m); return { x: p.x, y: p.y }; });
+    });
+    const r = drawing.getBoundingClientRect();
+    return { labels, ends, area: { x: r.x, y: r.y, width: r.width, height: r.height } };`);
+
+  const first = await atoms();
+  await b.drag(await centre('[data-element="C"]'), { x: first.area.x + first.area.width * 0.4, y: first.area.y + first.area.height * 0.4 });
+  check('drag C onto the empty sketch → methane', (await smiles()) === 'C');
+
+  const methane = (await atoms()).labels[0];
+  await b.drag(await centre('[data-tool="single"]'), methane);
+  check('drag a single bond onto CH4 → ethane', (await smiles()) === 'CC');
+
+  const ethane = await atoms();
+  const far = ethane.ends.reduce((a, e) => (Math.hypot(e.x - methane.x, e.y - methane.y) > Math.hypot(a.x - methane.x, a.y - methane.y) ? e : a));
+  await b.drag(await centre('[data-element="Cl"]'), far);
+  check('drag Cl onto a carbon of ethane → methyl chloride', (await smiles()) === 'CCl');
+
+  await b.drag(await centre('[data-element="O"]'), { x: ethane.area.x + ethane.area.width * 0.85, y: ethane.area.y + ethane.area.height * 0.85 });
+  const beside = await smiles();
+  const chips = await b.run(`return document.querySelectorAll('.sketch-drag-chip').length;`);
+  check('a drop beside the molecule adds nothing, and the chip goes home', beside === 'CCl' && chips === 0, `${beside}, ${chips} chip(s) left`);
+}
+
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */
 async function orbitalListStaysPut(b: Browser) {
   await b.open(url);
@@ -251,7 +296,7 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, orbitalListStaysPut]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, orbitalListStaysPut]) {
     try {
       await part(b);
     } catch (error) {
