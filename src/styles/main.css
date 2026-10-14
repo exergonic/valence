@@ -1915,6 +1915,74 @@ body .gwt-MenuBarPopup .gwt-MenuBar-vertical .gwt-MenuItemSeparator .menuSeparat
 
 body .gwt-MenuBarPopup .gwt-MenuBar-vertical .subMenuIcon-selected { background: var(--accent); }
 
+/* ── JSME's dialogs (the menu's "Change atom charge"), made to match too ──
+   A mosaic WindowPanel: GWT's decorated-popup frame (a 3×3 table of corner
+   and edge images) round a caption and a body that JSME lays out with
+   absolute positions and fixed pixel sizes. So only surfaces, type and
+   borders change here, never a size, or JSME's layout clips. Its white body
+   held the page's pale text, as the menu once did. */
+body .mosaic-WindowPanel {
+  background: var(--panel-solid);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  overflow: hidden !important; /* JSME sets visible inline; the corners need hidden */
+}
+
+body .mosaic-WindowPanel [class^="popup"],
+body .mosaic-WindowPanel .Body { background: none; }
+
+body .mosaic-WindowPanel .mosaic-Caption {
+  background: none;
+  border-bottom: 1px solid var(--border);
+}
+
+body .mosaic-WindowPanel .mosaic-Caption-text {
+  padding: 7px 10px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 15px;
+  color: var(--text);
+}
+
+/* the close button is a dark sprite, lost on the dark looks */
+:root:not([data-theme="light"]) body .mosaic-WindowPanel .mosaic-ImageButton img { filter: invert(1); }
+
+body .mosaic-WindowPanel .gwt-Label {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 21px;
+  color: var(--text-2);
+}
+
+body .mosaic-WindowPanel .gwt-TextBox {
+  padding: 0 4px;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+body .mosaic-WindowPanel .gwt-TextBox:focus { border-color: var(--accent); outline: none; }
+
+body .mosaic-WindowPanel button {
+  padding: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 11px;
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+body .mosaic-WindowPanel button:hover { border-color: var(--border-strong); color: var(--text); }
+
+/* OK comes first: the action, in the accent like the app's own */
+body .mosaic-WindowPanel button:first-of-type { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+body .mosaic-WindowPanel button:first-of-type:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: var(--accent-ink); }
+
 #copy-toast {
   position: fixed;
   z-index: 60;
