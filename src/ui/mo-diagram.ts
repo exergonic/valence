@@ -49,7 +49,10 @@ function pipekMezeyNote(list: LocalizedList) {
       + `${list.source === 'gfn2' ? '⟨φ|F|φ⟩ of the Fock operator' : '⟨φ|H|φ⟩ of the Hamiltonian'}: the average of the `
       + 'delocalized energies it is built from, weighted by how much of each it holds. The occupied energies add up to the '
       + 'delocalized ones, but an orbital’s energy is not an ionization energy — Koopmans’ theorem speaks of the '
-      + 'delocalized orbitals.',
+      + 'delocalized orbitals. With an orbital drawn, a tick marks the ones it mixes with — the brighter, the stronger; '
+      + 'hover one for the coupling ⟨φᵢ|F|φⱼ⟩, or draw both. These couplings are what turn the localized orbitals back '
+      + 'into the delocalized ones. Filled orbitals mix only with filled '
+      + 'ones and empty with empty — a lone pair’s donation into a σ* is already in the lone pair’s own tail.',
     link: {
       label: 'Pipek & Mezey, J. Chem. Phys. 1989',
       href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
@@ -97,6 +100,20 @@ const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
 };
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
+
+/** The weakest ⟨φᵢ|F|φⱼ⟩ the localized list ticks, eV (2.3 kcal/mol). The
+ *  couplings that matter run 0.5–4.6 eV (water's two O–H bonds 0.68,
+ *  formaldehyde's n with a C–H bond 1.51, PCl₅'s lone pair with its own
+ *  P–Cl bond 4.57); under a tenth of an eV is a ripple. */
+const COUPLING_SHOWN_EV = 0.1;
+
+/** Two localized orbitals' coupling, for the readout when both are drawn. A
+ *  filled and an empty orbital never mix here, and the readout says why
+ *  rather than printing a zero (fock-couplings.ts). */
+function pairCoupling(couplings: number[][], i: number, j: number, orbitals: LocalizedOrbital[]): string {
+  if (orbitals[i].occupied !== orbitals[j].occupied) return ' · a filled and an empty orbital: no coupling';
+  return ` · coupling ${formatEnergy(Math.abs(couplings[i][j]))} ${ENERGY_UNIT}`;
+}
 
 /**
  * Split an ascending run of orbitals into degenerate sets: each set is the
@@ -350,10 +367,29 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
 
     const selection = ctx.display.localizedSelection;
     const occupiedCount = orbitals.filter((o) => o.occupied).length;
+    // The orbitals the latest pick mixes with: ⟨φᵢ|F|φⱼ⟩ above the cut, each
+    // row ticked in proportion to the strongest — an invitation to draw it
+    // beside the pick. The latest pick, as the composition line reads it. The
+    // number is the tooltip's, not the row's: a row is ~220 px and the longest
+    // labels ("C5-H11 σ · -316.7 kcal/mol") already fill it.
+    const pick = selection.length > 0 ? selection[selection.length - 1] : null;
+    const couplingTo = pick !== null && shown.couplings ? shown.couplings[pick] : null;
+    const coupled = (index: number) => couplingTo !== null && index !== pick
+      && Math.abs(couplingTo[index]) >= COUPLING_SHOWN_EV;
+    const strongest = couplingTo
+      ? Math.max(0, ...orbitals.map((_, i) => (coupled(i) ? Math.abs(couplingTo[i]) : 0)))
+      : 0;
     const row = (index: number) => {
       const orbital = orbitals[index];
       const slot = selection.indexOf(index);
-      const classes = slot >= 0 ? 'orb-item selected' : 'orb-item';
+      const mixes = coupled(index);
+      const classes = ['orb-item', slot >= 0 ? 'selected' : '', mixes ? 'coupled' : ''].filter(Boolean).join(' ');
+      const coupling = mixes ? Math.abs(couplingTo![index]) : 0;
+      const cue = mixes
+        ? ` style="--coupling:${(0.35 + 0.65 * coupling / strongest).toFixed(2)}"`
+          + ` title="Mixes with ${localizedType(molecule, orbitals[pick!])} by ${formatEnergy(coupling)} ${ENERGY_UNIT}`
+          + ' (⟨φᵢ|F|φⱼ⟩) — click to draw it too"'
+        : '';
       // the dot carries the phase colour the orbital is drawn in, so the list
       // and the picture say the same thing when two orbitals are up at once
       const dot = slot >= 0
@@ -361,7 +397,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         : '<span class="orb-dot"></span>';
       // one Type column, as avo_ibo's table has — the class IS the type's tail —
       // then the energy, written as the Delocalized ladder writes an MO's
-      return `<button class="${classes}" data-index="${index}">`
+      return `<button class="${classes}" data-index="${index}"${cue}>`
         + dot
         + `<span class="orb-type">${localizedType(molecule, orbital)}`
         + ` · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}</span>`
@@ -417,6 +453,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         .map((orbital) => `${localizedType(molecule, orbital)} · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}`
           + (orbital.occupied ? '' : ' (empty)'))
         .join('  +  ')
+        + (selection.length === 2 && shown.couplings ? pairCoupling(shown.couplings, selection[0], selection[1], orbitals) : '')
         + (selection.length > 2 ? ' — click any again to drop it'
           : selection.length > 1 ? ' — click either again to drop it' : ' — click it again to hide');
       // the composition line describes the LAST orbital picked: two orbitals

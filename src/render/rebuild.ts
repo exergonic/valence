@@ -28,6 +28,7 @@ import { syncVibration } from './vibration';
 import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
 import { extendedHuckelSpace, localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../chem/localized-orbitals/order-localized';
+import { fockCouplings } from '../chem/localized-orbitals/fock-couplings';
 import { resolveCharges } from '../chem/charge-model/bci-charges';
 import { labelPaletteFor } from './label-colors';
 
@@ -244,12 +245,14 @@ export function localizedOnScreen(ctx: SceneContext): LocalizedList | 'pending' 
   if (kept) return (ctx.localized = kept);
   const space = ladder ? gfn2OrbitalSpace(ladder) : extendedHuckelSpace(molecule, ctx.ehResult!);
   const sets = space && localizeOrbitals(space, molecule.atoms.length);
+  const orbitals = space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null;
   ctx.localized = {
     source: ladder ? 'gfn2' : 'eh',
     spin: ladder?.spin ?? null,
     basis: from.basis,
     from,
-    orbitals: space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null,
+    orbitals,
+    couplings: space && orbitals ? fockCouplings(space.hamiltonian, orbitals) : null,
   };
   ctx.localizedLists.push(ctx.localized);
   return ctx.localized;

@@ -13,6 +13,8 @@ import { EXAMPLES } from '../src/ui/examples';
 import { gfn2Ladders, gfn2OrbitalSpace, type Gfn2Ladder } from '../src/chem/gfn2-xtb/orbital-ladder';
 import { localizeOrbitals } from '../src/chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals, type LocalizedOrbital } from '../src/chem/localized-orbitals/order-localized';
+import { fockCouplings } from '../src/chem/localized-orbitals/fock-couplings';
+import { jacobiSymmetric } from '../src/utils/eigen';
 
 beforeAll(() => {
   const globals = globalThis as unknown as Record<string, unknown>;
@@ -66,6 +68,27 @@ describe('GFN2 orbitals as a space to localize', () => {
     const sum = filled(list).reduce((s, o) => s + o.energy, 0);
     const canonical = alpha.energies.slice(0, filled(list).length).reduce((s, e) => s + e, 0);
     expect(sum).toBeCloseTo(canonical, 6);
+  });
+});
+
+describe('the couplings between localized orbitals, ⟨φᵢ|F|φⱼ⟩', () => {
+  it('water: the diagonal is each energy, filled and empty never mix, and the filled block gives back the canonical energies', async () => {
+    const molecule = example('Water');
+    const { alpha } = await ladders(molecule);
+    const space = gfn2OrbitalSpace(alpha)!;
+    const list = localized(molecule, alpha)!;
+    const F = fockCouplings(space.hamiltonian, list);
+    list.forEach((orbital, i) => expect(F[i][i]).toBeCloseTo(orbital.energy, 9));
+    list.forEach((a, i) => list.forEach((b, j) => {
+      if (a.occupied !== b.occupied) expect(Math.abs(F[i][j])).toBeLessThan(1e-6);
+    }));
+    const filledRows = list.map((o, i) => (o.occupied ? i : -1)).filter((i) => i >= 0);
+    const block = filledRows.map((i) => filledRows.map((j) => F[i][j]));
+    const { values } = jacobiSymmetric(block, 1e-24);
+    values.forEach((value, k) => expect(value).toBeCloseTo(alpha.energies[k], 6));
+    // the two O–H bonds couple — the coupling that splits them into 2a₁ and 1b₂
+    const bonds = filledRows.filter((i) => list[i].character === 'sigma');
+    expect(Math.abs(F[bonds[0]][bonds[1]])).toBeGreaterThan(0.1);
   });
 });
 

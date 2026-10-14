@@ -2126,6 +2126,24 @@ button.orb-rail:focus-visible { outline: none; }
 
 .orb-item.selected .orb-type { color: var(--accent-text); }
 
+/* The orbitals the latest pick mixes with (⟨φᵢ|F|φⱼ⟩, mo-diagram.ts): a tick
+   inside the row's RIGHT edge, as strong as the coupling against the
+   strongest; the number is the row's tooltip. On the left it read as a second
+   rail beside the degenerate-set rail in the gutter. */
+.orb-item { position: relative; }
+
+.orb-item.coupled::before {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 5px;
+  bottom: 5px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  opacity: var(--coupling, 1);
+}
+
 
 #mo-body {
   display: flex;

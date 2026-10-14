@@ -166,6 +166,9 @@ export interface LocalizedList {
   /** Classified and ordered; null when the filling is not settled — no list
    *  rather than a wrong one (the panel says why). */
   orbitals: LocalizedOrbital[] | null;
+  /** ⟨φᵢ|F|φⱼ⟩ in eV between the orbitals above, in their order (fock-couplings.ts);
+   *  null with them. */
+  couplings: number[][] | null;
   /** What it was localized from — a GFN2 ladder or the EH result. */
   from: unknown;
 }
