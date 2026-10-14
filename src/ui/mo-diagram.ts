@@ -45,8 +45,11 @@ function pipekMezeyNote(list: LocalizedList) {
   return {
     text: `Pipek–Mezey localization of the ${source}: the delocalized MOs `
       + 'rearranged into bonds and lone pairs, occupied space and valence-virtual space alike, listed as an energy '
-      + 'ladder — lowest at the bottom. No energies are printed: a localized orbital is not an eigenstate, so the order uses the one-electron '
-      + 'expectation ⟨φ|H|φ⟩ while the numbers themselves would inherit the parameter sensitivity.',
+      + 'ladder — lowest at the bottom. A localized orbital is not an eigenstate, so its energy is the expectation '
+      + `${list.source === 'gfn2' ? '⟨φ|F|φ⟩ of the Fock operator' : '⟨φ|H|φ⟩ of the Hamiltonian'}: the average of the `
+      + 'delocalized energies it is built from, weighted by how much of each it holds. The occupied energies add up to the '
+      + 'delocalized ones, but an orbital’s energy is not an ionization energy — Koopmans’ theorem speaks of the '
+      + 'delocalized orbitals.',
     link: {
       label: 'Pipek & Mezey, J. Chem. Phys. 1989',
       href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
@@ -289,9 +292,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
    * The localized list: one row per orbital, ordered as an energy ladder —
    * lowest at the bottom of the panel, rising as you read up, which is how the
    * Delocalized ladder and other programs draw an orbital list. The order is
-   * ⟨φ|H|φ⟩ within each section (see orderLocalizedOrbitals); the number
-   * itself is not printed, because a localized orbital is not an eigenstate
-   * and the number would inherit the model's parameter sensitivity.
+   * ⟨φ|H|φ⟩ within each section (see orderLocalizedOrbitals), and the row
+   * prints that number as the Delocalized ladder prints an MO's energy.
    */
   function drawLocalized(): void {
     const shown = localizedOnScreen(ctx);
@@ -343,10 +345,12 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       const dot = slot >= 0
         ? `<span class="orb-dot" style="background:#${MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length][0].toString(16).padStart(6, '0')}"></span>`
         : '<span class="orb-dot"></span>';
-      // one Type column, as avo_ibo's table has — the class IS the type's tail
+      // one Type column, as avo_ibo's table has — the class IS the type's tail —
+      // then the energy, written as the Delocalized ladder writes an MO's
       return html + `<button class="${classes}" data-index="${index}">`
         + dot
-        + `<span class="orb-type">${localizedType(molecule, orbital)}</span>`
+        + `<span class="orb-type">${localizedType(molecule, orbital)}`
+        + ` · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}</span>`
         + '</button>';
     }).join('');
     list.querySelectorAll<HTMLButtonElement>('button.orb-item').forEach((node) => {
@@ -358,7 +362,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         .map((index) => orbitals[index])
         .filter((orbital): orbital is LocalizedOrbital => !!orbital);
       readout.textContent = described
-        .map((orbital) => `${localizedType(molecule, orbital)}${orbital.occupied ? '' : ' (empty)'}`)
+        .map((orbital) => `${localizedType(molecule, orbital)} · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}`
+          + (orbital.occupied ? '' : ' (empty)'))
         .join('  +  ')
         + (selection.length > 1 ? ' — click either again to drop it' : ' — click it again to hide');
       // the composition line describes the LAST orbital picked: two orbitals

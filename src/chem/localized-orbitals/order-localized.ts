@@ -7,8 +7,12 @@
  * calculation's Hamiltonian (GFN2's Fock matrix, or extended Hückel's H),
  * within each section (occupied first, then the valence-virtual block). It is
  * well defined for any orbital — the mean of the canonical energies the
- * localized orbital spans — and it is the sort key ONLY: the number inherits
- * the method's parameter sensitivity, so it is never shown.
+ * localized orbital spans, weighted by how much of each it holds — and it is
+ * what avo_ibo prints as an IBO's energy. The panel prints it too (decided
+ * with the user 2026-10-14, once GFN2's Fock matrix was behind the list: its
+ * order matched avo_ibo's ωB97X-D/def2-TZVP order on formaldehyde orbital for
+ * orbital). It is not an ionization energy: Koopmans' theorem speaks of the
+ * canonical orbitals.
  *
  * The list is an **energy ladder**, ascending: lowest at the bottom of the
  * panel, rising as you read up, the way the canonical level diagram and other
@@ -67,7 +71,7 @@ export interface LocalizedOrbital {
   /** Coefficients per AO, in the calculation frame and the solver's basis
    *  order — the same shape the MO renderers already take. */
   coefficients: number[];
-  /** ⟨φ|H|φ⟩ in eV. The sort key within a section, and never displayed. */
+  /** ⟨φ|H|φ⟩ in eV: the sort key within a section, and the energy the panel prints. */
   energy: number;
   character: LocalizedCharacter;
   /** Filled (an occupied-space orbital: two electrons, or one in a spin
