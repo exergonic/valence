@@ -103,7 +103,8 @@ const FALLBACK_STEP_ANGSTROM = 0.1;
  * central differences of the engine's own energy (h = 1e-3 bohr, SCF converged
  * to ~1e-11 Eh, so the reference is good to ~1e-8): P₄ 1e-7, water 9e-6,
  * SF₆ and CHFCl₂ 6e-5, ethene 9e-5, methanol 2.2e-4, the cyclopropenyl anion
- * 4.6e-4 — and 1e-3 where its optimisation stalls, ten times the 1e-4
+ * 4.6e-4 (the cause, D4 not self-consistent, is in `relax` below) — and 1e-3
+ * where its optimisation stalls, ten times the 1e-4
  * convergence gate. An optimiser steered by that gradient cannot satisfy its
  * line search near the minimum and grinds (the anion: 3 400 evaluations at a
  * flat energy). The engine's NUMERICAL gradient is exact to the step, at 6N
@@ -575,10 +576,13 @@ export async function optimizeWithGfn2(
   /**
    * One optimisation from `start`. Berny first, on the analytic gradient —
    * fast, and right for most molecules. But OCC's analytic GFN2 gradient is
-   * wrong for polar species — a known upstream limitation (OCC's README: the
-   * multipole-on gradient misses the AO-multipole integral derivatives, a
-   * ~1 mHa gap; no binding reaches the charge-only variant — reported as
-   * peterspackman/occ#58, so revisit this check when it is fixed). Measured against
+   * wrong for polar species in v0.9.4: its D4 dispersion energy is evaluated
+   * at the SCC charges, but D4's charge potential ∂E_disp/∂q never enters the
+   * Hamiltonian, so the energy is not variational and the gradient misses a
+   * charge-response term — largest where charge separates (the maintainer's
+   * diagnosis on peterspackman/occ#58; OCC's README had blamed missing
+   * AO-multipole integral derivatives, which were already in). Fixed upstream
+   * in 5644eaf, due in 0.9.6 — revisit this check when we rebuild on it. Measured against
    * the Fortran xTB oracle: methanol 2.2e-4, the cyclopropenyl anion 4.7e-4
    * Eh/bohr, while xTB's own analytic gradient matches OCC's finite
    * differences to 1e-6. Berny believes it: on the anion it reported convergence 4.7 kcal/mol above
