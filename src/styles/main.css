@@ -2016,14 +2016,23 @@ body .mosaic-WindowPanel button:first-of-type:hover { background: var(--accent-h
   overflow-y: auto;
 }
 
-/* Section headers: what is filled vs empty in the localized list. */
+/* Section headers: what is filled vs empty. The unit sits at the right, over
+   the energy column, so the rows print bare numbers; the padding is the row's
+   (border + 8px), so the unit's right edge is the numbers' right edge. */
 .orb-group {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
   margin: 6px 0 2px;
+  padding-right: 9px;
   color: var(--text-faint);
   font-size: 10px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
+
+.orb-unit { text-transform: none; letter-spacing: 0; }
 
 #mo-list .orb-group:first-child { margin-top: 0; }
 
@@ -2102,6 +2111,19 @@ button.orb-rail:focus-visible { outline: none; }
   color: var(--text-2);
   font-variant-numeric: tabular-nums;
 }
+
+/* The energy column: right-aligned, so the decimal points line up down the list */
+.orb-energy {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  min-width: 7ch; /* "-1234.5": the coupling beside it keeps one column too */
+}
+
+.orb-item.selected .orb-energy { color: var(--accent-text); }
 
 /* HOMO / LUMO, right-aligned on the row */
 .orb-tag {

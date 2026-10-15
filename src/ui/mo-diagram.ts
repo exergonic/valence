@@ -115,6 +115,13 @@ function pairCoupling(couplings: number[][], i: number, j: number, orbitals: Loc
   return ` · coupling ${formatEnergy(Math.abs(couplings[i][j]))} ${ENERGY_UNIT}`;
 }
 
+/** A section header of either list. It names the unit once, above the energy
+ *  column, so the rows can carry bare numbers — a unit on every row left no
+ *  room for the coupling. */
+function sectionHeader(label: string): string {
+  return `<div class="orb-group"><span>${label}</span><span class="orb-unit">${ENERGY_UNIT}</span></div>`;
+}
+
 /**
  * Split an ascending run of orbitals into degenerate sets: each set is the
  * orbitals within DEGENERATE_TOLERANCE_EV of its first. Both lists group by
@@ -369,9 +376,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const occupiedCount = orbitals.filter((o) => o.occupied).length;
     // The orbitals the latest pick mixes with: ⟨φᵢ|F|φⱼ⟩ above the cut, each
     // row ticked in proportion to the strongest — an invitation to draw it
-    // beside the pick. The latest pick, as the composition line reads it. The
-    // number is the tooltip's, not the row's: a row is ~220 px and the longest
-    // labels ("C5-H11 σ · -316.7 kcal/mol") already fill it.
+    // beside the pick. The latest pick, as the composition line reads it.
     const pick = selection.length > 0 ? selection[selection.length - 1] : null;
     const couplingTo = pick !== null && shown.couplings ? shown.couplings[pick] : null;
     const coupled = (index: number) => couplingTo !== null && index !== pick
@@ -396,11 +401,12 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         ? `<span class="orb-dot" style="background:#${MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length][0].toString(16).padStart(6, '0')}"></span>`
         : '<span class="orb-dot"></span>';
       // one Type column, as avo_ibo's table has — the class IS the type's tail —
-      // then the energy, written as the Delocalized ladder writes an MO's
+      // then the energy, in the column the Delocalized ladder prints an MO's
+      // in; the section header names the unit
       return `<button class="${classes}" data-index="${index}"${cue}>`
         + dot
-        + `<span class="orb-type">${localizedType(molecule, orbital)}`
-        + ` · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}</span>`
+        + `<span class="orb-type">${localizedType(molecule, orbital)}</span>`
+        + `<span class="orb-energy">${formatEnergy(orbital.energy)}</span>`
         + '</button>';
     };
     // Degenerate sets within each section — the two O–H bonds of water, the
@@ -425,7 +431,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         const header = tag === 'occupied'
           ? `Occupied${spin} · ${occupiedCount}`
           : `Empty${spin} — valence-virtual · ${orbitals.length - occupiedCount}`;
-        html += `<div class="orb-group">${header}</div>`;
+        html += sectionHeader(header);
       }
       const rows = [...run].reverse().map(row).join('');
       if (run.length === 1) return html + rows;
@@ -548,6 +554,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const rows: string[] = [];
     const emptyCount = occupations ? levels.filter((l) => !l.occupied).length : 0;
     let section: boolean | null = null;
+    // without a known filling there are no sections, but the unit still needs a header
+    if (!occupations) rows.push(sectionHeader(`${levels.length} levels`));
     for (const group of [...groups].reverse()) {
       // The occupied/empty split, as the localized list has it. Only when the
       // filling is known: an open shell (or a partly-filled degenerate set)
@@ -556,11 +564,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         const occupied = group[0].occupied;
         if (occupied !== section) {
           section = occupied;
-          rows.push(
-            `<div class="orb-group">${occupied
-              ? `Occupied · ${levels.length - emptyCount}`
-              : `Empty · ${emptyCount}`}</div>`,
-          );
+          rows.push(sectionHeader(occupied ? `Occupied · ${levels.length - emptyCount}` : `Empty · ${emptyCount}`));
         }
       }
       // the frontier can sit inside a degenerate set, so the tag belongs to the
@@ -578,8 +582,9 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
           + `<span class="orb-dot"${phase}></span>`
           + `<span class="orb-type">MO ${level.index + 1}`
           + (irrep ? ` · ${irrep}` : '')
-          + ` · ${formatEnergy(level.energy)} ${ENERGY_UNIT}</span>`
+          + '</span>'
           + (tag ? `<span class="orb-tag">${tag}</span>` : '')
+          + `<span class="orb-energy">${formatEnergy(level.energy)}</span>`
           + '</button>';
       }).join('');
       // A degenerate set carries the same rail as the localized list's. It

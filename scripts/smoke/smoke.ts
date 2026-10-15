@@ -251,7 +251,7 @@ async function orbitalListStaysPut(b: Browser) {
   await orbitalsReady(b);
   const before = await b.run(`
     const rows = [...document.querySelectorAll('button.orb-item')];
-    const list = rows[0].parentElement;
+    const list = rows[0].closest("#mo-list");
     const box = list.getBoundingClientRect();
     const row = rows.find((r) => { const b = r.getBoundingClientRect(); return b.top > box.top + 2 && b.bottom < box.top + 80; });
     const b = row.getBoundingClientRect();
@@ -260,7 +260,7 @@ async function orbitalListStaysPut(b: Browser) {
   await b.click(before.x, before.y);
   await settle(b, 800);
   const after = await b.run(`
-    const list = document.querySelector('button.orb-item').parentElement;
+    const list = document.querySelector("#mo-list");
     return { scroll: list.scrollTop, selected: document.querySelector('button.orb-item.selected')?.textContent.trim() };`);
   check('clicking an MO selects it', after.selected === before.label, after.selected ?? 'nothing selected');
   check('clicking an MO leaves the list where it was', Math.abs(after.scroll - before.scroll) < 1, `scrollTop ${before.scroll} → ${after.scroll}`);
