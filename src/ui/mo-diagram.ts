@@ -33,7 +33,7 @@ import { MO_PHASE_PAIRS, MO_SIGNIFICANT } from '../render/mo-lobes';
 import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import { SP_ONLY_METALS } from '../chem/extended-huckel/parameters';
 import { spinName } from '../chem/elements';
-import { ENERGY_UNIT, formatEnergy } from './units';
+import { ENERGY_UNIT, KCAL_PER_EV, formatEnergy } from './units';
 import { GFN2_NOTE } from '../geometry/gfn2-refine';
 import { writeNote } from './info-note';
 
@@ -52,11 +52,38 @@ function pipekMezeyNote(list: LocalizedList) {
       + 'delocalized orbitals. With an orbital drawn, a tick marks the ones it mixes with — the brighter, the stronger; '
       + 'hover one for the coupling ⟨φᵢ|F|φⱼ⟩, or draw both. These couplings are what turn the localized orbitals back '
       + 'into the delocalized ones. Filled orbitals mix only with filled '
-      + 'ones and empty with empty — a lone pair’s donation into a σ* is already in the lone pair’s own tail.',
+      + 'ones and empty with empty — a lone pair’s donation into a σ* is already in the lone pair’s own tail. '
+      + '“Lewis structure” above shows it as a donation, E(2).',
     link: {
       label: 'Pipek & Mezey, J. Chem. Phys. 1989',
       href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
     },
+  };
+}
+
+const NBO_LINK = {
+  label: 'Reed, Curtiss & Weinhold, Chem. Rev. 1988',
+  href: 'https://doi.org/10.1021/cr00088a005',
+};
+
+/** The Lewis-structure list's note: what the orbitals are, and how to read
+ *  E(2), including what it cannot be trusted for. */
+function lewisNote(list: LocalizedList, molecule: Molecule) {
+  const share = ((list.lewisShare ?? 0) * 100).toFixed(1);
+  const carriers = [...new Set(molecule.atoms.map((a) => a.element).filter((e) => e !== 'H'))];
+  return {
+    text: 'The Lewis structure you drew, made into orbitals the NBO way from the GFN2-xTB density (semiempirical): '
+      + 'each lone pair from its own atom, each bond from its two atoms, each antibond its bond’s out-of-phase partner. '
+      + `Without tails they hold ${share}% of the electrons; the rest is delocalization, which E(2) accounts for. `
+      + 'With a filled orbital drawn, the empty ones it donates into show E(2), the second-order stabilization '
+      + 'q·F²/Δε, and an underline as long as its share of the strongest; draw an empty one to see its donors. A tick '
+      + 'marks mixing within a section, as in Pipek–Mezey. E(2) is a perturbative estimate that overstates strong '
+      + 'resonance, and GFN2’s empty orbitals sit low, so compare the numbers with each other rather than with NBO’s. '
+      + 'Draw another resonance structure to see its Lewis orbitals.'
+      + (list.rydbergs > 0
+        ? ` The ${list.rydbergs} orbitals left over on ${carriers.join(', ')}, mostly d, complete the set but are not listed.`
+        : ''),
+    link: NBO_LINK,
   };
 }
 
@@ -97,6 +124,7 @@ const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
   'delta antibond': 'δ*',
   antibond: 'anti*',
   virtual: 'virt',
+  'lone vacancy': 'LP*',
 };
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
@@ -107,12 +135,22 @@ const TOP_CONTRIBUTORS = 6;
  *  P–Cl bond 4.57); under a tenth of an eV is a ripple. */
 const COUPLING_SHOWN_EV = 0.1;
 
-/** Two localized orbitals' coupling, for the readout when both are drawn. A
- *  filled and an empty orbital never mix here, and the readout says why
+/** The smallest E(2) the Lewis-structure list marks, eV: NBO's own print
+ *  threshold, 0.5 kcal/mol. */
+const E2_SHOWN_EV = 0.5 / KCAL_PER_EV;
+
+/** What two drawn orbitals have between them, for the readout. Two of one
+ *  section mix by ⟨φᵢ|F|φⱼ⟩. A filled and an empty one: in the Lewis list,
+ *  the donation's E(2); in Pipek–Mezey's, nothing, and the readout says why
  *  rather than printing a zero (fock-couplings.ts). */
-function pairCoupling(couplings: number[][], i: number, j: number, orbitals: LocalizedOrbital[]): string {
-  if (orbitals[i].occupied !== orbitals[j].occupied) return ' · a filled and an empty orbital: no coupling';
-  return ` · coupling ${formatEnergy(Math.abs(couplings[i][j]))} ${ENERGY_UNIT}`;
+function pairReadout(shown: LocalizedList, i: number, j: number): string {
+  const orbitals = shown.orbitals!;
+  if (orbitals[i].occupied !== orbitals[j].occupied) {
+    return shown.donation
+      ? ` · E(2) ${formatEnergy(shown.donation[i][j])} ${ENERGY_UNIT}`
+      : ' · a filled and an empty orbital: no coupling';
+  }
+  return shown.couplings ? ` · coupling ${formatEnergy(Math.abs(shown.couplings[i][j]))} ${ENERGY_UNIT}` : '';
 }
 
 /** A section header of either list. It names the unit once, above the energy
@@ -286,6 +324,19 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       ctx.rerender();
     });
   }
+  // How the Localized view localizes. A new list is new orbitals, so the
+  // selection goes; its top filled orbital is drawn, which in the Lewis list
+  // shows at once what it donates into.
+  const localizeRow = document.getElementById('mo-localize-row');
+  const localizeButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#mo-localize-row [data-localize]'));
+  for (const button of localizeButtons) {
+    button.addEventListener('click', () => {
+      const method = button.dataset.localize === 'lewis' ? 'lewis' : 'pipek-mezey';
+      if (ctx.display.localizeMethod === method) return;
+      ctx.display.localizeMethod = method;
+      panelApi.selectHomo();
+    });
+  }
   for (const button of spinButtons) {
     button.addEventListener('click', () => {
       const spin = button.dataset.moSpin === 'beta' ? 'beta' : 'alpha';
@@ -300,6 +351,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   function syncMethodRows(view: 'delocalized' | 'localized'): void {
     const gfn2 = ctx.display.moMethod === 'gfn2';
     methodRow?.classList.toggle('hidden', view !== 'delocalized');
+    localizeRow?.classList.toggle('hidden', view !== 'localized');
+    for (const b of localizeButtons) b.classList.toggle('active', b.dataset.localize === ctx.display.localizeMethod);
     for (const b of methodButtons) b.classList.toggle('active', b.dataset.moMethod === ctx.display.moMethod);
     // the spin row serves whichever list reads GFN2's orbitals: the ladder
     // with GFN2 picked, the localized list whenever it is GFN2's
@@ -355,6 +408,10 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       note.textContent = 'Computing the GFN2-xTB orbitals to localize…';
       return;
     }
+    if (shown?.refusal) {
+      writeNote(note, { text: `No Lewis-structure orbitals: ${shown.refusal}. Pipek–Mezey still localizes it.`, link: NBO_LINK });
+      return;
+    }
     const orbitals = shown?.orbitals;
     if (!shown || !orbitals || !molecule) {
       note.textContent = !molecule
@@ -374,40 +431,59 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
 
     const selection = ctx.display.localizedSelection;
     const occupiedCount = orbitals.filter((o) => o.occupied).length;
-    // The orbitals the latest pick mixes with: ⟨φᵢ|F|φⱼ⟩ above the cut, each
-    // row ticked in proportion to the strongest and carrying the number — an
-    // invitation to draw it beside the pick. The latest pick, as the
-    // composition line reads it.
+    // Two cues for the latest pick (the one the composition line reads), each
+    // an invitation to draw the row beside it. A TICK marks the orbitals of
+    // its own section it mixes with, ⟨φᵢ|F|φⱼ⟩ above the cut, as bright as the
+    // coupling against the strongest; its number is the tooltip's. In the
+    // Lewis-structure list, the orbitals of the OTHER section it donates into
+    // (or receives from) carry their E(2) as a number and an underline as
+    // long as its share of the strongest — the donation is the headline, the
+    // mixing the background.
     const pick = selection.length > 0 ? selection[selection.length - 1] : null;
     const couplingTo = pick !== null && shown.couplings ? shown.couplings[pick] : null;
     const coupled = (index: number) => couplingTo !== null && index !== pick
+      && orbitals[index].occupied === orbitals[pick!].occupied
       && Math.abs(couplingTo[index]) >= COUPLING_SHOWN_EV;
     const strongest = couplingTo
       ? Math.max(0, ...orbitals.map((_, i) => (coupled(i) ? Math.abs(couplingTo[i]) : 0)))
+      : 0;
+    const donationTo = pick !== null && shown.donation ? shown.donation[pick] : null;
+    const donates = (index: number) => donationTo !== null && donationTo[index] >= E2_SHOWN_EV;
+    const strongestDonation = donationTo
+      ? Math.max(0, ...orbitals.map((_, i) => (donates(i) ? donationTo[i] : 0)))
       : 0;
     const row = (index: number) => {
       const orbital = orbitals[index];
       const slot = selection.indexOf(index);
       const mixes = coupled(index);
-      const classes = ['orb-item', slot >= 0 ? 'selected' : '', mixes ? 'coupled' : ''].filter(Boolean).join(' ');
+      const gives = donates(index);
+      const classes = ['orb-item', slot >= 0 ? 'selected' : '', mixes ? 'coupled' : '', gives ? 'donates' : '']
+        .filter(Boolean).join(' ');
       const coupling = mixes ? Math.abs(couplingTo![index]) : 0;
+      const e2 = gives ? donationTo![index] : 0;
+      // the arrow runs from the filled orbital to the empty one, whichever was picked
+      const [donor, acceptor] = gives && !orbital.occupied ? [pick!, index] : [index, pick!];
       const cue = mixes
         ? ` style="--coupling:${(0.35 + 0.65 * coupling / strongest).toFixed(2)}"`
           + ` title="Mixes with ${localizedType(molecule, orbitals[pick!])} by ${formatEnergy(coupling)} ${ENERGY_UNIT}`
           + ' (⟨φᵢ|F|φⱼ⟩) — click to draw it too"'
-        : '';
+        : gives
+          ? ` style="--donation:${(e2 / strongestDonation).toFixed(2)}"`
+            + ` title="${localizedType(molecule, orbitals[donor])} → ${localizedType(molecule, orbitals[acceptor])}: `
+            + `E(2) ${formatEnergy(e2)} ${ENERGY_UNIT} — click to draw it too"`
+          : '';
       // the dot carries the phase colour the orbital is drawn in, so the list
       // and the picture say the same thing when two orbitals are up at once
       const dot = slot >= 0
         ? `<span class="orb-dot" style="background:#${MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length][0].toString(16).padStart(6, '0')}"></span>`
         : '<span class="orb-dot"></span>';
       // one Type column, as avo_ibo's table has — the class IS the type's tail —
-      // then the coupling to the pick, then the energy, in the column the
+      // then the E(2) to the pick, then the energy, in the column the
       // Delocalized ladder prints an MO's in; the section header names the unit
       return `<button class="${classes}" data-index="${index}"${cue}>`
         + dot
         + `<span class="orb-type">${localizedType(molecule, orbital)}</span>`
-        + (mixes ? `<span class="orb-coupling">↔ ${formatEnergy(coupling)}</span>` : '')
+        + (gives ? `<span class="orb-e2">${formatEnergy(e2)}</span>` : '')
         + `<span class="orb-energy">${formatEnergy(orbital.energy)}</span>`
         + '</button>';
     };
@@ -430,9 +506,10 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       if (tag !== section) {
         section = tag;
         const spin = shown.spin ? ` (${shown.spin === 'alpha' ? 'α' : 'β'})` : '';
+        const lewis = shown.method === 'lewis';
         const header = tag === 'occupied'
-          ? `Occupied${spin} · ${occupiedCount}`
-          : `Empty${spin} — valence-virtual · ${orbitals.length - occupiedCount}`;
+          ? `${lewis ? 'Lewis — filled' : `Occupied${spin}`} · ${occupiedCount}`
+          : `${lewis ? 'Non-Lewis — empty' : `Empty${spin} — valence-virtual`} · ${orbitals.length - occupiedCount}`;
         html += sectionHeader(header);
       }
       const rows = [...run].reverse().map(row).join('');
@@ -459,9 +536,10 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         .filter((orbital): orbital is LocalizedOrbital => !!orbital);
       readout.textContent = described
         .map((orbital) => `${localizedType(molecule, orbital)} · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}`
+          + (orbital.occupancy === undefined ? '' : ` · ${Math.max(0, orbital.occupancy).toFixed(2)} e⁻`)
           + (orbital.occupied ? '' : ' (empty)'))
         .join('  +  ')
-        + (selection.length === 2 && shown.couplings ? pairCoupling(shown.couplings, selection[0], selection[1], orbitals) : '')
+        + (selection.length === 2 ? pairReadout(shown, selection[0], selection[1]) : '')
         + (selection.length > 2 ? ' — click any again to drop it'
           : selection.length > 1 ? ' — click either again to drop it' : ' — click it again to hide');
       // the composition line describes the LAST orbital picked: two orbitals
@@ -474,7 +552,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     } else {
       readout.textContent = `${orbitals.length} localized orbitals · click one to draw it, another to compare`;
     }
-    writeNote(note, pipekMezeyNote(shown));
+    writeNote(note, shown.method === 'lewis' ? lewisNote(shown, molecule) : pipekMezeyNote(shown));
   }
 
   // The ladder the list was last framed on. Every click redraws the list, and
@@ -861,7 +939,8 @@ function localizedType(molecule: Molecule, orbital: LocalizedOrbital): string {
   const joined = (atoms: number[]) => atoms.map(name).join('-');
   const kind = CHARACTER_LABEL[orbital.character];
 
-  if (orbital.character === 'lone pair' || orbital.character === 'lone pair s' || orbital.character === 'virtual') {
+  if (orbital.character === 'lone pair' || orbital.character === 'lone pair s' || orbital.character === 'virtual'
+    || orbital.character === 'lone vacancy') {
     return `${joined(orbital.atoms.slice(0, 1))}(${kind})`;
   }
   if (orbital.character === 'delocalized') return kind;

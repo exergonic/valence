@@ -86,6 +86,11 @@ export interface DisplaySettings {
    *  self-consistent, so its ordering is the trustworthy one) or extended
    *  Hückel (the textbook picture). */
   moMethod: 'eh' | 'gfn2';
+  /** How the Localized view localizes: Pipek–Mezey (the default — the
+   *  orbitals find their own bonds and lone pairs, tails and all), or the
+   *  Lewis structure as drawn, made into orbitals the NBO way, with the
+   *  donor–acceptor energies E(2) between them (lewis-orbitals.ts). */
+  localizeMethod: 'pipek-mezey' | 'lewis';
   /** For an open shell's GFN2 orbitals — the ladder or the localized list —
    *  which spin channel is listed. */
   moSpin: 'alpha' | 'beta';
@@ -161,6 +166,8 @@ export function setActiveIsoValue(display: DisplaySettings, value: number): void
  */
 export interface LocalizedList {
   source: 'gfn2' | 'eh';
+  /** Pipek–Mezey's orbitals, or the drawn Lewis structure's (NBO-style). */
+  method: 'pipek-mezey' | 'lewis';
   spin: 'alpha' | 'beta' | null;
   basis: BasisFunction[];
   /** Classified and ordered; null when the filling is not settled — no list
@@ -169,6 +176,15 @@ export interface LocalizedList {
   /** ⟨φᵢ|F|φⱼ⟩ in eV between the orbitals above, in their order (fock-couplings.ts);
    *  null with them. */
   couplings: number[][] | null;
+  /** The Lewis structure's E(2) in eV, filled orbital ↔ empty one, both ways
+   *  round; null for Pipek–Mezey, whose filled and empty orbitals do not mix. */
+  donation: number[][] | null;
+  /** The share of the electrons the Lewis orbitals hold, 0–1; null for Pipek–Mezey. */
+  lewisShare: number | null;
+  /** How many d Rydberg orbitals the Lewis set holds and does not list. */
+  rydbergs: number;
+  /** Why the drawn structure could not be made into Lewis orbitals, or null. */
+  refusal: string | null;
   /** What it was localized from — a GFN2 ladder or the EH result. */
   from: unknown;
 }
@@ -398,6 +414,7 @@ export function initScene(container: HTMLElement): SceneContext {
       orbitalView: 'delocalized',
       moMethod: 'gfn2',
       moSpin: 'alpha',
+      localizeMethod: 'pipek-mezey',
       vibrationIndex: null,
       localizedSelection: [],
       showOrbitals: true,

@@ -81,6 +81,11 @@ async function view(b: Browser, model: string) {
 /** Sketch a molecule (as SMILES, into JSME) and build it, as the button does. */
 async function build(b: Browser, smiles: string) {
   await b.run(`window.jsmeApplet.readGenericMolecularInput(${JSON.stringify(smiles)});`);
+  // JSME takes the input in its own time; Build on a sketch it has not read yet builds nothing
+  for (let waited = 0; waited < 10_000; waited += 100) {
+    if (await b.run(`return !!window.jsmeApplet.smiles();`)) break;
+    await sleep(100);
+  }
   await sleep(300);
   await b.run(`document.getElementById('render-btn').click();`);
   await sleep(800);
@@ -267,6 +272,43 @@ async function orbitalListStaysPut(b: Browser) {
 }
 
 /**
+ * The Lewis-structure orbitals follow the drawing: formamide drawn O=C–N has a
+ * nitrogen lone pair, and its strongest donation is into the C=O π*. (Pipek–
+ * Mezey localizes formamide as the zwitterion, with no such lone pair.)
+ */
+async function lewisStructureDonation(b: Browser) {
+  await b.open(url);
+  await build(b, 'NC=O');
+  await view(b, 'localized');
+  await orbitalsReady(b);
+  await b.run(`document.querySelector('[data-localize="lewis"]').click();`);
+  // the Lewis list is built from the GFN2 single point, which may still be running
+  let listed = false;
+  for (let waited = 0; waited < 20_000 && !listed; waited += 250) {
+    listed = await b.run(`return [...document.querySelectorAll('#mo-list button.orb-item')].some((row) => /^N\\d+\\(LP\\)/.test(row.textContent));`);
+    if (!listed) await sleep(250);
+  }
+  if (!listed) {
+    const note: string = await b.run(`return document.getElementById('mo-note').textContent;`);
+    check('Lewis structure: formamide’s N lone pair donates most into the C=O π*', false, `no N lone pair listed — ${note.slice(0, 90)}`);
+    return;
+  }
+  await b.run(`
+    for (const row of document.querySelectorAll('#mo-list button.orb-item.selected')) row.click();
+    [...document.querySelectorAll('#mo-list button.orb-item')].find((row) => /^N\\d+\\(LP\\)/.test(row.textContent)).click();`);
+  await settle(b, 600);
+  const donations: Array<{ type: string; e2: number }> = await b.run(`
+    return [...document.querySelectorAll('#mo-list button.orb-item.donates')].map((row) => ({
+      type: row.querySelector('.orb-type').textContent,
+      e2: parseFloat(row.querySelector('.orb-e2').textContent),
+    })).sort((x, y) => y.e2 - x.e2);`);
+  const top = donations[0];
+  check('Lewis structure: formamide’s N lone pair donates most into the C=O π*',
+    !!top && /^[CO]\d+-[CO]\d+ π\*$/.test(top.type) && top.e2 > 25,
+    top ? `${top.type} ${top.e2} kcal/mol` : 'no donation marked');
+}
+
+/**
  * A clean console on load, in a narrow window — so a real error is never
  * buried in noise. A sketcher under ~300 px is where JSME's menu icons logged
  * dozens of invalid-SVG errors (index.html corrects their markup); the main
@@ -296,7 +338,7 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, orbitalListStaysPut]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, orbitalListStaysPut, lewisStructureDonation]) {
     try {
       await part(b);
     } catch (error) {

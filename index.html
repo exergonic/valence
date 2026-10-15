@@ -246,6 +246,10 @@
                 <button class="view-preset-btn active" data-mo-method="gfn2" title="GFN2-xTB: self-consistent orbitals — each electron feels the others' charge — so their order is the more trustworthy where the two disagree. Semiempirical; its empty orbitals sit low. Its localized orbitals are the Localized view.">GFN2-xTB</button>
                 <button class="view-preset-btn" data-mo-method="eh" title="Extended Hückel: the textbook orbital picture — fixed atomic parameters, no self-consistency. The Localized view uses it only when GFN2-xTB has no orbitals to give.">Extended Hückel</button>
               </div>
+              <div id="mo-localize-row" class="preset-row hidden" role="group" aria-label="How the orbitals are localized">
+                <button class="view-preset-btn active" data-localize="pipek-mezey" title="Pipek–Mezey: the orbitals find their own bonds and lone pairs, each with the small tails that turn it back into the delocalized orbitals. A tick marks the ones a drawn orbital mixes with.">Pipek–Mezey</button>
+                <button class="view-preset-btn" data-localize="lewis" title="The Lewis structure you drew, as NBO-style orbitals: each lone pair and bond on its own atoms, its antibond beside it — and E(2), what each donation from a filled orbital into an empty one is worth.">Lewis structure</button>
+              </div>
               <div id="mo-spin-row" class="preset-row hidden" role="group" aria-label="Spin channel">
                 <button class="view-preset-btn active" data-mo-spin="alpha" title="The α (spin-up) orbitals of this open shell">α spin</button>
                 <button class="view-preset-btn" data-mo-spin="beta" title="The β (spin-down) orbitals: one electron fewer for each unpaired one">β spin</button>

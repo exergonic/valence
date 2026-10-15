@@ -2125,12 +2125,13 @@ button.orb-rail:focus-visible { outline: none; }
 
 .orb-item.selected .orb-energy { color: var(--accent-text); }
 
-/* The coupling to the latest pick (⟨φᵢ|F|φⱼ⟩), beside the energy; it rides
-   with the tick at the row's right edge, in the same accent */
-.orb-coupling {
+/* E(2) to the latest pick, beside the energy (the Lewis-structure list): the
+   donation is the number on the row; the mixing tick carries none */
+.orb-e2 {
   flex: 0 0 auto;
   font-family: var(--font-mono);
   font-size: 10px;
+  font-weight: 600;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
 }
@@ -2160,7 +2161,7 @@ button.orb-rail:focus-visible { outline: none; }
 
 /* The orbitals the latest pick mixes with (⟨φᵢ|F|φⱼ⟩, mo-diagram.ts): a tick
    inside the row's RIGHT edge, as strong as the coupling against the
-   strongest; the number is .orb-coupling. On the left it read as a second
+   strongest; the number is the row's tooltip. On the left it read as a second
    rail beside the degenerate-set rail in the gutter. */
 .orb-item { position: relative; }
 
@@ -2174,6 +2175,21 @@ button.orb-rail:focus-visible { outline: none; }
   border-radius: 1px;
   background: var(--accent);
   opacity: var(--coupling, 1);
+}
+
+/* A donation to or from the latest pick (E(2), the Lewis-structure list): an
+   underline along the row's foot, as long as its share of the strongest. A
+   length, where the tick is a brightness: the two never land on one row (a
+   tick is within a section, a donation across them). */
+.orb-item.donates::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  bottom: 1px;
+  width: calc((100% - 16px) * var(--donation, 1));
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
 }
 
 

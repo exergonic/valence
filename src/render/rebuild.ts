@@ -29,6 +29,8 @@ import { solveExtendedHuckel } from '../chem/extended-huckel/solve';
 import { extendedHuckelSpace, localizeOrbitals } from '../chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals } from '../chem/localized-orbitals/order-localized';
 import { fockCouplings } from '../chem/localized-orbitals/fock-couplings';
+import { lewisOrbitals } from '../chem/localized-orbitals/lewis-orbitals';
+import type { Molecule } from '../mol-parser';
 import { resolveCharges } from '../chem/charge-model/bci-charges';
 import { labelPaletteFor } from './label-colors';
 
@@ -241,21 +243,47 @@ export function localizedOnScreen(ctx: SceneContext): LocalizedList | 'pending' 
   // an open shell's two spin channels are two lists, and keeping one meant
   // that going back from β to α localized α all over again (0.9 s for the
   // triplet NiCl₄²⁻).
-  const kept = ctx.localizedLists.find((list) => list.from === from);
+  const method = ctx.display.localizeMethod;
+  const kept = ctx.localizedLists.find((list) => list.from === from && list.method === method);
   if (kept) return (ctx.localized = kept);
-  const space = ladder ? gfn2OrbitalSpace(ladder) : extendedHuckelSpace(molecule, ctx.ehResult!);
-  const sets = space && localizeOrbitals(space, molecule.atoms.length);
-  const orbitals = space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null;
-  ctx.localized = {
-    source: ladder ? 'gfn2' : 'eh',
-    spin: ladder?.spin ?? null,
-    basis: from.basis,
-    from,
-    orbitals,
-    couplings: space && orbitals ? fockCouplings(space.hamiltonian, orbitals) : null,
+  const base = {
+    source: ladder ? 'gfn2' as const : 'eh' as const, method, spin: ladder?.spin ?? null, basis: from.basis, from,
   };
+  if (method === 'lewis') {
+    ctx.localized = { ...base, ...lewisList(molecule, ladder) };
+  } else {
+    const space = ladder ? gfn2OrbitalSpace(ladder) : extendedHuckelSpace(molecule, ctx.ehResult!);
+    const sets = space && localizeOrbitals(space, molecule.atoms.length);
+    const orbitals = space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null;
+    ctx.localized = {
+      ...base,
+      orbitals,
+      couplings: space && orbitals ? fockCouplings(space.hamiltonian, orbitals) : null,
+      donation: null,
+      lewisShare: null,
+      rydbergs: 0,
+      refusal: null,
+    };
+  }
   ctx.localizedLists.push(ctx.localized);
   return ctx.localized;
+}
+
+/** The drawn Lewis structure's orbitals and their E(2), or the reason there
+ *  are none. They need GFN2's Fock matrix and a closed shell: a Lewis
+ *  structure pairs every electron. */
+function lewisList(molecule: Molecule, ladder: Gfn2Ladder | null) {
+  const none = (refusal: string) => ({
+    orbitals: null, couplings: null, donation: null, lewisShare: null, rydbergs: 0, refusal,
+  });
+  if (!ladder) return none('they are built from GFN2-xTB’s density and Fock matrix, and GFN2-xTB had none for this structure');
+  if (ladder.spin) return none('this is an open shell, and a Lewis structure pairs every electron');
+  const space = gfn2OrbitalSpace(ladder);
+  if (!space) return none('GFN2-xTB leaves a level at the frontier partly filled, so which orbitals are occupied is not settled');
+  const result = lewisOrbitals(molecule, space);
+  if ('refusal' in result) return none(result.refusal);
+  const { orbitals, couplings, donation, lewisShare, rydbergs } = result.lewis;
+  return { orbitals, couplings, donation, lewisShare, rydbergs, refusal: null };
 }
 
 /** An orbital's field is sampled around the atoms holding more than this
@@ -317,7 +345,7 @@ function drawSelectedGfn2Orbitals(ctx: SceneContext, localized: LocalizedList | 
       const orbital = localized.orbitals?.[index];
       if (!orbital) return;
       picks.push({
-        orbital: `localized:${localized.spin ?? 'alpha'}:${index}`,
+        orbital: `${localized.method}:${localized.spin ?? 'alpha'}:${index}`,
         coefficients: orbital.coefficients,
         atoms: atomsHolding(orbital.populations),
         phase: MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length],
@@ -608,7 +636,7 @@ function redrawScene(ctx: SceneContext) {
       const orbital = localized.orbitals![index];
       if (!orbital) return;
       picks.push({
-        key: `localized:${index}`,
+        key: `${localized.method}:${index}`,
         coefficients: orbital.coefficients,
         phase: MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length],
       });

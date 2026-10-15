@@ -65,7 +65,8 @@ export type LocalizedCharacter =
   | 'delocalized'    // avo_ibo: Deloc
   | 'sigma antibond' | 'pi antibond' | 'delta antibond'
   | 'antibond'       // avo_ibo: anti*  — an empty two-centre orbital past the gate
-  | 'virtual';       // avo_ibo: (virt) / Virt
+  | 'virtual'        // avo_ibo: (virt) / Virt
+  | 'lone vacancy';  // NBO: LP*        — an empty valence orbital on one atom (BF₃'s boron p); Lewis-structure orbitals only
 
 export interface LocalizedOrbital {
   /** Coefficients per AO, in the calculation frame and the solver's basis
@@ -84,6 +85,11 @@ export interface LocalizedOrbital {
    *  tail, and so is population that sits only in a same-n polarization d,
    *  so a lone pair names one atom. */
   atoms: number[];
+  /** Electrons in it, NBO-style — the Lewis-structure orbitals only
+   *  (lewis-orbitals.ts): a lone pair that donates holds less than 2. A
+   *  Pipek–Mezey orbital spans the occupied or the empty space exactly, so
+   *  it has none to report. */
+  occupancy?: number;
 }
 
 /**
