@@ -375,8 +375,9 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const selection = ctx.display.localizedSelection;
     const occupiedCount = orbitals.filter((o) => o.occupied).length;
     // The orbitals the latest pick mixes with: ⟨φᵢ|F|φⱼ⟩ above the cut, each
-    // row ticked in proportion to the strongest — an invitation to draw it
-    // beside the pick. The latest pick, as the composition line reads it.
+    // row ticked in proportion to the strongest and carrying the number — an
+    // invitation to draw it beside the pick. The latest pick, as the
+    // composition line reads it.
     const pick = selection.length > 0 ? selection[selection.length - 1] : null;
     const couplingTo = pick !== null && shown.couplings ? shown.couplings[pick] : null;
     const coupled = (index: number) => couplingTo !== null && index !== pick
@@ -401,11 +402,12 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
         ? `<span class="orb-dot" style="background:#${MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length][0].toString(16).padStart(6, '0')}"></span>`
         : '<span class="orb-dot"></span>';
       // one Type column, as avo_ibo's table has — the class IS the type's tail —
-      // then the energy, in the column the Delocalized ladder prints an MO's
-      // in; the section header names the unit
+      // then the coupling to the pick, then the energy, in the column the
+      // Delocalized ladder prints an MO's in; the section header names the unit
       return `<button class="${classes}" data-index="${index}"${cue}>`
         + dot
         + `<span class="orb-type">${localizedType(molecule, orbital)}</span>`
+        + (mixes ? `<span class="orb-coupling">↔ ${formatEnergy(coupling)}</span>` : '')
         + `<span class="orb-energy">${formatEnergy(orbital.energy)}</span>`
         + '</button>';
     };

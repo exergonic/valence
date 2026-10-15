@@ -2125,6 +2125,16 @@ button.orb-rail:focus-visible { outline: none; }
 
 .orb-item.selected .orb-energy { color: var(--accent-text); }
 
+/* The coupling to the latest pick (⟨φᵢ|F|φⱼ⟩), beside the energy; it rides
+   with the tick at the row's right edge, in the same accent */
+.orb-coupling {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
 /* HOMO / LUMO, right-aligned on the row */
 .orb-tag {
   flex: 0 0 auto;
@@ -2150,7 +2160,7 @@ button.orb-rail:focus-visible { outline: none; }
 
 /* The orbitals the latest pick mixes with (⟨φᵢ|F|φⱼ⟩, mo-diagram.ts): a tick
    inside the row's RIGHT edge, as strong as the coupling against the
-   strongest; the number is the row's tooltip. On the left it read as a second
+   strongest; the number is .orb-coupling. On the left it read as a second
    rail beside the degenerate-set rail in the gutter. */
 .orb-item { position: relative; }
 
