@@ -86,10 +86,12 @@ export interface DisplaySettings {
    *  self-consistent, so its ordering is the trustworthy one) or extended
    *  Hückel (the textbook picture). */
   moMethod: 'eh' | 'gfn2';
-  /** How the Localized view localizes: Pipek–Mezey (the default — the
-   *  orbitals find their own bonds and lone pairs, tails and all), or the
-   *  Lewis structure as drawn, made into orbitals the NBO way, with the
-   *  donor–acceptor energies E(2) between them (lewis-orbitals.ts). */
+  /** How the Localized view localizes: the Lewis structure as drawn, made
+   *  into orbitals the NBO way, with the donor–acceptor energies E(2) between
+   *  them (lewis-orbitals.ts) — the default, decided with the user 2026-10-19
+   *  — or Pipek–Mezey (the orbitals find their own bonds and lone pairs,
+   *  tails and all), which also stands in when the drawing has no Lewis
+   *  orbitals. */
   localizeMethod: 'pipek-mezey' | 'lewis';
   /** For an open shell's GFN2 orbitals — the ladder or the localized list —
    *  which spin channel is listed. */
@@ -183,7 +185,8 @@ export interface LocalizedList {
   lewisShare: number | null;
   /** How many d Rydberg orbitals the Lewis set holds and does not list. */
   rydbergs: number;
-  /** Why the drawn structure could not be made into Lewis orbitals, or null. */
+  /** Why the drawn structure could not be made into Lewis orbitals, or null.
+   *  On a Pipek–Mezey list: it is standing in for the Lewis one, and why. */
   refusal: string | null;
   /** What it was localized from — a GFN2 ladder or the EH result. */
   from: unknown;
@@ -414,7 +417,7 @@ export function initScene(container: HTMLElement): SceneContext {
       orbitalView: 'delocalized',
       moMethod: 'gfn2',
       moSpin: 'alpha',
-      localizeMethod: 'pipek-mezey',
+      localizeMethod: 'lewis',
       vibrationIndex: null,
       localizedSelection: [],
       showOrbitals: true,

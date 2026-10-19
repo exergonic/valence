@@ -352,7 +352,9 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const gfn2 = ctx.display.moMethod === 'gfn2';
     methodRow?.classList.toggle('hidden', view !== 'delocalized');
     localizeRow?.classList.toggle('hidden', view !== 'localized');
-    for (const b of localizeButtons) b.classList.toggle('active', b.dataset.localize === ctx.display.localizeMethod);
+    // the method ON SCREEN: Pipek–Mezey's list stands in when the drawing has no Lewis orbitals
+    const shownMethod = ctx.localized?.method ?? ctx.display.localizeMethod;
+    for (const b of localizeButtons) b.classList.toggle('active', b.dataset.localize === shownMethod);
     for (const b of methodButtons) b.classList.toggle('active', b.dataset.moMethod === ctx.display.moMethod);
     // the spin row serves whichever list reads GFN2's orbitals: the ladder
     // with GFN2 picked, the localized list whenever it is GFN2's
@@ -406,10 +408,6 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const molecule = ctx.currentMolecule;
     if (shown === 'pending') {
       note.textContent = 'Computing the GFN2-xTB orbitals to localize…';
-      return;
-    }
-    if (shown?.refusal) {
-      writeNote(note, { text: `No Lewis-structure orbitals: ${shown.refusal}. Pipek–Mezey still localizes it.`, link: NBO_LINK });
       return;
     }
     const orbitals = shown?.orbitals;
@@ -552,7 +550,9 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     } else {
       readout.textContent = `${orbitals.length} localized orbitals · click one to draw it, another to compare`;
     }
-    writeNote(note, shown.method === 'lewis' ? lewisNote(shown, molecule) : pipekMezeyNote(shown));
+    writeNote(note, shown.refusal
+      ? { text: `No Lewis-structure orbitals: ${shown.refusal}. These are Pipek–Mezey’s localized orbitals instead.`, link: NBO_LINK }
+      : shown.method === 'lewis' ? lewisNote(shown, molecule) : pipekMezeyNote(shown));
   }
 
   // The ladder the list was last framed on. Every click redraws the list, and

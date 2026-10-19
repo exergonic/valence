@@ -243,30 +243,40 @@ export function localizedOnScreen(ctx: SceneContext): LocalizedList | 'pending' 
   // an open shell's two spin channels are two lists, and keeping one meant
   // that going back from β to α localized α all over again (0.9 s for the
   // triplet NiCl₄²⁻).
-  const method = ctx.display.localizeMethod;
-  const kept = ctx.localizedLists.find((list) => list.from === from && list.method === method);
-  if (kept) return (ctx.localized = kept);
-  const base = {
-    source: ladder ? 'gfn2' as const : 'eh' as const, method, spin: ladder?.spin ?? null, basis: from.basis, from,
-  };
-  if (method === 'lewis') {
-    ctx.localized = { ...base, ...lewisList(molecule, ladder) };
-  } else {
-    const space = ladder ? gfn2OrbitalSpace(ladder) : extendedHuckelSpace(molecule, ctx.ehResult!);
-    const sets = space && localizeOrbitals(space, molecule.atoms.length);
-    const orbitals = space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null;
-    ctx.localized = {
-      ...base,
-      orbitals,
-      couplings: space && orbitals ? fockCouplings(space.hamiltonian, orbitals) : null,
-      donation: null,
-      lewisShare: null,
-      rydbergs: 0,
-      refusal: null,
+  const build = (method: LocalizedList['method']): LocalizedList => {
+    const kept = ctx.localizedLists.find((list) => list.from === from && list.method === method);
+    if (kept) return kept;
+    const base = {
+      source: ladder ? 'gfn2' as const : 'eh' as const, method, spin: ladder?.spin ?? null, basis: from.basis, from,
     };
+    let list: LocalizedList;
+    if (method === 'lewis') {
+      list = { ...base, ...lewisList(molecule, ladder) };
+    } else {
+      const space = ladder ? gfn2OrbitalSpace(ladder) : extendedHuckelSpace(molecule, ctx.ehResult!);
+      const sets = space && localizeOrbitals(space, molecule.atoms.length);
+      const orbitals = space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null;
+      list = {
+        ...base,
+        orbitals,
+        couplings: space && orbitals ? fockCouplings(space.hamiltonian, orbitals) : null,
+        donation: null,
+        lewisShare: null,
+        rydbergs: 0,
+        refusal: null,
+      };
+    }
+    ctx.localizedLists.push(list);
+    return list;
+  };
+  const chosen = build(ctx.display.localizeMethod);
+  // The Lewis structure is the default, and a drawing it cannot describe
+  // (diborane's bridges, a metal, an open shell) still gets localized
+  // orbitals: Pipek–Mezey's, carrying the reason the Lewis ones are not there.
+  if (chosen.method === 'lewis' && chosen.refusal) {
+    return (ctx.localized = { ...build('pipek-mezey'), refusal: chosen.refusal });
   }
-  ctx.localizedLists.push(ctx.localized);
-  return ctx.localized;
+  return (ctx.localized = chosen);
 }
 
 /** The drawn Lewis structure's orbitals and their E(2), or the reason there
