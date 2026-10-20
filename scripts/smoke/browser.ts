@@ -44,7 +44,23 @@ export async function launchBrowser(width = 1600, height = 1000, scale = 1) {
   const proc = spawn(executable, [
     '--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
     `--window-size=${width},${height}`, '--no-first-run', '--no-default-browser-check',
-    '--ignore-gpu-blocklist', 'about:blank',
+    '--ignore-gpu-blocklist',
+    // Windows' native-occlusion tracking can judge the headless window covered
+    // (a locked screen covers everything; so can the desktop's own windows),
+    // and then the page goes visibilityState "hidden", stops drawing frames,
+    // and every pointer event waits seconds for a frame that never comes —
+    // measured 2026-10-20: 145 fps, then "rAF stalled" 1.5 s after an example
+    // loaded, and whole runs went from ~110 s to ~20 min. Keep the page drawing.
+    '--disable-features=CalculateNativeWinOcclusion',
+    '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding',
+    '--disable-background-timer-throttling',
+    // Edge signs a fresh profile in to the Windows account on its own and
+    // syncs it: within ~10 s the user's extensions arrive, one opens its help
+    // page in a new foreground tab (Dark Reader, measured 2026-10-20), and the
+    // tab under test goes hidden and stops drawing — the real cause of runs
+    // that took 20 minutes instead of 2. No sync, no extensions.
+    '--disable-sync', '--disable-extensions', '--disable-component-extensions-with-background-pages',
+    'about:blank',
   ], { stdio: 'ignore' });
 
   let target: { webSocketDebuggerUrl: string } | undefined;
