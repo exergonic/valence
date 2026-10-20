@@ -49,7 +49,7 @@ function pipekMezeyNote(list: LocalizedList) {
       + `${list.source === 'gfn2' ? '⟨φ|F|φ⟩ of the Fock operator' : '⟨φ|H|φ⟩ of the Hamiltonian'}: the average of the `
       + 'delocalized energies it is built from, weighted by how much of each it holds. The occupied energies add up to the '
       + 'delocalized ones, but an orbital’s energy is not an ionization energy — Koopmans’ theorem speaks of the '
-      + 'delocalized orbitals. With an orbital drawn, a tick marks the ones it mixes with — the brighter, the stronger; '
+      + 'delocalized orbitals. With an orbital drawn, a tick marks the ones the first one drawn mixes with — the brighter, the stronger; '
       + 'hover one for the coupling ⟨φᵢ|F|φⱼ⟩, or draw both. These couplings are what turn the localized orbitals back '
       + 'into the delocalized ones. Filled orbitals mix only with filled '
       + 'ones and empty with empty — a lone pair’s donation into a σ* is already in the lone pair’s own tail. '
@@ -75,9 +75,11 @@ function lewisNote(list: LocalizedList, molecule: Molecule) {
     text: 'The Lewis structure you drew, made into orbitals the NBO way from the GFN2-xTB density (semiempirical): '
       + 'each lone pair from its own atom, each bond from its two atoms, each antibond its bond’s out-of-phase partner. '
       + `Without tails they hold ${share}% of the electrons; the rest is delocalization, which E(2) accounts for. `
-      + 'With a filled orbital drawn, the empty ones it donates into show E(2), the second-order stabilization '
-      + 'q·F²/Δε, and an underline as long as its share of the strongest; draw an empty one to see its donors. A tick '
-      + 'marks mixing within a section, as in Pipek–Mezey. E(2) is a perturbative estimate that overstates strong '
+      + 'The first orbital you draw is the anchor (outlined): the empty orbitals it donates into show E(2), the '
+      + 'second-order stabilization q·F²/Δε, and an underline as long as its share of the strongest — an empty anchor '
+      + 'shows its donors. The numbers stay with the anchor while you draw its partners beside it; take it away and the '
+      + 'next orbital drawn becomes the anchor. A tick marks mixing within a section, as in Pipek–Mezey. E(2) is a '
+      + 'perturbative estimate that overstates strong '
       + 'resonance, and GFN2’s empty orbitals sit low, so compare the numbers with each other rather than with NBO’s. '
       + 'Draw another resonance structure to see its Lewis orbitals.'
       + (list.rydbergs > 0
@@ -138,6 +140,23 @@ const COUPLING_SHOWN_EV = 0.1;
 /** The smallest E(2) the Lewis-structure list marks, eV: NBO's own print
  *  threshold, 0.5 kcal/mol. */
 const E2_SHOWN_EV = 0.5 / KCAL_PER_EV;
+
+/** What the anchor gives (a filled orbital) or takes (an empty one), for the
+ *  readout: its partners above the threshold, strongest first, the first four
+ *  named, and their total. Empty for a list without donations (Pipek–Mezey). */
+function donationSummary(shown: LocalizedList, anchor: number, name: (index: number) => string): string {
+  if (!shown.donation) return '';
+  const verb = shown.orbitals![anchor].occupied ? 'donates into' : 'receives from';
+  const partners = shown.donation[anchor]
+    .map((e2, index) => ({ index, e2 }))
+    .filter((partner) => partner.e2 >= E2_SHOWN_EV)
+    .sort((a, b) => b.e2 - a.e2);
+  if (partners.length === 0) return ` · ${verb} nothing above 0.5 ${ENERGY_UNIT}`;
+  const total = partners.reduce((sum, partner) => sum + partner.e2, 0);
+  const named = partners.slice(0, 4).map((partner) => `${name(partner.index)} ${formatEnergy(partner.e2)}`).join(', ');
+  return ` · ${verb} ${named}${partners.length > 4 ? `, +${partners.length - 4} more` : ''}`
+    + ` (total ${formatEnergy(total)} ${ENERGY_UNIT})`;
+}
 
 /** What two drawn orbitals have between them, for the readout. Two of one
  *  section mix by ⟨φᵢ|F|φⱼ⟩. A filled and an empty one: in the Lewis list,
@@ -429,15 +448,21 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
 
     const selection = ctx.display.localizedSelection;
     const occupiedCount = orbitals.filter((o) => o.occupied).length;
-    // Two cues for the latest pick (the one the composition line reads), each
-    // an invitation to draw the row beside it. A TICK marks the orbitals of
-    // its own section it mixes with, ⟨φᵢ|F|φⱼ⟩ above the cut, as bright as the
-    // coupling against the strongest; its number is the tooltip's. In the
+    // Two cues for the ANCHOR — the first orbital drawn — each an invitation
+    // to draw the row beside it. A TICK marks the orbitals of its own section
+    // it mixes with, ⟨φᵢ|F|φⱼ⟩ above the cut, as bright as the coupling
+    // against the strongest; its number is the tooltip's. In the
     // Lewis-structure list, the orbitals of the OTHER section it donates into
     // (or receives from) carry their E(2) as a number and an underline as
     // long as its share of the strongest — the donation is the headline, the
     // mixing the background.
-    const pick = selection.length > 0 ? selection[selection.length - 1] : null;
+    // The cues stay with the anchor while partners are drawn beside it. They
+    // followed the latest pick at first, and drawing C2–C3 π* to see where
+    // C1–C6 π's electrons go swapped the numbers for the π*'s own donors: a
+    // chase from orbital to orbital (reported 2026-10-19). Taking the anchor
+    // away hands it to the next orbital drawn, so following a thread is still
+    // one deliberate click.
+    const pick = selection.length > 0 ? selection[0] : null;
     const couplingTo = pick !== null && shown.couplings ? shown.couplings[pick] : null;
     const coupled = (index: number) => couplingTo !== null && index !== pick
       && orbitals[index].occupied === orbitals[pick!].occupied
@@ -455,7 +480,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       const slot = selection.indexOf(index);
       const mixes = coupled(index);
       const gives = donates(index);
-      const classes = ['orb-item', slot >= 0 ? 'selected' : '', mixes ? 'coupled' : '', gives ? 'donates' : '']
+      const anchor = slot === 0;
+      const classes = ['orb-item', slot >= 0 ? 'selected' : '', anchor ? 'anchor' : '', mixes ? 'coupled' : '', gives ? 'donates' : '']
         .filter(Boolean).join(' ');
       const coupling = mixes ? Math.abs(couplingTo![index]) : 0;
       const e2 = gives ? donationTo![index] : 0;
@@ -469,7 +495,10 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
           ? ` style="--donation:${(e2 / strongestDonation).toFixed(2)}"`
             + ` title="${localizedType(molecule, orbitals[donor])} → ${localizedType(molecule, orbitals[acceptor])}: `
             + `E(2) ${formatEnergy(e2)} ${ENERGY_UNIT} — click to draw it too"`
-          : '';
+          : anchor
+            ? ' title="The anchor: the list’s numbers, underlines and ticks are its interactions. Click it to take it '
+              + 'away, and the next orbital drawn takes over."'
+            : '';
       // the dot carries the phase colour the orbital is drawn in, so the list
       // and the picture say the same thing when two orbitals are up at once
       const dot = slot >= 0
@@ -529,17 +558,27 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     });
 
     if (selection.length > 0) {
-      const described = selection
-        .map((index) => orbitals[index])
-        .filter((orbital): orbital is LocalizedOrbital => !!orbital);
-      readout.textContent = described
-        .map((orbital) => `${localizedType(molecule, orbital)} · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}`
+      const name = (index: number) => localizedType(molecule, orbitals[index]);
+      const describe = (index: number) => {
+        const orbital = orbitals[index];
+        return `${name(index)} · ${formatEnergy(orbital.energy)} ${ENERGY_UNIT}`
           + (orbital.occupancy === undefined ? '' : ` · ${Math.max(0, orbital.occupancy).toFixed(2)} e⁻`)
-          + (orbital.occupied ? '' : ' (empty)'))
-        .join('  +  ')
-        + (selection.length === 2 ? pairReadout(shown, selection[0], selection[1]) : '')
-        + (selection.length > 2 ? ' — click any again to drop it'
-          : selection.length > 1 ? ' — click either again to drop it' : ' — click it again to hide');
+          + (orbital.occupied ? '' : ' (empty)');
+      };
+      const [first, second] = selection;
+      if (selection.length === 1) {
+        // the anchor alone: what it gives or takes, strongest first
+        readout.textContent = describe(first) + donationSummary(shown, first, name) + ' — click it again to hide';
+      } else if (selection.length === 2 && shown.donation && orbitals[first].occupied !== orbitals[second].occupied) {
+        // a donor and an acceptor: the donation, as an arrow, whichever was drawn first
+        const [donor, acceptor] = orbitals[first].occupied ? [first, second] : [second, first];
+        readout.textContent = `${name(donor)} → ${name(acceptor)} · E(2) ${formatEnergy(shown.donation[donor][acceptor])} `
+          + `${ENERGY_UNIT} — click either again to drop it`;
+      } else {
+        readout.textContent = selection.map(describe).join('  +  ')
+          + (selection.length === 2 ? pairReadout(shown, first, second) : '')
+          + (selection.length > 2 ? ' — click any again to drop it' : ' — click either again to drop it');
+      }
       // the composition line describes the LAST orbital picked: two orbitals
       // have no joint composition, and the latest pick is the one being read
       const latest = orbitals[selection[selection.length - 1]];

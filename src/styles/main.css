@@ -2159,6 +2159,10 @@ button.orb-rail:focus-visible { outline: none; }
 
 .orb-item.selected .orb-type { color: var(--accent-text); }
 
+/* The anchor: the first orbital drawn, whose interactions the list's numbers,
+   underlines and ticks describe while partners are drawn beside it. */
+.orb-item.anchor { border-color: var(--accent); }
+
 /* The orbitals the latest pick mixes with (⟨φᵢ|F|φⱼ⟩, mo-diagram.ts): a tick
    inside the row's RIGHT edge, as strong as the coupling against the
    strongest; the number is the row's tooltip. On the left it read as a second
