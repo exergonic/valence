@@ -45,7 +45,9 @@ function pipekMezeyNote(list: LocalizedList) {
     : 'extended-Hückel orbitals (semiempirical) — GFN2-xTB had none to give for this structure';
   return {
     text: `Pipek–Mezey localization of the ${source}: the delocalized MOs `
-      + 'rearranged into bonds and lone pairs, occupied space and valence-virtual space alike, listed as an energy '
+      + 'rearranged into bonds and lone pairs, occupied space and valence-virtual space alike — the empty orbitals are '
+      + 'the σ*, π* and empty p a Lewis structure has room for, without the polarization d a heavier atom’s basis adds '
+      + '(intrinsic atomic orbitals, as avo_ibo builds them) — listed as an energy '
       + 'ladder — lowest at the bottom. A localized orbital is not an eigenstate, so its energy is the expectation '
       + `${list.source === 'gfn2' ? '⟨φ|F|φ⟩ of the Fock operator' : '⟨φ|H|φ⟩ of the Hamiltonian'}: the average of the `
       + 'delocalized energies it is built from, weighted by how much of each it holds. The occupied energies add up to the '
@@ -1038,6 +1040,24 @@ function localizedType(molecule: Molecule, orbital: LocalizedOrbital): string {
       return ea === eb ? a - b : ea.localeCompare(eb);
     });
     return `${joined(sorted)} ${kind}`;
+  }
+  // A σ-type orbital names every centre it has: the valence virtuals of a
+  // hypervalent molecule are multi-centre — PCl₅'s axial σ* is Cl–P–Cl, SF₆'s
+  // a₁g σ* is on all seven atoms — and a two-atom label hid the rest. The
+  // strongest atom sits in the middle; past three, the others are counted.
+  // A π keeps its bond pair: a ring π's tails are the conjugation the reader
+  // already sees, and the Kekulé pair is the name they know it by.
+  const sigmaType = orbital.character === 'sigma' || orbital.character === 'sigma antibond' || orbital.character === 'antibond';
+  if (sigmaType && orbital.atoms.length === 3) {
+    const [centre, ...ends] = orbital.atoms;
+    const [left, right] = ends.sort((a, b) => a - b);
+    return `${name(left)}-${name(centre)}-${name(right)} ${kind}`;
+  }
+  if (sigmaType && orbital.atoms.length > 3) {
+    const [centre, ...others] = orbital.atoms;
+    const elements = new Set(others.map((atom) => molecule.atoms[atom].element));
+    const counted = elements.size === 1 ? `${others.length} ${[...elements][0]}` : `${others.length} atoms`;
+    return `${name(centre)} + ${counted} ${kind}`;
   }
   // a two-centre bond (or antibond), its atoms in index order
   const pair = orbital.atoms.slice(0, 2).sort((a, b) => a - b);

@@ -15,6 +15,8 @@ import { localizeOrbitals } from '../src/chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals, type LocalizedOrbital } from '../src/chem/localized-orbitals/order-localized';
 import { fockCouplings } from '../src/chem/localized-orbitals/fock-couplings';
 import { jacobiSymmetric } from '../src/utils/eigen';
+import { valenceVirtuals } from '../src/chem/localized-orbitals/valence-virtuals';
+import { localGeometry } from './helpers/local-geometry';
 
 beforeAll(() => {
   const globals = globalThis as unknown as Record<string, unknown>;
@@ -36,7 +38,7 @@ async function ladders(molecule: Molecule) {
 
 function localized(molecule: Molecule, ladder: Gfn2Ladder): LocalizedOrbital[] | null {
   const space = gfn2OrbitalSpace(ladder);
-  const sets = space && localizeOrbitals(space, molecule.atoms.length);
+  const sets = space && localizeOrbitals(space, molecule.atoms.map((atom) => atom.element));
   return space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null;
 }
 
@@ -137,6 +139,51 @@ describe('the Lewis picture from GFN2 orbitals', () => {
     const nickelBonds = list.filter((o) => o.atoms.length === 2 && elementsOf(molecule, o) === 'CNi');
     expect(nickelBonds).toHaveLength(4);
     for (const bond of nickelBonds) expect(bond.character).toBe('sigma');
+  });
+});
+
+describe('the empty orbitals are the valence virtuals (IAO), not the polarization d', () => {
+  /** The space, the valence virtuals and the localized list of a molecule. */
+  async function virtualsOf(molecule: Molecule) {
+    const { alpha } = await ladders(molecule);
+    const space = gfn2OrbitalSpace(alpha)!;
+    const elements = molecule.atoms.map((atom) => atom.element);
+    return { space, virtuals: valenceVirtuals(space, elements), empty: localized(molecule, alpha)!.filter((o) => !o.occupied) };
+  }
+  const sOverlap = (S: number[][], u: number[], v: number[]) =>
+    u.reduce((sum, x, i) => sum + x * S[i].reduce((inner, s, j) => inner + s * v[j], 0), 0);
+
+  it('water, a minimal basis: the canonical virtuals as they were', async () => {
+    const { space, virtuals } = await virtualsOf(example('Water'));
+    expect(virtuals).toEqual(space.coefficients.slice(space.occupied));
+  });
+
+  it('PCl₅: four of 34 canonical virtuals — three equatorial σ* and the axial Cl–P–Cl σ* — orthonormal and empty', async () => {
+    const molecule = example('Phosphorus pentachloride');
+    const { space, virtuals, empty } = await virtualsOf(molecule);
+    expect(space.coefficients.length - space.occupied).toBe(34);
+    expect(virtuals.length).toBe(4); // P and 5 Cl: 24 s/p functions, less 20 occupied
+    virtuals.forEach((u, i) => {
+      virtuals.forEach((v, j) => expect(sOverlap(space.overlap, u, v)).toBeCloseTo(i === j ? 1 : 0, 6));
+      space.coefficients.slice(0, space.occupied).forEach((c) => expect(sOverlap(space.overlap, u, c)).toBeCloseTo(0, 9));
+    });
+    expect(empty.every((o) => o.character === 'sigma antibond')).toBe(true);
+    expect(empty.filter((o) => o.atoms.length === 3).map((o) => elementsOf(molecule, o))).toEqual(['ClClP']);
+  });
+
+  it('SF₆: four — the a₁g and the t₁u σ*', async () => {
+    const { empty } = await virtualsOf(example('Sulfur hexafluoride'));
+    expect(empty.length).toBe(4);
+  });
+
+  it('SO₂: the three-centre π* and two S–O σ*', async () => {
+    const molecule = (await localGeometry({
+      atoms: [{ element: 'O', x: 0, y: 0, z: 0 }, { element: 'S', x: 1.3, y: 0.75, z: 0 }, { element: 'O', x: 2.6, y: 0, z: 0 }],
+      bonds: [{ atom1Index: 0, atom2Index: 1, order: 2 }, { atom1Index: 1, atom2Index: 2, order: 2 }],
+    }))!.molecule;
+    const { empty } = await virtualsOf(molecule);
+    expect(empty.map((o) => o.character).sort()).toEqual(['pi antibond', 'sigma antibond', 'sigma antibond']);
+    expect(empty.find((o) => o.character === 'pi antibond')!.atoms.length).toBe(3);
   });
 });
 

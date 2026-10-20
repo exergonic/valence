@@ -15,7 +15,7 @@ import { solveGeneralized } from '../src/utils/eigen';
 /** Extended Hückel's localized blocks, or null when the shell is open. */
 function localizeOrbitals(molecule: Molecule, result: ExtendedHuckelResult) {
   const space = extendedHuckelSpace(molecule, result);
-  return space && localizeSpace(space, molecule.atoms.length);
+  return space && localizeSpace(space, molecule.atoms.map((atom) => atom.element));
 }
 import { extendedHuckelSpace, localizeOrbitals as localizeSpace, pipekMezeyAngle } from '../src/chem/localized-orbitals/localize-pm';
 import { orderLocalizedOrbitals, type LocalizedOrbital } from '../src/chem/localized-orbitals/order-localized';

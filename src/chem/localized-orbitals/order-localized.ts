@@ -384,6 +384,9 @@ function describe(
   // Polarization d does not make a second centre: SI₂'s sulfur 3d tail is
   // 0.10 of an iodine lone pair, and listing it draws "lone pair I–S".
   const ordered = shares.filter((share) => centreShare(share) > ATOM_CARRIER).map((share) => share.atom);
+  // all of it polarization d (a canonical virtual of a basis with d, kept when
+  // the valence-virtual projection cannot be made): still name its atom
+  if (ordered.length === 0 && shares.length > 0) ordered.push(shares[0].atom);
   return {
     coefficients,
     energy: quadratic(result.hamiltonian, coefficients),

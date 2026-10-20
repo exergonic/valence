@@ -254,7 +254,7 @@ export function localizedOnScreen(ctx: SceneContext): LocalizedList | 'pending' 
       list = { ...base, ...lewisList(molecule, ladder) };
     } else {
       const space = ladder ? gfn2OrbitalSpace(ladder) : extendedHuckelSpace(molecule, ctx.ehResult!);
-      const sets = space && localizeOrbitals(space, molecule.atoms.length);
+      const sets = space && localizeOrbitals(space, molecule.atoms.map((atom) => atom.element));
       const orbitals = space && sets ? orderLocalizedOrbitals(molecule, space, sets) : null;
       list = {
         ...base,

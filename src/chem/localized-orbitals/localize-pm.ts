@@ -45,10 +45,9 @@
  * symmetry-equivalent, same class, same energy. Measured, with the numbers,
  * in NOTES.md.
  *
- * The occupied block only: valence-virtual (σ*, π*) localization needs the
- * virtual space projected onto the minimal basis (Derricotte & Evangelista,
- * J. Chem. Theory Comput. 13, 2561 (2017)), which this cut skips — the
- * teaching need is the occupied picture.
+ * The empty block is the valence-virtual space (valence-virtuals.ts): the
+ * σ*, π* and empty p a Lewis structure has room for, without the polarization
+ * d a heavier atom's basis adds.
  *
  * Refusals come first, per the house ladder: an orbital set whose filling is
  * not settled — extended Hückel's open shell (an odd electron count, or a
@@ -62,6 +61,7 @@ import type { ExtendedHuckelResult } from '../extended-huckel/solve';
 import { closedShellOccupations } from '../extended-huckel/solve';
 import type { BasisFunction } from '../extended-huckel/assign-basis';
 import { atomicPopulations, crossPopulations } from './mulliken-populations';
+import { valenceVirtuals } from './valence-virtuals';
 
 /**
  * One set of orbitals to localize: the canonical MOs of one calculation (one
@@ -269,18 +269,12 @@ export interface LocalizedSets {
  * the same MO-major order and calculation frame as `space.coefficients`, so
  * the existing MO renderers draw them unchanged.
  *
- * **Why the virtual block is localizable as it stands.** Derricotte &
- * Evangelista build valence-virtual orbitals by projecting the (huge) virtual
- * space of a full basis onto the minimal one by SVD and keeping the
- * n_min − n_occ directions the density can reach. Extended Hückel's basis IS
- * minimal, and GFN2's nearly so (one s on H, as here; a polarization d on the
- * heavier main group), so there is nothing to screen: the virtual space is already
- * n_min − n_occ dimensional and already spans that complement, and the SVD is
- * a square orthogonal matrix whose singular values are all 1 — degenerate, so
- * it selects nothing. What is left is the localization itself, on the
- * canonical virtual block. That is what this does, and it is what the app
- * labels (not "VVO/IAO", which would imply a screening step that does not
- * exist here).
+ * **The virtual block is the valence virtuals** (valence-virtuals.ts): the
+ * IAO span less the occupied space, n_minimal − n_occupied orbitals. For a
+ * minimal basis that is the canonical virtual block as it stands. A
+ * polarization d is not: it was taken as "nearly minimal" here once, and
+ * PCl₅'s 34 canonical virtuals localized into 25 rows of d with no centre to
+ * name (measured 2026-10-19) — now its 4 valence virtuals.
  *
  * The virtuals are the rough part of an EH calculation and the labels say so,
  * but the *symmetry* of a localized virtual is reliable: ethene's π* comes
@@ -289,13 +283,13 @@ export interface LocalizedSets {
  *
  * Null when there are no occupied levels to localize.
  */
-export function localizeOrbitals(space: OrbitalSpace, atomCount: number): LocalizedSets | null {
+export function localizeOrbitals(space: OrbitalSpace, elements: string[]): LocalizedSets | null {
   const { occupied, overlap, hamiltonian, basis, coefficients } = space;
   if (occupied === 0) return null;
-  const block = (from: number, to: number) => Array.from({ length: to - from }, (_, k) => coefficients[from + k].slice());
+  const atomCount = elements.length;
 
-  const occupiedRows = block(0, occupied);
-  const virtualRows = block(occupied, coefficients.length);
+  const occupiedRows = coefficients.slice(0, occupied).map((row) => row.slice());
+  const virtualRows = valenceVirtuals(space, elements);
   localizeBlock(occupiedRows, overlap, hamiltonian, basis, atomCount);
   localizeBlock(virtualRows, overlap, hamiltonian, basis, atomCount);
   return { occupied: occupiedRows, virtual: virtualRows };
