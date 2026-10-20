@@ -299,6 +299,47 @@ async function sketcherMoveAndClean(b: Browser) {
   check('Undo after a Clean puts the dragged drawing back', undone === moved, undone === moved ? 'restored' : 'not restored');
 }
 
+/** The functional groups (asked for 2026-10-20): pick COOH from "Groups…",
+ *  click methanol's O, and the group is bonded to it. */
+async function sketcherFunctionalGroup(b: Browser) {
+  await b.open(url);
+  await b.run(`window.jsmeApplet.readGenericMolecularInput('CO');`);
+  await sleep(400);
+  const centre = (selector: string) => b.run(`const r = document.querySelector('${selector}').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+  const press = async (selector: string) => {
+    const p = await centre(selector);
+    await b.moveTo(p.x, p.y);
+    await b.click(p.x, p.y);
+    await sleep(300);
+  };
+  // the first press on JSME's drawing after a load is ignored: spend it on empty space
+  const corner = await b.run(`
+    const r = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150).getBoundingClientRect();
+    return { x: r.x + 20, y: r.y + r.height - 20 };`);
+  await b.moveTo(corner.x, corner.y);
+  await b.click(corner.x, corner.y);
+  await press('#sketch-groups');
+  await press('#group-palette .fg-cell[data-code="235"]');
+  // The O is the last glyph of JSME's "HO" label. JSME redraws a molecule it
+  // has read only on a later pointer event, so the label can still sit where
+  // the last drawing put it (measured 16 px off): click, read the label again,
+  // and click again until the group is on — at most three tries.
+  let smiles = 'CO';
+  for (let tries = 0; tries < 3 && smiles === 'CO'; tries++) {
+    const oxygen = await b.run(`
+      const svg = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150);
+      const r = [...svg.querySelectorAll('text')].find((t) => /O/.test(t.textContent)).getBoundingClientRect();
+      return { x: r.x + r.width * 0.72, y: r.y + r.height / 2 };`);
+    await b.moveTo(oxygen.x, oxygen.y);
+    await sleep(300);
+    await b.click(oxygen.x, oxygen.y);
+    await sleep(300);
+    smiles = await b.run(`return window.jsmeApplet.smiles();`);
+  }
+  const pressed: string = await b.run(`return document.querySelector('#sketch-elements [aria-pressed="true"]')?.textContent ?? '';`);
+  check('a functional group from "Groups…" is bonded to the atom clicked', smiles === 'COC(=O)O' && pressed === 'COOH', `${smiles}, ${pressed} chosen`);
+}
+
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */
 async function orbitalListStaysPut(b: Browser) {
   await b.open(url);
@@ -391,7 +432,7 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, orbitalListStaysPut, lewisStructureDonation]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, orbitalListStaysPut, lewisStructureDonation]) {
     try {
       await part(b);
     } catch (error) {

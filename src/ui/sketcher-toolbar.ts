@@ -26,6 +26,7 @@
  * (NOTES.md); a JSME upgrade must re-check them.
  */
 import { setupPeriodicTable } from './periodic-table';
+import { setupGroupPalette, type FunctionalGroup } from './functional-groups';
 import { takesImplicitHydrogens } from '../chem/fill-hydrogens';
 
 /** setAction() codes for our tools. */
@@ -292,9 +293,11 @@ function setupDragFromToolbar(stage: HTMLElement, choose: (button: HTMLButtonEle
 
   document.addEventListener('mousedown', (event) => {
     if (event.button !== 0) return;
-    const button = (event.target as HTMLElement).closest<HTMLButtonElement>('#sketch-tools [data-tool], #sketch-elements [data-element]');
+    const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      '#sketch-tools [data-tool], #sketch-elements [data-element], #sketch-elements [data-group]',
+    );
     // the move tool acts by dragging an atom already drawn: dropped, it would do nothing
-    const draggable = !!button?.dataset.element
+    const draggable = !!button?.dataset.element || !!button?.dataset.group
       || ((button?.dataset.tool ?? '') in TOOL_ACTIONS && button?.dataset.tool !== 'move');
     pressed = button && draggable && !button.disabled ? { button, x: event.clientX, y: event.clientY } : null;
   });
@@ -351,7 +354,10 @@ export function setupSketcherToolbar(): void {
   const elementRow = document.getElementById('sketch-elements');
   const moreButton = document.getElementById('sketch-more') as HTMLButtonElement | null;
   // Live, not captured once: a pick from the periodic table adds a button.
-  const buttons = () => Array.from(document.querySelectorAll<HTMLButtonElement>('#sketch-tools [data-tool], #sketch-elements [data-element]'));
+  const buttons = () => Array.from(document.querySelectorAll<HTMLButtonElement>(
+    '#sketch-tools [data-tool], #sketch-elements [data-element], #sketch-elements [data-group]',
+  ));
+  const groupsButton = document.getElementById('sketch-groups') as HTMLButtonElement | null;
   let element: string | null = null;
   let xAtomBox: HTMLInputElement | null = null;
 
@@ -363,6 +369,14 @@ export function setupSketcherToolbar(): void {
     element = null;
     window.jsmeApplet?.setAction?.(TOOL_ACTIONS[tool]);
     if (button) markSelected(button);
+  };
+
+  // A functional group is one of JSME's substituent actions: a click on an
+  // atom bonds the group to it (functional-groups.ts)
+  const chooseGroup = (code: number, button: HTMLButtonElement) => {
+    element = null;
+    window.jsmeApplet?.setAction?.(code);
+    markSelected(button);
   };
 
   const chooseElement = (symbol: string, button: HTMLButtonElement) => {
@@ -380,6 +394,7 @@ export function setupSketcherToolbar(): void {
   const choose = (button: HTMLButtonElement) => {
     const tool = button.dataset.tool;
     if (button.dataset.element) chooseElement(button.dataset.element, button);
+    else if (button.dataset.group) chooseGroup(Number(button.dataset.group), button);
     else if (tool && tool in TOOL_ACTIONS) chooseTool(tool, button);
   };
 
@@ -406,6 +421,28 @@ export function setupSketcherToolbar(): void {
   };
   if (moreButton) setupPeriodicTable(moreButton, pickElement);
 
+  // A pick from the functional groups: a button for it at the end of the row,
+  // before "Groups…" (the three most recent kept), chosen at once, so the
+  // next click on an atom attaches it — or drag the button onto one.
+  const GROUPS_KEPT = 3;
+  const pickGroup = (group: FunctionalGroup) => {
+    if (!elementRow || !groupsButton) return;
+    let button = elementRow.querySelector<HTMLButtonElement>(`[data-group="${group.code}"]`);
+    if (!button) {
+      button = document.createElement('button');
+      button.className = 'sketch-element sketch-group';
+      button.dataset.group = String(group.code);
+      button.title = `${group.label} — ${group.name}: click or drag onto an atom to attach it`;
+      button.textContent = group.label;
+      button.setAttribute('aria-pressed', 'false');
+      elementRow.insertBefore(button, groupsButton);
+      const picked = elementRow.querySelectorAll('[data-group]');
+      if (picked.length > GROUPS_KEPT) picked[0].remove();
+    }
+    chooseGroup(group.code, button);
+  };
+  if (groupsButton) setupGroupPalette(groupsButton, pickGroup);
+
   // A clean replaces JSME's molecule, and JSME's own undo cannot step back
   // over it (measured: Ctrl+Z after a clean leaves the clean layout). So the
   // drawing from before is kept, and Undo puts it back — while the clean
@@ -417,7 +454,7 @@ export function setupSketcherToolbar(): void {
 
   for (const bar of [document.getElementById('sketch-tools'), elementRow]) {
     bar?.addEventListener('click', (event) => {
-      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-tool], [data-element]');
+      const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-tool], [data-element], [data-group]');
       const applet = window.jsmeApplet;
       if (!button || !applet) return;
       const tool = button.dataset.tool;
@@ -517,8 +554,7 @@ export function setupSketcherToolbar(): void {
         void openXAtomBox(stage).then((box) => {
           xAtomBox = box;
           const selected = buttons().find((b) => b.getAttribute('aria-pressed') === 'true');
-          if (selected?.dataset.element) chooseElement(selected.dataset.element, selected);
-          else if (selected?.dataset.tool) chooseTool(selected.dataset.tool, selected);
+          if (selected) choose(selected);
           if (moreButton) {
             moreButton.disabled = !box;
             if (!box) moreButton.title = 'More elements: unavailable — the sketcher did not open its atom box';
