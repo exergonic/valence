@@ -31,6 +31,11 @@ import { takesImplicitHydrogens } from '../chem/fill-hydrogens';
 /** setAction() codes for our tools. */
 const TOOL_ACTIONS: Record<string, number> = {
   delete: 104,
+  // JSME's "Move atom" (its tooltip table, 2026-10-20): drag an atom and only
+  // that atom moves; a drag on empty space does nothing. JSME has no lasso —
+  // one atom at a time, and Shift-drag on empty space turns the whole molecule
+  // whatever the tool.
+  move: 113,
   charge: 108, // cycles the charge of the atom clicked
   stereo: 201, // on an atom: a new wedge; on that bond: wedge → hash → either
   single: 202,
@@ -43,6 +48,34 @@ const TOOL_ACTIONS: Record<string, number> = {
   benzene: 209,
   ring6: 210,
 };
+
+/**
+ * Lay the drawing out afresh: JSME's own MOL block read back with every
+ * coordinate zeroed, which makes JSME compute 2D coordinates. JSME's "Compute
+ * 2D coordinates" sits in a menu we cannot reach (its molecule menu, behind a
+ * deferred internal command), so this is the public road to the same layout.
+ * It keeps everything the drawing says — the atoms in order, drawn
+ * hydrogens (H–Ni–H keeps its three atoms; a SMILES round trip folds them
+ * away), charges, the X box's elements, ring and E/Z stereo, chirality
+ * (trans-2-methylcyclohexanol reads back the same SMILES). Returns the MOL
+ * blocks before and after, or null for an empty sketch.
+ */
+function cleanLayout(applet: Window['jsmeApplet']): { before: string; after: string } | null {
+  if (!applet.smiles()) return null;
+  const before: string = applet.molFile();
+  const lines = before.split('\n');
+  const atomCount = parseInt(lines[3]?.slice(0, 3) ?? '', 10);
+  if (!Number.isFinite(atomCount)) return null;
+  const zeroed = lines.map((line, i) => (i >= 4 && i < 4 + atomCount ? `    0.0000    0.0000    0.0000${line.slice(30)}` : line));
+  applet.readMolFile(zeroed.join('\n'));
+  return { before, after: applet.molFile() };
+}
+
+/** A MOL block from its counts line on: the header carries a timestamp, so two
+ *  reads of one drawing differ there and nowhere else. */
+function drawingOf(molFile: string): string {
+  return molFile.split('\n').slice(3).join('\n');
+}
 
 /** setAction() code that places a lone carbon on empty space. */
 const PLACE_CARBON = 253;
@@ -260,7 +293,9 @@ function setupDragFromToolbar(stage: HTMLElement, choose: (button: HTMLButtonEle
   document.addEventListener('mousedown', (event) => {
     if (event.button !== 0) return;
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>('#sketch-tools [data-tool], #sketch-elements [data-element]');
-    const draggable = !!button?.dataset.element || (button?.dataset.tool ?? '') in TOOL_ACTIONS;
+    // the move tool acts by dragging an atom already drawn: dropped, it would do nothing
+    const draggable = !!button?.dataset.element
+      || ((button?.dataset.tool ?? '') in TOOL_ACTIONS && button?.dataset.tool !== 'move');
     pressed = button && draggable && !button.disabled ? { button, x: event.clientX, y: event.clientY } : null;
   });
 
@@ -340,8 +375,8 @@ export function setupSketcherToolbar(): void {
     markSelected(button);
   };
 
-  // An element or a drawing tool; undo, redo and clear are commands, handled
-  // where they are clicked.
+  // An element or a drawing tool; undo, redo, clean and clear are commands,
+  // handled where they are clicked.
   const choose = (button: HTMLButtonElement) => {
     const tool = button.dataset.tool;
     if (button.dataset.element) chooseElement(button.dataset.element, button);
@@ -371,14 +406,30 @@ export function setupSketcherToolbar(): void {
   };
   if (moreButton) setupPeriodicTable(moreButton, pickElement);
 
+  // A clean replaces JSME's molecule, and JSME's own undo cannot step back
+  // over it (measured: Ctrl+Z after a clean leaves the clean layout). So the
+  // drawing from before is kept, and Undo puts it back — while the clean
+  // layout is still what is drawn; any edit since, and Undo is JSME's again.
+  // JSME rescales a drawing it reads to its standard bond length, so a drawing
+  // with a stretched bond comes back uniformly smaller (×0.78 after one long
+  // drag): the same picture, at JSME's scale.
+  let cleaned: { before: string; after: string } | null = null;
+
   for (const bar of [document.getElementById('sketch-tools'), elementRow]) {
     bar?.addEventListener('click', (event) => {
       const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-tool], [data-element]');
       const applet = window.jsmeApplet;
       if (!button || !applet) return;
       const tool = button.dataset.tool;
-      if (tool === 'undo' || tool === 'redo') {
+      if (tool === 'undo' && cleaned && drawingOf(applet.molFile()) === drawingOf(cleaned.after)) {
+        applet.readMolFile(cleaned.before);
+        cleaned = null;
+        reselect();
+      } else if (tool === 'undo' || tool === 'redo') {
         pressKey(stage, tool === 'undo' ? 'z' : 'y', true);
+      } else if (tool === 'clean') {
+        cleaned = cleanLayout(applet) ?? cleaned;
+        reselect();
       } else if (tool === 'clear') {
         // JSME's clear() empties the molecule but does not redraw, so the old
         // structure stayed on screen and Clear looked dead. And right after
@@ -393,6 +444,13 @@ export function setupSketcherToolbar(): void {
     });
   }
   setupDragFromToolbar(stage, choose);
+
+  /** Reading a MOL block can reset JSME's action: set the chosen tool or
+   *  element again. */
+  function reselect(): void {
+    const selected = buttons().find((b) => b.getAttribute('aria-pressed') === 'true');
+    if (selected) choose(selected);
+  }
 
   // An element chosen: a click on an atom becomes the element's key, and the
   // click itself is kept from JSME (its action, placing a carbon, would add a

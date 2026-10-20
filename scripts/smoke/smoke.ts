@@ -248,6 +248,57 @@ async function sketcherDragAndDrop(b: Browser) {
   check('a drop beside the molecule adds nothing, and the chip goes home', beside === 'CCl' && chips === 0, `${beside}, ${chips} chip(s) left`);
 }
 
+/** Move and Clean (asked for 2026-10-20): the move tool drags one atom and
+ *  leaves the molecule what it was; Clean lays it out afresh, still the same
+ *  molecule; Undo puts the dragged drawing back. */
+async function sketcherMoveAndClean(b: Browser) {
+  await b.open(url);
+  await b.run(`window.jsmeApplet.readGenericMolecularInput('CC(=O)Nc1ccccc1');`);
+  await sleep(400);
+  const button = (tool: string) => b.run(`const r = document.querySelector('#sketch-tools [data-tool="${tool}"]').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+  const press = async (tool: string) => {
+    const p = await button(tool);
+    await b.moveTo(p.x, p.y);
+    await b.click(p.x, p.y);
+    await sleep(300);
+  };
+  // the shape of the drawing: every atom's offset from the first, scale-free
+  const shape = `const l = window.jsmeApplet.molFile().split('\\n'); const n = parseInt(l[3].slice(0, 3));
+    const p = l.slice(4, 4 + n).map((s) => [parseFloat(s.slice(0, 10)), parseFloat(s.slice(10, 20))]);
+    const d = p.map((q) => Math.hypot(q[0] - p[0][0], q[1] - p[0][1])); const max = Math.max(...d);
+    return d.map((x) => (x / max).toFixed(3)).join(',');`;
+  const before = await b.run(shape);
+  await press('move');
+  const oxygen = await b.run(`
+    const svg = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150);
+    const r = [...svg.querySelectorAll('text')].find((t) => t.textContent === 'O').getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+  // JSME ignores the first press on its drawing after the page loads (the
+  // first-atom trap of 2026-10-06 again): a first drag did nothing, every one
+  // after moved. One press on empty space first — with the move tool it does
+  // nothing. Then the atom under JSME's hover box before the press.
+  const corner = await b.run(`
+    const r = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150).getBoundingClientRect();
+    return { x: r.x + 20, y: r.y + r.height - 20 };`);
+  await b.moveTo(corner.x, corner.y);
+  await b.click(corner.x, corner.y);
+  await sleep(200);
+  await b.moveTo(oxygen.x, oxygen.y);
+  await sleep(300);
+  await b.drag(oxygen, { x: oxygen.x + 60, y: oxygen.y + 50 });
+  await sleep(300);
+  const moved = await b.run(shape);
+  const smilesMoved: string = await b.run(`return window.jsmeApplet.smiles();`);
+  check('the move tool drags one atom and keeps the molecule', moved !== before && smilesMoved === 'CC(=O)Nc1ccccc1', smilesMoved);
+  await press('clean');
+  const cleaned = await b.run(shape);
+  const smilesCleaned: string = await b.run(`return window.jsmeApplet.smiles();`);
+  check('Clean lays it out afresh, the same molecule', cleaned !== moved && smilesCleaned === 'CC(=O)Nc1ccccc1', smilesCleaned);
+  await press('undo');
+  const undone = await b.run(shape);
+  check('Undo after a Clean puts the dragged drawing back', undone === moved, undone === moved ? 'restored' : 'not restored');
+}
+
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */
 async function orbitalListStaysPut(b: Browser) {
   await b.open(url);
@@ -340,7 +391,7 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, orbitalListStaysPut, lewisStructureDonation]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, orbitalListStaysPut, lewisStructureDonation]) {
     try {
       await part(b);
     } catch (error) {
