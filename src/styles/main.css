@@ -49,6 +49,10 @@
   --sketch-s: #e8cf5a;
   --sketch-halogen: #7fdb9a;
   --sketch-p: #f5a65b;
+  /* the x, y, z legend in the scene's corner: the usual red, green, blue */
+  --axis-x: #ff7b7b;
+  --axis-y: #6fdc94;
+  --axis-z: #7aa7ff;
 }
 
 :root[data-theme="steel"] {
@@ -137,6 +141,9 @@
   --sketch-s: #8c6a00;
   --sketch-halogen: #1e7a44;
   --sketch-p: #b4570a;
+  --axis-x: #cf3434;
+  --axis-y: #1d8a4a;
+  --axis-z: #2f6fe0;
 }
 
 * {
@@ -637,6 +644,40 @@ button, input, select, textarea { font-family: inherit; }
   overflow: hidden;
   position: relative;
 }
+
+/* The structure's x, y, z, turning with the view (render/axis-legend.ts).
+   On top of the corner buttons' column (#canvas-actions: three 36 px buttons,
+   6 px apart, 14 px up) — the view tabs fill the bottom edge of a narrow
+   scene, but stop 60 px short of the right to leave that column clear. */
+#axis-legend {
+  position: absolute;
+  right: 14px;
+  bottom: 144px;
+  width: 64px;
+  height: 64px;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#axis-legend.hidden { display: none; }
+#axis-legend .axis-ring { fill: var(--panel); stroke: var(--border); stroke-width: 1; }
+#axis-legend line { stroke-width: 2.2; stroke-linecap: round; }
+
+#axis-legend text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+#axis-legend .axis-x line { stroke: var(--axis-x); }
+#axis-legend .axis-x text { fill: var(--axis-x); }
+#axis-legend .axis-y line { stroke: var(--axis-y); }
+#axis-legend .axis-y text { fill: var(--axis-y); }
+#axis-legend .axis-z line { stroke: var(--axis-z); }
+#axis-legend .axis-z text { fill: var(--axis-z); }
 
 /* ── Molecule Info Header (persistent) ── */
 

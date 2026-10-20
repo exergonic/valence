@@ -16,6 +16,7 @@ import type { ExtendedHuckelResult } from '../chem/extended-huckel/solve';
 import type { LocalizedOrbital } from '../chem/localized-orbitals/order-localized';
 import type { BasisFunction } from '../chem/extended-huckel/assign-basis';
 import { updateLabels } from './labels';
+import { createAxisLegend } from './axis-legend';
 import { ATOM_LAYER, type AtomStyle } from './atom-styles';
 
 export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complementary' | 'cool' | 'warm' | 'highcontrast' | 'custom';
@@ -305,6 +306,7 @@ export function initScene(container: HTMLElement): SceneContext {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(container.clientWidth, container.clientHeight);
   container.appendChild(renderer.domElement);
+  const axisLegend = createAxisLegend(container);
 
   const controls = new TrackballControls(camera, renderer.domElement);
   controls.rotateSpeed = 3.0;
@@ -389,6 +391,7 @@ export function initScene(container: HTMLElement): SceneContext {
     // needs no per-frame push.
     updateLabels(labelGroup, camera);
     renderer.render(scene, camera);
+    axisLegend.update(camera, moleculeGroup, moleculeGroup.children.length > 0);
   }
   animate();
 
