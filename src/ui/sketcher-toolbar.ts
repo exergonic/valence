@@ -26,7 +26,7 @@
  * (NOTES.md); a JSME upgrade must re-check them.
  */
 import { setupPeriodicTable } from './periodic-table';
-import { setupGroupPalette, type FunctionalGroup } from './functional-groups';
+import { groupByCode, setupGroupPalette, type FunctionalGroup } from './functional-groups';
 import { takesImplicitHydrogens } from '../chem/fill-hydrogens';
 
 /** setAction() codes for our tools. */
@@ -237,8 +237,17 @@ const DRAG_START_PX = 5;
  *
  * A drop that would add nothing — beside the molecule (one molecule at a
  * time), off the sketch, or Esc — sends the chip back to its button.
+ *
+ * A group can be dragged straight out of the "Groups…" list too (asked for
+ * 2026-10-20): as the drag starts, `fromGroupList` picks it as a click would —
+ * the list closes and the group gets its button in the row — and the drag
+ * carries that button, so a drop that adds nothing sends the chip there.
  */
-function setupDragFromToolbar(stage: HTMLElement, choose: (button: HTMLButtonElement) => void): void {
+function setupDragFromToolbar(
+  stage: HTMLElement,
+  choose: (button: HTMLButtonElement) => void,
+  fromGroupList: (cell: HTMLButtonElement) => HTMLButtonElement | null,
+): void {
   let pressed: { button: HTMLButtonElement; x: number; y: number } | null = null;
   let dragged: HTMLButtonElement | null = null;
   let chip: HTMLElement | null = null;
@@ -257,7 +266,9 @@ function setupDragFromToolbar(stage: HTMLElement, choose: (button: HTMLButtonEle
     if (chip) chip.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
   };
 
-  const begin = (button: HTMLButtonElement, x: number, y: number) => {
+  const begin = (pressedButton: HTMLButtonElement, x: number, y: number) => {
+    const button = pressedButton.dataset.code ? fromGroupList(pressedButton) : pressedButton;
+    if (!button) return;
     dragged = button;
     choose(button);
     sketchWasEmpty = !window.jsmeApplet?.smiles?.();
@@ -294,10 +305,10 @@ function setupDragFromToolbar(stage: HTMLElement, choose: (button: HTMLButtonEle
   document.addEventListener('mousedown', (event) => {
     if (event.button !== 0) return;
     const button = (event.target as HTMLElement).closest<HTMLButtonElement>(
-      '#sketch-tools [data-tool], #sketch-elements [data-element], #sketch-elements [data-group]',
+      '#sketch-tools [data-tool], #sketch-elements [data-element], #sketch-elements [data-group], #group-palette .fg-cell',
     );
     // the move tool acts by dragging an atom already drawn: dropped, it would do nothing
-    const draggable = !!button?.dataset.element || !!button?.dataset.group
+    const draggable = !!button?.dataset.element || !!button?.dataset.group || !!button?.dataset.code
       || ((button?.dataset.tool ?? '') in TOOL_ACTIONS && button?.dataset.tool !== 'move');
     pressed = button && draggable && !button.disabled ? { button, x: event.clientX, y: event.clientY } : null;
   });
@@ -312,6 +323,10 @@ function setupDragFromToolbar(stage: HTMLElement, choose: (button: HTMLButtonEle
     if (!dragged) {
       if (Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < DRAG_START_PX) return;
       begin(pressed.button, event.clientX, event.clientY);
+      if (!dragged) {
+        pressed = null;
+        return;
+      }
     }
     placeChip(event.clientX, event.clientY);
     // JSME moves its hover box in its own handler for this move; read it after.
@@ -425,8 +440,8 @@ export function setupSketcherToolbar(): void {
   // before "Groups…" (the three most recent kept), chosen at once, so the
   // next click on an atom attaches it — or drag the button onto one.
   const GROUPS_KEPT = 3;
-  const pickGroup = (group: FunctionalGroup) => {
-    if (!elementRow || !groupsButton) return;
+  const pickGroup = (group: FunctionalGroup): HTMLButtonElement | null => {
+    if (!elementRow || !groupsButton) return null;
     let button = elementRow.querySelector<HTMLButtonElement>(`[data-group="${group.code}"]`);
     if (!button) {
       button = document.createElement('button');
@@ -440,8 +455,16 @@ export function setupSketcherToolbar(): void {
       if (picked.length > GROUPS_KEPT) picked[0].remove();
     }
     chooseGroup(group.code, button);
+    return button;
   };
-  if (groupsButton) setupGroupPalette(groupsButton, pickGroup);
+  const closeGroupList = groupsButton ? setupGroupPalette(groupsButton, pickGroup) : () => {};
+  // a group dragged out of the list: picked, as a click on it would
+  const fromGroupList = (cell: HTMLButtonElement) => {
+    const group = groupByCode(Number(cell.dataset.code));
+    if (!group) return null;
+    closeGroupList();
+    return pickGroup(group);
+  };
 
   // A clean replaces JSME's molecule, and JSME's own undo cannot step back
   // over it (measured: Ctrl+Z after a clean leaves the clean layout). So the
@@ -480,7 +503,7 @@ export function setupSketcherToolbar(): void {
       }
     });
   }
-  setupDragFromToolbar(stage, choose);
+  setupDragFromToolbar(stage, choose, fromGroupList);
 
   /** Reading a MOL block can reset JSME's action: set the chosen tool or
    *  element again. */

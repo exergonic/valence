@@ -338,6 +338,25 @@ async function sketcherFunctionalGroup(b: Browser) {
   }
   const pressed: string = await b.run(`return document.querySelector('#sketch-elements [aria-pressed="true"]')?.textContent ?? '';`);
   check('a functional group from "Groups…" is bonded to the atom clicked', smiles === 'COC(=O)O' && pressed === 'COOH', `${smiles}, ${pressed} chosen`);
+
+  // Straight from the list (asked for 2026-10-20): drag CN out of "Groups…"
+  // onto methanol's O. The same stale-label retry as above.
+  await b.run(`window.jsmeApplet.readGenericMolecularInput('CO'); window.jsmeApplet.repaint();`);
+  await sleep(400);
+  let dragged = 'CO';
+  for (let tries = 0; tries < 3 && dragged === 'CO'; tries++) {
+    await press('#sketch-groups');
+    const cell = await centre('#group-palette .fg-cell[data-code="242"]');
+    const oxygen = await b.run(`
+      const svg = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150);
+      const r = [...svg.querySelectorAll('text')].find((t) => /O/.test(t.textContent)).getBoundingClientRect();
+      return { x: r.x + r.width * 0.72, y: r.y + r.height / 2 };`);
+    await b.drag(cell, oxygen);
+    await sleep(400);
+    dragged = await b.run(`return window.jsmeApplet.smiles();`);
+  }
+  const row: string = await b.run(`return [...document.querySelectorAll('#sketch-elements [data-group]')].map((b) => b.textContent).join(' ');`);
+  check('a group dragged straight from "Groups…" is bonded where it is dropped', dragged === 'COC#N' && row.includes('CN'), `${dragged}; row: ${row}`);
 }
 
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */

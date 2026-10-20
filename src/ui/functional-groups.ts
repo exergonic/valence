@@ -87,9 +87,10 @@ export function groupByCode(code: number): FunctionalGroup | undefined {
 /**
  * Build the popover and wire it to its button, as the periodic table is: a
  * pick closes it and hands the group to `onPick`; Escape or a click
- * elsewhere closes it unpicked.
+ * elsewhere closes it unpicked. Returns its close, for a group dragged out
+ * of it (sketcher-toolbar.ts).
  */
-export function setupGroupPalette(trigger: HTMLButtonElement, onPick: (group: FunctionalGroup) => void): void {
+export function setupGroupPalette(trigger: HTMLButtonElement, onPick: (group: FunctionalGroup) => void): () => void {
   const panel = document.createElement('div');
   panel.id = 'group-palette';
   panel.className = 'hidden';
@@ -115,7 +116,7 @@ export function setupGroupPalette(trigger: HTMLButtonElement, onPick: (group: Fu
   }
   const note = document.createElement('p');
   note.className = 'pt-legend';
-  note.textContent = 'Pick a group: it is chosen, and gets a button in the element row. Then click an atom of the sketch to bond the group to it, or drag that button onto one. A group cannot be dragged from this list.';
+  note.textContent = 'Drag a group onto an atom of the sketch, or pick it and click the atom: the group is bonded to it. A group used gets a button in the element row, to click or drag again.';
   panel.appendChild(note);
   document.body.appendChild(panel);
 
@@ -154,4 +155,5 @@ export function setupGroupPalette(trigger: HTMLButtonElement, onPick: (group: Fu
     const target = event.target as Node;
     if (isOpen() && !panel.contains(target) && !trigger.contains(target)) close(false);
   });
+  return () => close(false);
 }
