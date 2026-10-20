@@ -115,7 +115,7 @@ export function setupGroupPalette(trigger: HTMLButtonElement, onPick: (group: Fu
   }
   const note = document.createElement('p');
   note.className = 'pt-legend';
-  note.textContent = 'Click an atom of the sketch, or drag the group onto one: the group is bonded to it.';
+  note.textContent = 'Pick a group: it is chosen, and gets a button in the element row. Then click an atom of the sketch to bond the group to it, or drag that button onto one. A group cannot be dragged from this list.';
   panel.appendChild(note);
   document.body.appendChild(panel);
 
