@@ -526,9 +526,9 @@ function redrawScene(ctx: SceneContext) {
   // GFN2's single point at this geometry: bond orders, spin (null while it runs)
   const properties = gfn2PropertiesOnScreen(ctx);
   syncLabelModeControl(properties);
-  if (labelMode === 'atom') {
-    // Element symbol labels (C, N, O...)
-    renderLabels(ctx.labelGroup, ctx.currentMolecule);
+  if (labelMode === 'atom' || labelMode === 'atom-id') {
+    // Element symbol labels (C, N, O...), or numbered as the orbital lists name them (C1, H7)
+    renderLabels(ctx.labelGroup, ctx.currentMolecule, labelMode === 'atom-id');
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
   } else if (labelMode === 'orbital' && ctx.atomOrbitals) {

@@ -40,8 +40,10 @@ function makeTextSprite(text: string): THREE.Sprite {
   return sprite;
 }
 
-export function renderLabels(group: THREE.Group, molecule: Molecule): void {
-  placeAtomLabels(group, molecule, (i) => molecule.atoms[i].element);
+/** Element symbols on the atoms; numbered (C1, H7) as the orbital lists and
+ *  the E(2) table name them, so a row can be found on the molecule. */
+export function renderLabels(group: THREE.Group, molecule: Molecule, numbered = false): void {
+  placeAtomLabels(group, molecule, (i) => (numbered ? `${molecule.atoms[i].element}${i + 1}` : molecule.atoms[i].element));
 }
 
 /** Render a partial charge as a short sign-prefixed label: "+0.43",

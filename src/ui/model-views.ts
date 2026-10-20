@@ -84,6 +84,15 @@ export function setupModelViews(ctx: SceneContext, moPanel: MoPanel): void {
   const blurb = document.getElementById('inspector-blurb')!;
 
   let active: ModelView = 'vsepr';
+  // Numbered element labels are a reader's choice, not a view's: once picked,
+  // a view that shows element symbols shows them numbered, until plain
+  // symbols are picked again.
+  let numberedLabels = false;
+  document.getElementById('ctrl-label-mode')?.addEventListener('change', (event) => {
+    const mode = (event.target as HTMLSelectElement).value;
+    if (mode === 'atom-id') numberedLabels = true;
+    else if (mode === 'atom') numberedLabels = false;
+  });
 
   const apply = (view: ModelView) => {
     const preset = PRESETS[view];
@@ -96,7 +105,7 @@ export function setupModelViews(ctx: SceneContext, moPanel: MoPanel): void {
     blurb.textContent = preset.blurb;
     setChecked('ctrl-show-mol', preset.atoms);
     setChecked('ctrl-show-orb', preset.vseprOrbitals);
-    setSelected('ctrl-label-mode', preset.labels);
+    setSelected('ctrl-label-mode', preset.labels === 'atom' && numberedLabels ? 'atom-id' : preset.labels);
     setChecked('ctrl-show-esp', preset.esp);
     setChecked('ctrl-show-dipole', preset.dipole);
     if (preset.orbitals === 'none') {
