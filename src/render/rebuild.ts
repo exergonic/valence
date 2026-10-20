@@ -30,6 +30,7 @@ import { extendedHuckelSpace, localizeOrbitals } from '../chem/localized-orbital
 import { orderLocalizedOrbitals } from '../chem/localized-orbitals/order-localized';
 import { fockCouplings } from '../chem/localized-orbitals/fock-couplings';
 import { lewisOrbitals } from '../chem/localized-orbitals/lewis-orbitals';
+import { presentingFrame } from './view-orientation';
 import type { Molecule } from '../mol-parser';
 import { resolveCharges } from '../chem/charge-model/bci-charges';
 import { labelPaletteFor } from './label-colors';
@@ -764,18 +765,18 @@ export function buildScene(ctx: SceneContext) {
 /** Point the camera at the molecule from in front, far enough back to see all
  *  of it — on a new molecule, and when the view is reset. */
 export function frameCamera(ctx: SceneContext) {
-  const center = new THREE.Vector3();
-  ctx.moleculeGroup.children.forEach((child) => {
-    if (child instanceof THREE.Mesh) {
-      center.add(child.position);
-    }
-  });
-  center.divideScalar(ctx.moleculeGroup.children.length || 1);
+  // longest extent across, next longest up, the broad face toward the reader
+  // (view-orientation.ts) — not whatever frame the structure arrived in
+  const frame = presentingFrame(ctx.currentMolecule?.atoms ?? []);
+  const center = new THREE.Vector3(...frame.centre);
 
   const box = new THREE.Box3().setFromObject(ctx.moleculeGroup);
   const size = box.getSize(new THREE.Vector3()).length();
   const dist = size * 1.5;
-  ctx.camera.position.set(center.x, center.y, center.z + dist);
+  ctx.camera.position.copy(center).addScaledVector(new THREE.Vector3(...frame.toward), dist);
+  // the trackball tilts the camera's up as it rotates: set it, or the last
+  // molecule's tilt carries over to the next
+  ctx.camera.up.set(...frame.up);
   ctx.camera.lookAt(center);
   ctx.controls.target.set(center.x, center.y, center.z);
   ctx.controls.update();
