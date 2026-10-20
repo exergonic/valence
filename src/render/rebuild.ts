@@ -472,7 +472,7 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
 export function rebuildDisplay(ctx: SceneContext) {
   redrawScene(ctx);
   // last: the groups are new, so a playing vibration takes up the new meshes
-  syncVibration(ctx);
+  syncVibration(ctx, gfn2PropertiesOnScreen(ctx));
 }
 
 function redrawScene(ctx: SceneContext) {

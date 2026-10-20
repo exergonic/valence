@@ -645,6 +645,55 @@ button, input, select, textarea { font-family: inherit; }
   position: relative;
 }
 
+/* The thermochemistry under the vibration control (render/vibration.ts):
+   a two-column list, numbers right-aligned in the mono face like the
+   orbital lists' energies. */
+.thermo-readout {
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.thermo-readout.hidden { display: none; }
+
+.thermo-head {
+  margin-bottom: 6px;
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.thermo-readout dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  margin: 0;
+}
+
+.thermo-readout dt { color: var(--text-muted); font-size: 12px; }
+.thermo-readout dt[title] { cursor: help; }
+
+.thermo-readout dd {
+  margin: 0;
+  text-align: right;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.thermo-readout dd span { margin-left: 6px; color: var(--text-faint); font-size: 10px; }
+
+.thermo-note {
+  margin-top: 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 /* The structure's x, y, z, turning with the view (render/axis-legend.ts).
    On top of the corner buttons' column (#canvas-actions: three 36 px buttons,
    6 px apart, 14 px up) — the view tabs fill the bottom edge of a narrow

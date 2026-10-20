@@ -10,7 +10,11 @@
  */
 import * as THREE from 'three';
 import type { SceneContext } from './setup';
+import type { Molecule } from '../mol-parser';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
+import type { Gfn2Properties } from '../geometry/gfn2-refine';
+import { detectPointGroup } from '../geometry/symmetrize';
+import { symmetryNumber, thermochemistry, type Thermochemistry } from '../chem/gfn2-xtb/thermochemistry';
 
 /** The largest atom's swing, Å — enough to see, small enough to stay a bond. */
 const AMPLITUDE = 0.25;
@@ -92,8 +96,9 @@ function stopVibration(ctx: SceneContext): void {
  * screen. The control lists the modes when the structure has them, and says
  * how to get them when it does not.
  */
-export function syncVibration(ctx: SceneContext): void {
+export function syncVibration(ctx: SceneContext, properties: Gfn2Properties | null): void {
   const modes = ctx.vibrations && ctx.vibrations.molecule === ctx.currentMolecule ? ctx.vibrations.modes : null;
+  writeThermochemistry(ctx.currentMolecule ? thermochemistryOf(ctx.currentMolecule, modes, properties) : null);
   if (!modes) ctx.display.vibrationIndex = null;
   const select = document.getElementById('ctrl-vibration') as HTMLSelectElement | null;
   if (select) {
@@ -114,4 +119,58 @@ export function syncVibration(ctx: SceneContext): void {
   const index = ctx.display.vibrationIndex;
   if (modes && index !== null && modes[index]) startVibration(ctx, modes[index]);
   else stopVibration(ctx);
+}
+
+/**
+ * The structure's thermochemistry at 298.15 K, 1 atm — when it has vibrations
+ * (a GFN2 minimum below 16 atoms) and GFN2's single point has given its
+ * energy; null otherwise. The symmetry number comes from the point group the
+ * structure has; the spin, from the single point.
+ */
+export function thermochemistryOf(
+  molecule: Molecule,
+  modes: NormalMode[] | null,
+  properties: Gfn2Properties | null,
+): Thermochemistry | null {
+  if (!modes || modes.length === 0 || !properties || properties.charges.length !== molecule.atoms.length) return null;
+  return thermochemistry({
+    atoms: molecule.atoms,
+    frequencies: modes.map((mode) => mode.frequency),
+    energy: properties.energy,
+    multiplicity: properties.multiplicity,
+    symmetryNumber: symmetryNumber(detectPointGroup(molecule)),
+  });
+}
+
+const KCAL_PER_HARTREE = 627.5094740631;
+
+/** The readout under the vibration control: the corrections in kcal/mol, the
+ *  entropy in cal/(mol K) with its parts, the totals in Eh. */
+function writeThermochemistry(result: Thermochemistry | null): void {
+  const readout = document.getElementById('thermo-readout');
+  if (!readout) return;
+  readout.classList.toggle('hidden', !result);
+  if (!result) {
+    readout.innerHTML = '';
+    return;
+  }
+  const kcal = (eh: number) => (eh * KCAL_PER_HARTREE).toFixed(2);
+  const calPerK = (eh: number) => (eh * KCAL_PER_HARTREE * 1000).toFixed(2);
+  const parts = result.entropyParts;
+  const row = (term: string, value: string, unit: string, hint = '') =>
+    `<dt${hint ? ` title="${hint}"` : ''}>${term}</dt><dd>${value}<span>${unit}</span></dd>`;
+  readout.innerHTML = `<div class="thermo-head">Thermochemistry · ${result.temperature} K, 1 atm</div><dl>`
+    + row('ZPE', kcal(result.zeroPoint), 'kcal/mol', 'Zero-point vibrational energy: ½hcν̃ summed over the modes')
+    + row('H − E', kcal(result.enthalpyCorrection), 'kcal/mol', 'Zero-point, thermal (translation, rotation, vibration) and pV')
+    + row('S', calPerK(result.entropy), 'cal/(mol·K)',
+      `Translation ${calPerK(parts.translational)} · rotation ${calPerK(parts.rotational)} · vibration `
+      + `${calPerK(parts.vibrational)}${parts.electronic > 0 ? ` · spin ${calPerK(parts.electronic)}` : ''}`)
+    + row('G − E', kcal(result.freeEnergy - result.energy), 'kcal/mol', 'H − TS, less the electronic energy')
+    + row('H', result.enthalpy.toFixed(6), 'Eh')
+    + row('G', result.freeEnergy.toFixed(6), 'Eh')
+    + '</dl>'
+    + `<div class="thermo-note">σ = ${result.symmetryNumber}${result.linear ? ', linear' : ''}. Ideal gas, rigid rotor, `
+    + 'harmonic oscillator (RRHO) on GFN2-xTB’s frequencies — semiempirical.'
+    + (result.imaginary > 0 ? ` ${result.imaginary} imaginary mode${result.imaginary > 1 ? 's' : ''} left out: a saddle, not a minimum.` : '')
+    + '</div>';
 }

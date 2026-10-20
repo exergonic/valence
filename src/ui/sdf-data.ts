@@ -21,6 +21,7 @@ import { gfn2ChargeSets } from '../geometry/gfn2-refine';
 import type { Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
+import { thermochemistryOf } from '../render/vibration';
 
 export interface SdfField {
   name: string;
@@ -91,6 +92,14 @@ export function sdfDataFields(input: SdfDataInput): SdfField[] {
   }
   if (input.vibrations && input.vibrations.length > 0) {
     add('GFN2_HARMONIC_FREQUENCIES_PER_CM', input.vibrations.map((mode) => fixed(1)(mode.frequency)).join(' '));
+  }
+  const thermo = thermochemistryOf(molecule, input.vibrations, properties);
+  if (thermo) {
+    add('GFN2_THERMO_CONDITIONS', `${thermo.temperature} K, 1 atm; ideal gas, rigid rotor, harmonic oscillator (RRHO); symmetry number ${thermo.symmetryNumber}`);
+    add('GFN2_ZERO_POINT_ENERGY_HARTREE', fixed(8)(thermo.zeroPoint));
+    add('GFN2_ENTHALPY_HARTREE', fixed(8)(thermo.enthalpy));
+    add('GFN2_ENTROPY_HARTREE_PER_K', thermo.entropy.toExponential(8));
+    add('GFN2_FREE_ENERGY_HARTREE', fixed(8)(thermo.freeEnergy));
   }
 
   if (chargeSets) add('atom.dprop.GFN2_ESP_FITTED_CHARGE', perAtom(chargeSets.espFitted, charge));
