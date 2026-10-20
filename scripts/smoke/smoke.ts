@@ -306,6 +306,8 @@ async function lewisStructureDonation(b: Browser) {
   check('Lewis structure: formamide’s N lone pair donates most into the C=O π*',
     !!top && /^[CO]\d+-[CO]\d+ π\*$/.test(top.type) && top.e2 > 25,
     top ? `${top.type} ${top.e2} kcal/mol` : 'no donation marked');
+  const tableTop: string = await b.run(`return document.querySelector('#mo-e2 .e2-entry .e2-pair')?.textContent ?? '';`);
+  check('the E(2) table ranks the amide donation first', /^N\d+\(LP\) → [CO]\d+-[CO]\d+ π\*$/.test(tableTop), tableTop || 'no table');
 }
 
 /**

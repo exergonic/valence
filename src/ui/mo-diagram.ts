@@ -34,6 +34,7 @@ import type { LocalizedCharacter, LocalizedOrbital } from '../chem/localized-orb
 import { SP_ONLY_METALS } from '../chem/extended-huckel/parameters';
 import { spinName } from '../chem/elements';
 import { ENERGY_UNIT, KCAL_PER_EV, formatEnergy } from './units';
+import { rankDonations } from '../chem/localized-orbitals/lewis-orbitals';
 import { GFN2_NOTE } from '../geometry/gfn2-refine';
 import { writeNote } from './info-note';
 
@@ -78,7 +79,8 @@ function lewisNote(list: LocalizedList, molecule: Molecule) {
       + 'The first orbital you draw is the anchor (outlined): the empty orbitals it donates into show E(2), the '
       + 'second-order stabilization q·F²/Δε, and an underline as long as its share of the strongest — an empty anchor '
       + 'shows its donors. The numbers stay with the anchor while you draw its partners beside it; take it away and the '
-      + 'next orbital drawn becomes the anchor. A tick marks mixing within a section, as in Pipek–Mezey. E(2) is a '
+      + 'next orbital drawn becomes the anchor. A tick marks mixing within a section, as in Pipek–Mezey. The table '
+      + 'above ranks every donation in the molecule, and an entry draws its pair. E(2) is a '
       + 'perturbative estimate that overstates strong '
       + 'resonance, and GFN2’s empty orbitals sit low, so compare the numbers with each other rather than with NBO’s. '
       + 'Draw another resonance structure to see its Lewis orbitals.'
@@ -214,6 +216,9 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   const readout = document.getElementById('mo-readout')!;
   const composition = document.getElementById('mo-composition')!;
   const note = document.getElementById('mo-note')!;
+  const e2Panel = document.getElementById('mo-e2');
+  // the table's open/closed state outlives the redraws that rebuild it
+  let e2Open = true;
   const clear = document.getElementById('ctrl-mo-clear') as HTMLButtonElement | null;
 
   const select = (index: number | null) => {
@@ -556,6 +561,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     list.querySelectorAll<HTMLButtonElement>('button.orb-rail').forEach((node) => {
       node.addEventListener('click', () => toggleLocalizedSet(node.dataset.members!.split(',').map(Number)));
     });
+    if (shown.donation && !shown.refusal) drawDonationTable(shown, molecule);
 
     if (selection.length > 0) {
       const name = (index: number) => localizedType(molecule, orbitals[index]);
@@ -594,6 +600,44 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       : shown.method === 'lewis' ? lewisNote(shown, molecule) : pipekMezeyNote(shown));
   }
 
+  /**
+   * The E(2) table above the Lewis-structure list: every donation in the
+   * molecule, strongest first. It is the other way in to the list — start
+   * from what matters rather than exploring orbital by orbital. An entry
+   * draws its donor (the anchor) and its acceptor together; the entry that
+   * is exactly what is drawn is marked, and clicking it again clears it.
+   */
+  function drawDonationTable(shown: LocalizedList, molecule: Molecule): void {
+    if (!e2Panel) return;
+    const orbitals = shown.orbitals!;
+    const table = rankDonations(orbitals, shown.donation!, E2_SHOWN_EV);
+    if (table.length === 0) return;
+    const [anchor, partner, extra] = ctx.display.localizedSelection;
+    const name = (index: number) => localizedType(molecule, orbitals[index]);
+    e2Panel.innerHTML = `<details class="e2-table"${e2Open ? ' open' : ''}>`
+      + `<summary><span>Strongest donations · ${table.length}</span><span class="orb-unit">E(2), ${ENERGY_UNIT}</span></summary>`
+      + '<div class="e2-list">'
+      + table.map(({ donor, acceptor, e2 }) => {
+        const drawn = anchor === donor && partner === acceptor && extra === undefined;
+        return `<button class="e2-entry${drawn ? ' drawn' : ''}" data-donor="${donor}" data-acceptor="${acceptor}" `
+          + `title="${drawn ? 'Clear the picture' : `Draw ${name(donor)} and ${name(acceptor)} together`}">`
+          + `<span class="e2-pair">${name(donor)} → ${name(acceptor)}</span>`
+          + `<span class="e2-value">${formatEnergy(e2)}</span></button>`;
+      }).join('')
+      + '</div></details>';
+    e2Panel.classList.remove('hidden');
+    const details = e2Panel.querySelector('details')!;
+    details.addEventListener('toggle', () => { e2Open = details.open; });
+    e2Panel.querySelectorAll<HTMLButtonElement>('button.e2-entry').forEach((node) => {
+      node.addEventListener('click', () => {
+        const pair = [Number(node.dataset.donor), Number(node.dataset.acceptor)];
+        ctx.display.localizedSelection = node.classList.contains('drawn') ? [] : pair;
+        draw();
+        ctx.rerender();
+      });
+    });
+  }
+
   // The ladder the list was last framed on. Every click redraws the list, and
   // centring the selected row each time scrolled the levels under the pointer
   // (reported 2026-10-06: "I thought the MOs were rearranging on me"). So the
@@ -606,6 +650,10 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const gfn2 = view === 'delocalized' && ctx.display.moMethod === 'gfn2';
     const scrolled = list.scrollTop;
     list.innerHTML = '';
+    if (e2Panel) {
+      e2Panel.innerHTML = '';
+      e2Panel.classList.add('hidden');
+    }
     note.textContent = '';
     readout.textContent = '';
     composition.textContent = '';

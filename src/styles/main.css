@@ -2036,6 +2036,81 @@ body .mosaic-WindowPanel button:first-of-type:hover { background: var(--accent-h
 
 #mo-list .orb-group:first-child { margin-top: 0; }
 
+/* The E(2) table above the Lewis-structure list: every donation in the
+   molecule, strongest first, a short scrolling list of its own. Its header
+   reads like the list's section headers; an entry draws its pair. */
+#mo-e2 { margin-bottom: 6px; }
+#mo-e2.hidden { display: none; }
+
+.e2-table summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 9px 2px 0;
+  color: var(--text-faint);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+}
+
+.e2-table summary::-webkit-details-marker { display: none; }
+.e2-table summary > span:first-child::before { content: '▸ '; }
+.e2-table[open] summary > span:first-child::before { content: '▾ '; }
+
+.e2-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 168px;
+  margin-top: 2px;
+  overflow-y: auto;
+}
+
+.e2-entry {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.e2-entry:hover { background: var(--hover); }
+
+.e2-entry.drawn {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-border);
+}
+
+.e2-pair {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.e2-entry.drawn .e2-pair { color: var(--accent-text); }
+
+.e2-value {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
 /* A degenerate set: its rows held together by a rail in the list's left
    gutter, with a little air above and below. Every row keeps the gutter, so a
    set's rows line up with the singles around them. In the localized list the

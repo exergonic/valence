@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Atom, Molecule } from '../src/mol-parser';
 import { gfn2Ladders, gfn2OrbitalSpace } from '../src/chem/gfn2-xtb/orbital-ladder';
-import { lewisOrbitals, type LewisOrbitals } from '../src/chem/localized-orbitals/lewis-orbitals';
+import { lewisOrbitals, rankDonations, type LewisOrbitals } from '../src/chem/localized-orbitals/lewis-orbitals';
 import type { LocalizedOrbital } from '../src/chem/localized-orbitals/order-localized';
 import { jacobiSymmetric } from '../src/utils/eigen';
 import { localGeometry, optimisedExample } from './helpers/local-geometry';
@@ -145,6 +145,34 @@ describe('E(2): the donations the textbook draws', () => {
       expect(kcal).toBeGreaterThan(1);
       expect(kcal).toBeLessThan(5);
     });
+  });
+});
+
+describe('the E(2) table: every donation, strongest first', () => {
+  it('formamide: the amide n(N) → π*(C=O) heads it, and nothing below the threshold is listed', async () => {
+    const molecule = await fromSketch(['O', 'C', 'N'], [[0, 1, 2], [1, 2, 1]]);
+    const set = await lewis(molecule);
+    const minimum = 0.5 / KCAL;
+    const table = rankDonations(set.orbitals, set.donation, minimum);
+    const [top] = table;
+    expect(set.orbitals[top.donor].character).toBe('lone pair');
+    expect(elementsOf(molecule, set.orbitals[top.donor])).toBe('N');
+    expect(set.orbitals[top.acceptor].character).toBe('pi antibond');
+    table.forEach((entry, k) => {
+      expect(set.orbitals[entry.donor].occupied).toBe(true);
+      expect(set.orbitals[entry.acceptor].occupied).toBe(false);
+      expect(entry.e2).toBeGreaterThanOrEqual(minimum);
+      if (k > 0) expect(entry.e2).toBeLessThanOrEqual(table[k - 1].e2);
+    });
+  });
+
+  it('BF₃: the three fluorine lone pairs into boron’s empty p, equal, at the top', async () => {
+    const molecule = await fromSketch(['B', 'F', 'F', 'F'], [[0, 1, 1], [0, 2, 1], [0, 3, 1]]);
+    const set = await lewis(molecule);
+    const top = rankDonations(set.orbitals, set.donation, 0.5 / KCAL).slice(0, 3);
+    for (const entry of top) expect(set.orbitals[entry.acceptor].character).toBe('lone vacancy');
+    // equal to 0.1 kcal/mol: the optimised structure is D3h only to the optimiser's tolerance
+    expect(Math.abs(top[2].e2 - top[0].e2) * KCAL).toBeLessThan(0.1);
   });
 });
 

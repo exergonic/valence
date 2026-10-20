@@ -248,6 +248,30 @@ export function lewisOrbitals(molecule: Molecule, space: OrbitalSpace): LewisRes
   };
 }
 
+/** One donation: a filled Lewis orbital into an empty one, E(2) in eV. */
+export interface Donation {
+  donor: number;
+  acceptor: number;
+  e2: number;
+}
+
+/**
+ * Every donation at or above `minimum` (eV), strongest first — NBO's E(2)
+ * table, the molecule-wide answer to "which delocalization matters here?".
+ * Indices are into `orbitals`. Degenerate partners (benzene's six π → π*)
+ * are each listed: they are separate interactions of equal size.
+ */
+export function rankDonations(orbitals: LocalizedOrbital[], donation: number[][], minimum: number): Donation[] {
+  const found: Donation[] = [];
+  orbitals.forEach((donor, i) => {
+    if (!donor.occupied) return;
+    orbitals.forEach((acceptor, j) => {
+      if (!acceptor.occupied && donation[i][j] >= minimum) found.push({ donor: i, acceptor: j, e2: donation[i][j] });
+    });
+  });
+  return found.sort((a, b) => b.e2 - a.e2);
+}
+
 /** S^1/2 and S^-1/2 of the overlap matrix. */
 function squareRoots(S: number[][]): { half: number[][]; inverseHalf: number[][] } {
   const { values, vectors } = jacobiSymmetric(S);
