@@ -20,7 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Molecule } from '../src/mol-parser';
 import { parseMolBlock } from '../src/mol-parser';
-import { HESSIAN_SADDLE_THRESHOLD } from '../src/geometry/gfn2-refine';
+import { SADDLE_FREQUENCY_THRESHOLD } from '../src/geometry/gfn2-refine';
 import { EXAMPLES } from '../src/ui/examples';
 import { gfn2Ladders } from '../src/chem/gfn2-xtb/orbital-ladder';
 
@@ -124,8 +124,8 @@ describe('GFN2-xTB', () => {
   // curvature, and the app says which one is on screen.
   it('reports a curvature verdict for a converged run', async () => {
     const result = await refine(water);
-    expect(result!.lowestHessianMode).not.toBeNull();
-    expect(result!.lowestHessianMode!).toBeGreaterThan(HESSIAN_SADDLE_THRESHOLD);
+    expect(result!.lowestFrequency).not.toBeNull();
+    expect(result!.lowestFrequency!).toBeGreaterThan(SADDLE_FREQUENCY_THRESHOLD);
   }, 180_000);
 
   // The default charge model is GFN2's for every structure on screen, so a
@@ -424,10 +424,55 @@ M  END
     expect(result).not.toBeNull();
     expect(result!.converged).toBe(true);
     expect(result!.saddleEscapes).toBeGreaterThanOrEqual(1);
-    expect(result!.lowestHessianMode!).toBeGreaterThan(HESSIAN_SADDLE_THRESHOLD);
+    expect(result!.lowestFrequency!).toBeGreaterThan(SADDLE_FREQUENCY_THRESHOLD);
     expect(waterAngle(result!.molecule)).toBeGreaterThan(95);
     expect(waterAngle(result!.molecule)).toBeLessThan(115);
     expect(result!.energyHartree).toBeLessThan(-5.02063);
+  }, 180_000);
+
+  // A soft saddle. The embedder sets every single bond anti, so acetaldehyde's
+  // methyl starts with a C–H anti to the oxygen — the staggered conformer, a
+  // saddle (the minimum eclipses C=O with a C–H) — and the descent keeps that
+  // mirror plane. Its imaginary torsion, 166i cm⁻¹, has a raw Hessian
+  // eigenvalue of only −0.0018 Eh/bohr², which a verdict on the raw spectrum
+  // called a minimum and listed "ν1 · 166i cm⁻¹" among the vibrations
+  // (2026-10-20). Read from the vibrations, the run escapes it: one push,
+  // 1.0 kcal/mol down (experiment's barrier 1.16), the torsion at 145 cm⁻¹
+  // (experiment ~150).
+  it('escapes the staggered methyl saddle — acetaldehyde, as sketched', async () => {
+    const { localGeometry } = await import('./helpers/local-geometry');
+    const sketch: Molecule = {
+      atoms: [atom('C', 0, 0, 0), atom('C', 1.3, 0.75, 0), atom('O', 2.6, 0, 0)],
+      bonds: [bond(0, 1), { ...bond(1, 2), order: 2 }],
+    };
+    const local = await localGeometry(sketch);
+    const result = local!.gfn2!;
+    expect(result.converged).toBe(true);
+    expect(result.saddleEscapes).toBeGreaterThanOrEqual(1);
+    expect(result.lowestFrequency!).toBeGreaterThan(SADDLE_FREQUENCY_THRESHOLD);
+    expect(result.vibrations!.every((mode) => mode.frequency > 0)).toBe(true);
+    // the staggered saddle sits at −10.355108 Eh, the eclipsed minimum at −10.356705
+    expect(result.energyHartree).toBeLessThan(-10.3565);
+
+    // one methyl C–H eclipses the C=O: an H–C–C=O torsion near 0°
+    const atoms = local!.molecule.atoms;
+    const methylH = local!.molecule.bonds
+      .filter((b) => b.atom1Index === 0 || b.atom2Index === 0)
+      .map((b) => (b.atom1Index === 0 ? b.atom2Index : b.atom1Index))
+      .filter((i) => atoms[i].element === 'H');
+    const torsion = (h: number) => {
+      const [p, q, r, s] = [atoms[h], atoms[0], atoms[1], atoms[2]];
+      const b1 = [q.x - p.x, q.y - p.y, q.z - p.z];
+      const b2 = [r.x - q.x, r.y - q.y, r.z - q.z];
+      const b3 = [s.x - r.x, s.y - r.y, s.z - r.z];
+      const cross = (u: number[], v: number[]) => [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const dot = (u: number[], v: number[]) => u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+      const n1 = cross(b1, b2);
+      const n2 = cross(b2, b3);
+      const m = cross(n1, b2.map((x) => x / Math.hypot(b2[0], b2[1], b2[2])));
+      return (Math.atan2(dot(m, n2), dot(n1, n2)) * 180) / Math.PI;
+    };
+    expect(Math.min(...methylH.map((h) => Math.abs(torsion(h))))).toBeLessThan(10);
   }, 180_000);
 });
 
@@ -458,7 +503,7 @@ describe('Berny and the inexact analytic gradient', () => {
     expect(result!.converged).toBe(true);
     // the true minimum is −7.906790 Eh; Berny on the analytic gradient alone stops at −7.899336
     expect(result!.energyHartree).toBeLessThan(-7.9065);
-    expect(result!.lowestHessianMode!).toBeGreaterThan(HESSIAN_SADDLE_THRESHOLD);
+    expect(result!.lowestFrequency!).toBeGreaterThan(SADDLE_FREQUENCY_THRESHOLD);
     // ...and it is the exact-gradient check that gets it there, not the saddle
     // escape. Here the false stop happens to be the planar saddle, so with the
     // check removed the escape rescues the run (measured: one escape, same

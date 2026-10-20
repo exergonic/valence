@@ -54,7 +54,7 @@ describe('the local pipeline with a result whose bonding changed', () => {
       iterations: 65,
       milliseconds: 30_600,
       charges: null,
-      lowestHessianMode: null,
+      lowestFrequency: null,
       saddleEscapes: 0,
     }));
     expect(local?.engine).toBe('unrefined');

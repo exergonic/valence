@@ -21,7 +21,7 @@ import { breakSymmetry } from './embed';
 import type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets } from './gfn2-refine.worker';
 
 export type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets };
-export { HESSIAN_SADDLE_THRESHOLD } from '../chem/gfn2-xtb/normal-modes';
+export { SADDLE_FREQUENCY_THRESHOLD } from '../chem/gfn2-xtb/normal-modes';
 
 /**
  * The honest label for a GFN2-optimised geometry, shown in the Info log:

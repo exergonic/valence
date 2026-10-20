@@ -9,7 +9,7 @@ import { isMetal, lowestMultiplicity, spinName } from '../chem/elements';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { computeLocalGeometry } from '../geometry/local-geometry';
 import {
-  cancelGfn2, Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, GFN2_NOTE, HESSIAN_SADDLE_THRESHOLD, type Gfn2Progress, type Gfn2Result,
+  cancelGfn2, Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, GFN2_NOTE, SADDLE_FREQUENCY_THRESHOLD, type Gfn2Progress, type Gfn2Result,
 } from '../geometry/gfn2-refine';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { ringPuckerWarnings } from '../geometry/ring-pucker';
@@ -174,17 +174,15 @@ function gfn2RunNotes(run: Gfn2Result): string[] {
     `GFN2-xTB converged in ${run.iterations} steps to ${run.energyHartree.toFixed(6)} Eh (${seconds} s).`,
   ];
   const escapes = run.saddleEscapes === 1 ? 'once' : `${run.saddleEscapes} times`;
-  if (run.lowestHessianMode === null) {
+  if (run.lowestFrequency === null) {
     notes.push('GFN2-xTB Hessian check skipped (above 16 atoms, where it costs more than the optimisation): '
       + 'the structure is a converged stationary point, not verified to be a minimum.');
-  } else if (run.lowestHessianMode < HESSIAN_SADDLE_THRESHOLD) {
-    notes.push('GFN2-xTB converged to a saddle, not a minimum — the lowest Hessian mode is imaginary '
-      + `(λ = ${run.lowestHessianMode.toFixed(3)} Eh/bohr²)`
-      + (run.saddleEscapes > 0 ? `, and pushing it down that mode (${escapes}) found nothing lower` : '')
+  } else if (run.lowestFrequency < SADDLE_FREQUENCY_THRESHOLD) {
+    notes.push('GFN2-xTB converged to a saddle, not a minimum — the lowest vibration is imaginary '
+      + `(${Math.abs(run.lowestFrequency).toFixed(0)}i cm⁻¹)`
+      + (run.saddleEscapes > 0 ? `, and pushing it down that mode (${escapes}) did not reach a minimum` : '')
       + ', so the geometry on screen is that stationary point.');
   } else {
-    // The raw Hessian's lowest eigenvalue at a minimum is a rigid-body zero
-    // mode (~0 ± the FD noise floor), not a number worth printing.
     notes.push(run.saddleEscapes > 0
       ? `GFN2-xTB first converged to a saddle point; pushed down its imaginary mode (${escapes}) and `
         + 're-optimised, it reached a minimum — no imaginary mode.'

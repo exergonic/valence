@@ -16,15 +16,20 @@ import { jacobiSymmetric } from '../../utils/eigen';
 import { ATOMIC_MASS } from '../assign-mass';
 
 /**
- * Below this lowest Hessian eigenvalue (Eh/bohr²) a converged geometry is a
- * saddle, not a minimum. A gradient-based stop cannot tell the two apart — a
- * saddle has zero gradient too — so the curvature is what makes the claim.
- * The numerical Hessian's noise floor measures ±0.003 (step-independent,
- * 2026-10-02), while a real imaginary mode of the planar cyclopropenyl anion
- * sits at −0.16, so 0.02 separates them cleanly. The optimiser pushes a
- * saddle off below it, and the Info log calls the verdict by it.
+ * Below this lowest vibration (cm⁻¹, negative = imaginary) a converged
+ * geometry is a saddle, not a minimum. A gradient-based stop cannot tell the
+ * two apart — a saddle has zero gradient too — so the curvature is what makes
+ * the claim. It is read from the vibrations, not the raw Hessian: a methyl
+ * torsion is soft, and acetaldehyde's staggered saddle (166i cm⁻¹) has a raw
+ * eigenvalue of only −0.0018 Eh/bohr² — inside the ±0.003 margin a raw
+ * verdict must leave for the rotations, which a not-quite-zero gradient gives
+ * spurious curvature. With the rotations projected out, the app's minima have
+ * no imaginary mode at all, while the methyl saddles of acetaldehyde,
+ * propene, acetone and acetic acid sit at 49i–171i (2026-10-20).
+ * The optimiser pushes a saddle off below it, and the Info log calls the
+ * verdict by it.
  */
-export const HESSIAN_SADDLE_THRESHOLD = -0.02;
+export const SADDLE_FREQUENCY_THRESHOLD = -20;
 
 /** √(Eh / (bohr² · u)) in cm⁻¹: ω = this × √λ for λ in Eh/(bohr² u). */
 const WAVENUMBER_PER_ROOT_HESSIAN = 5140.4871;

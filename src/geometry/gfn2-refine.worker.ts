@@ -26,12 +26,11 @@
  */
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { atomicNumber, lowestMultiplicity } from '../chem/elements';
-import { normalModes, HESSIAN_SADDLE_THRESHOLD, type NormalMode } from '../chem/gfn2-xtb/normal-modes';
+import { normalModes, SADDLE_FREQUENCY_THRESHOLD, type NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { alignToPrincipalAxes, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
 import { levelForFraction } from '../chem/extended-huckel/mo-surface';
 import { marchSignedField } from '../utils/march-tetrahedra';
 import type { Vec3 } from '../utils/vec3';
-import { jacobiSymmetric } from '../utils/eigen';
 import { fitChargesToPotential, mkFitPoints, fibonacciSphere } from '../chem/charge-model/esp-fit';
 import { cm5Corrections, cm5Covers, hirshfeldCharges, type RadialDensity } from '../chem/charge-model/cm5';
 import {
@@ -138,11 +137,16 @@ const MAX_HESSIAN_ATOMS = 16;
 /** Finite-difference step for the numerical Hessian, in bohr. */
 const HESSIAN_STEP_BOHR = 0.005;
 /** How far a saddle is pushed down its imaginary mode before re-optimising, in
- *  bohr (the length of the 3N displacement). Measured 2026-10-02 on the planar
- *  cyclopropenyl anion: 0.30 bohr along the mode lowers the energy by 4.15
- *  kcal/mol on both sides, enough for the optimiser to leave the saddle and
- *  small enough not to jump a basin. */
-const SADDLE_ESCAPE_BOHR = 0.3;
+ *  bohr (the length of the 3N displacement). 0.30 was measured 2026-10-02 on
+ *  the planar cyclopropenyl anion (4.15 kcal/mol down on both sides). A methyl
+ *  rotor needs more: a nearly free one's torque is under Berny's force gate
+ *  within a few degrees of the saddle, so it stops on the slope — acetic
+ *  acid's methyl, pushed 0.30 twice, turned ~12° each time and was still a
+ *  saddle (54i cm⁻¹); at 0.60 it reaches 6i, flat. The other saddles measured
+ *  (acetaldehyde, propene, acetone, ZnCl₂, linear water) reach the same minima
+ *  either way (2026-10-20). Methyl rotors stay approximate: good enough, not
+ *  perfect. */
+const SADDLE_ESCAPE_BOHR = 0.6;
 /** Saddle escapes before the run gives up and reports what it has. A
  *  higher-order saddle can take one push per imaginary mode; past two, the
  *  start is the problem, not the curvature. */
@@ -175,14 +179,13 @@ export interface Gfn2Result {
    *  Null when the engine's cached SCF does not describe the returned point
    *  — a wrong-geometry charge array is worse than none. */
   charges: number[] | null;
-  /** Lowest eigenvalue of the numerical Hessian at the returned geometry
-   *  (Eh/bohr²), or null when the check was skipped — the run did not
-   *  converge, the molecule is above the size gate, or the Hessian failed.
-   *  Negative beyond the numerical noise floor means the geometry is a
-   *  saddle, not a minimum (a saddle has zero gradient too, so the stop
-   *  criterion cannot tell them apart) — which, after the escapes, means the
-   *  run could not get off it. */
-  lowestHessianMode: number | null;
+  /** The lowest harmonic vibration at the returned geometry (cm⁻¹, negative
+   *  for an imaginary mode), or null when the check was skipped — the run did
+   *  not converge, the molecule is above the size gate, or the Hessian failed.
+   *  Below SADDLE_FREQUENCY_THRESHOLD the geometry is a saddle, not a minimum
+   *  (a saddle has zero gradient too, so the stop criterion cannot tell them
+   *  apart) — which, after the escapes, means the run could not get off it. */
+  lowestFrequency: number | null;
   /** How many times the run was pushed off a saddle and re-optimised. */
   saddleEscapes: number;
   /** The spin multiplicity the run used: the molecule's own, or the lowest
@@ -607,10 +610,11 @@ export async function optimizeWithGfn2(
     return ladder(start);
   };
 
-  /** The lowest Hessian mode at a relaxed point — the eigenvalue (Eh/bohr²)
-   *  and its eigenvector, per atom — or null when the check is skipped or
-   *  fails. The raw matrix is enough for a sign verdict and a direction (mass
-   *  weighting and rigid-body projection only matter for a frequency report).
+  /** The vibrations at a relaxed point — the lowest one's frequency (cm⁻¹,
+   *  negative = imaginary) and its direction as a unit 3N vector, per atom —
+   *  or null when the check is skipped or fails. The verdict needs the rigid
+   *  motions projected out: a soft torsion's curvature is smaller than what
+   *  a not-quite-zero gradient leaves on the rotations (see normal-modes.ts).
    *  OCC's Hessian rows are atom-major (x₀ y₀ z₀ x₁ …), unlike its gradient —
    *  measured: a rigid translation gives |H·t| ≈ 1e-6 that way and ≈ 1 the
    *  other. */
@@ -627,9 +631,11 @@ export async function optimizeWithGfn2(
         for (let j = 0; j < dim; j++) row.push(H.get(i, j));
         matrix.push(row);
       }
-      const { values, vectors } = jacobiSymmetric(matrix);
-      const mode = molecule.atoms.map((_, a) => [vectors[3 * a][0], vectors[3 * a + 1][0], vectors[3 * a + 2][0]]);
-      return { value: values[0], mode, matrix };
+      const modes = normalModes(relaxed.geometry.atoms, matrix);
+      if (modes.length === 0) return null;
+      const length = Math.hypot(...modes[0].displacements.flat());
+      const mode = modes[0].displacements.map((d) => d.map((x) => x / length));
+      return { frequency: modes[0].frequency, mode, modes };
     } catch {
       return null; // no verdict rather than a wrong one
     }
@@ -649,7 +655,7 @@ export async function optimizeWithGfn2(
   // lead to different minima — re-optimise each, and keep the lower converged
   // result. Its curvature is checked again: a higher-order saddle may need
   // another push.
-  while (lowest && lowest.value < HESSIAN_SADDLE_THRESHOLD && saddleEscapes < MAX_SADDLE_ESCAPES
+  while (lowest && lowest.frequency < SADDLE_FREQUENCY_THRESHOLD && saddleEscapes < MAX_SADDLE_ESCAPES
     && performance.now() < deadline) {
     saddleEscapes += 1;
     stage = 'saddle';
@@ -709,11 +715,11 @@ export async function optimizeWithGfn2(
     converged: best.converged,
     milliseconds: performance.now() - started,
     charges,
-    lowestHessianMode: lowest?.value ?? null,
+    lowestFrequency: lowest?.frequency ?? null,
     saddleEscapes,
-    // the vibrations come free with the curvature check: the same Hessian,
-    // mass-weighted — and only mean something at a minimum
-    vibrations: lowest && lowest.value >= HESSIAN_SADDLE_THRESHOLD ? normalModes(best.geometry.atoms, lowest.matrix) : null,
+    // the vibrations come free with the curvature check — and only mean
+    // something at a minimum
+    vibrations: lowest && lowest.frequency >= SADDLE_FREQUENCY_THRESHOLD ? lowest.modes : null,
   };
 }
 

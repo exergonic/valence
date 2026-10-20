@@ -23,6 +23,20 @@ const JAHN_TELLER: InfoNote = {
   },
 };
 
+// GFN2-xTB bends ZnCl₂: its minimum is at 134°, 0.72 kcal/mol below linear,
+// and the Fortran xTB oracle agrees (NOTES.md, 2026-10-20). Experiment finds
+// the vapour's molecule linear, so the example keeps the linear structure and
+// says why a GFN2 refinement will not.
+const ZNCL2_LINEAR: InfoNote = {
+  text: 'Linear, as experiment finds gas-phase ZnCl₂ — the geometry shown is that shape. '
+    + 'GFN2-xTB bends it to about 134° (0.7 kcal/mol lower), an error of the semiempirical model, '
+    + 'so "Refine with GFN2-xTB" will show it bent.',
+  link: {
+    label: 'Group 12 dihalides, from gas to solid',
+    href: 'https://doi.org/10.1002/chem.200801035',
+  },
+};
+
 const HEADER = 'JME\n\n\n';
 
 // Tetrahedral methane (sp³, 109.47°)
@@ -316,9 +330,11 @@ const DIBORANE = HEADER + `  8  8  0  0  0  0  0  0  0  0999 V2000
 M  END`;
 
 
-// Zinc chloride, from the geometry in ~/Code/avo_ibo/examples. The
-// demonstration of the s+p exception: the table carries no 3d for zinc and a
-// d¹⁰ shell is core-like, so it runs without d and the panel says so.
+// Zinc chloride, from the geometry in ~/Code/avo_ibo/examples (GFN1-xTB,
+// linear, 2.07 Å — linear as the vapour's molecule is; GFN2 would bend it, see
+// ZNCL2_LINEAR). The demonstration of the s+p exception: the table carries no
+// 3d for zinc and a d¹⁰ shell is core-like, so it runs without d and the panel
+// says so.
 const ZNCL2 = HEADER + `  3  2  0  0  0  0  0  0  0  0999 V2000
     0.0000    0.0000    2.0700 Cl  0  0  0  0  0  0  0  0  0  0  0  0
     0.0000    0.0000    0.0000 Zn  0  0  0  0  0  0  0  0  0  0  0  0
@@ -391,7 +407,7 @@ export const EXAMPLES: Example[] = [
   { name: 'Sulfur hexafluoride (SF₆)', mol: SF6 },
   { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
   { name: 'Diborane (B₂H₆)', mol: DIBORANE },
-  { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2 },
+  { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2, note: ZNCL2_LINEAR },
   { name: 'Tetrachloronickelate(II) ([NiCl₄]²⁻, triplet)', mol: NICL4, multiplicity: 3, note: JAHN_TELLER },
   { name: 'Tetracyanonickelate(II) ([Ni(CN)₄]²⁻, singlet)', mol: NICN4 },
 ];
