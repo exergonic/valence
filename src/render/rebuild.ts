@@ -502,8 +502,8 @@ function redrawScene(ctx: SceneContext) {
   };
   renderAtoms(ctx.moleculeGroup, atoms, ctx.display, ctx.renderer);
   // In space-filling mode, hide bonds
-  if (!ctx.display.spaceFilling) {
-    renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display);
+  if (ctx.display.representation !== 'space-filling') {
+    renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display, ctx.renderer);
   }
   renderHybridOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.atomOrbitals);
 
@@ -568,7 +568,7 @@ function redrawScene(ctx: SceneContext) {
 
   // π system highlighting: a cloud either side of each system's σ framework,
   // its member p lobes tinted to match (pi-systems.ts)
-  if (ctx.display.highlightPiSystems && ctx.atomOrbitals && !ctx.display.spaceFilling) {
+  if (ctx.display.highlightPiSystems && ctx.atomOrbitals && ctx.display.representation !== 'space-filling') {
     const systems = renderPiSystems(ctx.piSystemGroup, ctx.currentMolecule, ctx.atomOrbitals, ctx.display.orbitalPreset);
     tintPiSystemLobes(ctx.orbitalGroup, systems);
     ctx.piSystemGroup.visible = true;

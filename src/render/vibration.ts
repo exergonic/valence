@@ -27,19 +27,25 @@ function startVibration(ctx: SceneContext, mode: NormalMode): void {
   const swing = mode.displacements.map(([x, y, z]) => new THREE.Vector3(x, y, z).multiplyScalar(AMPLITUDE));
 
   const atoms: Array<{ mesh: THREE.Object3D; index: number }> = [];
-  const bonds: Array<{ mesh: THREE.Object3D; a: number; b: number; offset: THREE.Vector3; length: number }> = [];
+  const bonds: Array<{ mesh: THREE.Object3D; a: number; b: number; at: number; offset: THREE.Vector3; length: number }> = [];
   ctx.moleculeGroup.traverse((object) => {
-    const data = object.userData as { lobeType?: string; atomIndex?: number; atom1Index?: number; atom2Index?: number };
+    const data = object.userData as {
+      lobeType?: string; atomIndex?: number; atom1Index?: number; atom2Index?: number; span?: [number, number];
+    };
     if (data.lobeType === 'atom' && data.atomIndex !== undefined) {
       atoms.push({ mesh: object, index: data.atomIndex });
     } else if (data.lobeType === 'bond' && data.atom1Index !== undefined && data.atom2Index !== undefined) {
-      // a double bond's cylinders sit off the axis: keep each one's offset
-      const mid = base[data.atom1Index].clone().add(base[data.atom2Index]).multiplyScalar(0.5);
+      // a mesh covers its stretch of the bond (a stick's half, or all of it),
+      // and a double bond's cylinders sit off the axis: keep each one's offset
+      const [from, to] = data.span ?? [0, 1];
+      const at = (from + to) / 2;
+      const centre = base[data.atom1Index].clone().lerp(base[data.atom2Index], at);
       bonds.push({
         mesh: object,
         a: data.atom1Index,
         b: data.atom2Index,
-        offset: object.position.clone().sub(mid),
+        at,
+        offset: object.position.clone().sub(centre),
         length: base[data.atom1Index].distanceTo(base[data.atom2Index]),
       });
     }
@@ -64,7 +70,7 @@ function startVibration(ctx: SceneContext, mode: NormalMode): void {
       const direction = pb.clone().sub(pa);
       const length = direction.length();
       if (length < 1e-6) continue;
-      bond.mesh.position.copy(pa).add(pb).multiplyScalar(0.5).add(bond.offset);
+      bond.mesh.position.copy(pa).lerp(pb, bond.at).add(bond.offset);
       bond.mesh.quaternion.setFromUnitVectors(UP, direction.divideScalar(length));
       bond.mesh.scale.set(1, length / bond.length, 1);
     }

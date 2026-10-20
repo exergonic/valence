@@ -129,12 +129,15 @@ export function setupControls(ctx: SceneContext): { measure: MeasureTool } {
     ctx.rerender();
   });
 
-  // Space-filling toggle
-  const spaceFillingToggle = document.querySelector<HTMLInputElement>('#ctrl-space-filling')!;
-  spaceFillingToggle.addEventListener('change', () => {
-    ctx.display.spaceFilling = spaceFillingToggle.checked;
-    ctx.rerender();
-  });
+  // Representation: ball and stick, stick, or space-filling
+  const representationButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#ctrl-representation [data-representation]'));
+  for (const button of representationButtons) {
+    button.addEventListener('click', () => {
+      ctx.display.representation = button.dataset.representation as SceneContext['display']['representation'];
+      syncRepresentationControl(ctx);
+      ctx.rerender();
+    });
+  }
 
   // Auto-rotate toggle
   const autoRotateToggle = document.querySelector<HTMLInputElement>('#ctrl-auto-rotate')!;
@@ -470,4 +473,11 @@ export function moleculeToXYZ(mol: { atoms: any[] }): string {
     lines.push(`${a.element}  ${a.x.toFixed(6)}  ${a.y.toFixed(6)}  ${a.z.toFixed(6)}`);
   }
   return lines.join('\n') + '\n';
+}
+
+/** Mark the representation on screen — after a click, or a saved view restored. */
+export function syncRepresentationControl(ctx: SceneContext): void {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('#ctrl-representation [data-representation]')) {
+    button.classList.toggle('active', button.dataset.representation === ctx.display.representation);
+  }
 }

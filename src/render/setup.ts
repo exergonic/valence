@@ -74,7 +74,9 @@ export interface DisplaySettings {
   bgColor: string;
   colors: ColorSettings;
   viewPreset: 'all' | 'sigma-only' | 'pi-only' | 'lone-pairs-only';
-  spaceFilling: boolean;
+  /** How the molecule is drawn: balls on thin bonds, sticks coloured by
+   *  their atoms (rounded joints, no balls), or van der Waals spheres. */
+  representation: 'ball-and-stick' | 'stick' | 'space-filling';
   highlightPiSystems: boolean;
   /** Which MO of the Delocalized ladder on screen (GFN2-xTB's or extended
    *  Hückel's) is drawn over the molecule (null = none) — what clicking a
@@ -414,7 +416,7 @@ export function initScene(container: HTMLElement): SceneContext {
       atomScale: 1, bondScale: 1, labelMode: 'atom', orbitalPreset: 'metallic', atomStyle: 'glossy', bgColor: '#ffffff',
       colors: { scheme: 'element', sigma: [0, 0, 1], pi: [0.58, 0.7, 1], lonePair: [0.1, 0.7, 1] },
       viewPreset: 'all',
-      spaceFilling: false,
+      representation: 'ball-and-stick',
       highlightPiSystems: false,
       moIndex: null,
       orbitalView: 'delocalized',

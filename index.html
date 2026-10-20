@@ -409,10 +409,12 @@
               </div>
             </div>
             <div class="ctrl-section">
-              <label class="ctrl-toggle">
-                <input type="checkbox" id="ctrl-space-filling" />
-                <span>Space-filling (CPK)</span>
-              </label>
+              <span class="ctrl-label">Representation</span>
+              <div id="ctrl-representation" class="preset-row" role="group" aria-label="How the molecule is drawn">
+                <button class="view-preset-btn active" data-representation="ball-and-stick" title="Ball and stick: atoms as balls (0.3 × van der Waals, Avogadro's scale) on thin bonds">Ball &amp; stick</button>
+                <button class="view-preset-btn" data-representation="stick" title="Stick: the bonds alone, each half in its atom's colour, joined at rounded joints — the skeleton with nothing in the way">Stick</button>
+                <button class="view-preset-btn" data-representation="space-filling" title="Space-filling (CPK): each atom its full van der Waals sphere — the molecule's size and shape">Space-filling</button>
+              </div>
               <label class="ctrl-toggle">
                 <input type="checkbox" id="ctrl-auto-rotate" />
                 <span>Auto-rotate</span>

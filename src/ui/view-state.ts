@@ -8,7 +8,7 @@ import type { Bond } from '../mol-parser';
 import { buildScene } from '../render';
 import { asChargeModel } from '../render/setup';
 import type { Annotation } from './annotations';
-import { downloadFile } from './controls';
+import { downloadFile, syncRepresentationControl } from './controls';
 
 export interface ViewState {
   version: 1;
@@ -32,7 +32,9 @@ export interface ViewState {
     bgColor: string;
     colors: { scheme: string; sigma: [number, number, number]; pi: [number, number, number]; lonePair: [number, number, number] };
     viewPreset: string;
-    spaceFilling: boolean;
+    /** Absent in views saved before the stick representation: read spaceFilling. */
+    representation?: string;
+    spaceFilling?: boolean;
     autoRotate: boolean;
     highlightPiSystems: boolean;
   };
@@ -69,7 +71,7 @@ function serializeView(ctx: SceneContext, annotations: Annotation[]): ViewState 
         lonePair: [...ctx.display.colors.lonePair],
       },
       viewPreset: ctx.display.viewPreset,
-      spaceFilling: ctx.display.spaceFilling,
+      representation: ctx.display.representation,
       autoRotate: ctx.autoRotate,
       highlightPiSystems: ctx.display.highlightPiSystems,
     },
@@ -106,7 +108,10 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
     lonePair: [...d.colors.lonePair] as [number, number, number],
   };
   ctx.display.viewPreset = d.viewPreset as any;
-  ctx.display.spaceFilling = d.spaceFilling;
+  ctx.display.representation = d.representation === 'stick' || d.representation === 'space-filling'
+    ? d.representation
+    : d.spaceFilling ? 'space-filling' : 'ball-and-stick';
+  syncRepresentationControl(ctx);
   ctx.setAutoRotate(d.autoRotate);
   ctx.display.highlightPiSystems = d.highlightPiSystems;
 

@@ -1,9 +1,19 @@
 import * as THREE from 'three';
 import type { Atom, Bond } from '../mol-parser';
 import type { DisplaySettings } from './setup';
+import { getElementColor } from './chem-data';
+import { atomEnvMap, atomLayer, makeAtomMaterial } from './atom-styles';
 
 /** Single-bond radius in Å, before bondScale — Avogadro's ball-and-stick default. */
 const BOND_RADIUS = 0.1;
+/** The stick representation's radius in Å, before bondScale: thicker than a
+ *  ball-and-stick bond, since the stick is the whole picture. */
+const STICK_RADIUS = 0.16;
+
+/** A stick's radius — the bonds' and the joints' — with the Bond size slider. */
+export function stickRadius(display?: DisplaySettings): number {
+  return STICK_RADIUS * (display?.bondScale ?? 1);
+}
 
 /** Sub-cylinders for a bond of a given order, as offsets from the bond axis
  *  and radii, both in units of the single-bond radius.  Doubles and triples
@@ -57,9 +67,24 @@ export function bondPerpendicular(atoms: Atom[], bonds: Bond[], bond: Bond, axis
   return new THREE.Vector3().crossVectors(axis, reference).normalize();
 }
 
-export function renderBonds(group: THREE.Group, atoms: Atom[], bonds: Bond[], display?: DisplaySettings) {
+export function renderBonds(
+  group: THREE.Group,
+  atoms: Atom[],
+  bonds: Bond[],
+  display?: DisplaySettings,
+  renderer?: THREE.WebGLRenderer,
+) {
   const scale = display?.bondScale ?? 1;
-  const radius = BOND_RADIUS * scale;
+  const stick = display?.representation === 'stick';
+  const radius = stick ? stickRadius(display) : BOND_RADIUS * scale;
+  // A stick is drawn in the atoms' own material and light rig, half in each
+  // atom's colour, so a joint does not change shade where bond meets atom.
+  const style = display?.atomStyle ?? 'classic';
+  const env = stick && style !== 'classic' && renderer ? atomEnvMap(renderer) : null;
+  const halves = (bond: Bond) => [
+    { span: [0, 0.5] as [number, number], color: getElementColor(atoms[bond.atom1Index].element) },
+    { span: [0.5, 1] as [number, number], color: getElementColor(atoms[bond.atom2Index].element) },
+  ];
   for (const bond of bonds) {
     const a1 = atoms[bond.atom1Index];
     const a2 = atoms[bond.atom2Index];
@@ -67,20 +92,27 @@ export function renderBonds(group: THREE.Group, atoms: Atom[], bonds: Bond[], di
 
     const p1 = new THREE.Vector3(a1.x, a1.y, a1.z);
     const p2 = new THREE.Vector3(a2.x, a2.y, a2.z);
-    const mid = new THREE.Vector3().addVectors(p1, p2).multiplyScalar(0.5);
     const dir = new THREE.Vector3().subVectors(p2, p1);
     const length = dir.length();
     dir.normalize();
 
     const perpendicular = bondPerpendicular(atoms, bonds, bond, dir);
-    const mat = new THREE.MeshPhongMaterial({ color: 0xcccccc });
+    // `span` is the stretch of the bond a mesh covers, as fractions from atom 1
+    // to atom 2: the vibration reads it to move a half-bond with its atoms
+    const pieces = stick
+      ? halves(bond).map(({ span, color }) => ({ span, material: makeAtomMaterial(style, color, env), layer: atomLayer(style) }))
+      : [{ span: [0, 1] as [number, number], material: new THREE.MeshPhongMaterial({ color: 0xcccccc }), layer: 0 }];
     for (const cylinder of bondCylinders(bond.order, radius)) {
-      const geo = new THREE.CylinderGeometry(cylinder.radius, cylinder.radius, length, 8);
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.copy(mid).addScaledVector(perpendicular, cylinder.offset);
-      mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-      mesh.userData = { atom1Index: bond.atom1Index, atom2Index: bond.atom2Index, lobeType: 'bond' };
-      group.add(mesh);
+      for (const { span, material, layer } of pieces) {
+        const geo = new THREE.CylinderGeometry(cylinder.radius, cylinder.radius, length * (span[1] - span[0]), stick ? 16 : 8);
+        const mesh = new THREE.Mesh(geo, material);
+        mesh.layers.set(layer);
+        mesh.position.copy(p1).addScaledVector(dir, length * (span[0] + span[1]) / 2)
+          .addScaledVector(perpendicular, cylinder.offset);
+        mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+        mesh.userData = { atom1Index: bond.atom1Index, atom2Index: bond.atom2Index, lobeType: 'bond', span };
+        group.add(mesh);
+      }
     }
   }
 }

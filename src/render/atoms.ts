@@ -1,21 +1,26 @@
 import * as THREE from 'three';
 import type { Atom } from '../mol-parser';
 import { getElementColor, getVisualRadius, getVdwRadius } from './chem-data';
+import { stickRadius } from './bonds';
 import type { DisplaySettings } from './setup';
 import { atomEnvMap, atomLayer, makeAtomMaterial } from './atom-styles';
 
 export function renderAtoms(group: THREE.Group, atoms: Atom[], display?: DisplaySettings, renderer?: THREE.WebGLRenderer) {
   const scale = display?.atomScale ?? 1;
-  const spaceFilling = display?.spaceFilling ?? false;
+  const representation = display?.representation ?? 'ball-and-stick';
   const style = display?.atomStyle ?? 'classic';
   const env = style === 'classic' || !renderer ? null : atomEnvMap(renderer);
   const layer = atomLayer(style);
   for (let i = 0; i < atoms.length; i++) {
     const atom = atoms[i];
     const color = getElementColor(atom.element);
-    const radius = spaceFilling
+    // a stick's atom is its rounded joint: as wide as the stick, so the
+    // bonds meet in a smooth elbow rather than a ball
+    const radius = representation === 'space-filling'
       ? getVdwRadius(atom.element)
-      : getVisualRadius(atom.element) * scale;
+      : representation === 'stick'
+        ? stickRadius(display)
+        : getVisualRadius(atom.element) * scale;
     const geo = new THREE.SphereGeometry(radius, 48, 48);
     const mat = makeAtomMaterial(style, color, env);
     const mesh = new THREE.Mesh(geo, mat);
