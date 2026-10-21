@@ -186,7 +186,8 @@ export interface LocalizedList {
   donation: number[][] | null;
   /** The share of the electrons the Lewis orbitals hold, 0–1; null for Pipek–Mezey. */
   lewisShare: number | null;
-  /** How many d Rydberg orbitals the Lewis set holds and does not list. */
+  /** How many Rydberg orbitals (d; an alkali metal's p) the Lewis set holds
+   *  and does not list. */
   rydbergs: number;
   /** Why the drawn structure could not be made into Lewis orbitals, or null.
    *  On a Pipek–Mezey list: it is standing in for the Lewis one, and why. */

@@ -29,6 +29,12 @@
  *  5. What an atom has left over is empty: an empty valence orbital (boron's
  *     p in BF₃, NBO's LP*) or, mostly d, a Rydberg-like polarization function.
  *
+ * A bond drawn to an alkali metal is ionic, as in the VSEPR picture
+ * (assign-orbitals.ts, ionicContacts): the metal's electron goes to the atom
+ * it touches, which takes it as one more lone pair, and the metal keeps only
+ * empty orbitals — NaOH is Na⁺ and ⁻OH, and the hydroxide's lone pairs donate
+ * into the Na⁺'s empty 3s, the covalent part of an ionic bond.
+ *
  * The set spans the basis and is orthonormal by construction. GFN2's Fock
  * matrix taken into it has a diagonal (each orbital's energy) and couplings,
  * and the coupling between a filled Lewis orbital i and an empty one j gives
@@ -42,7 +48,8 @@
  */
 import type { Molecule } from '../../mol-parser';
 import { jacobiSymmetric } from '../../utils/eigen';
-import { isDBlock, showsOnlyValenceS } from '../elements';
+import { isAlkaliMetal, isDBlock, showsOnlyValenceS } from '../elements';
+import { ionicContacts } from '../vsepr/assign-orbitals';
 import { VALENCE_ELECTRONS } from '../valence-electrons';
 import { atomicPopulations } from './mulliken-populations';
 import type { OrbitalSpace } from './localize-pm';
@@ -51,7 +58,8 @@ import type { LocalizedCharacter, LocalizedOrbital } from './order-localized';
 export interface LewisOrbitals {
   /** The filled Lewis orbitals (lone pairs and bonds), ascending ⟨φ|F|φ⟩,
    *  then the empty ones (antibonds, empty valence orbitals), ascending. The
-   *  d Rydbergs are left out: they take part in the set, not in the list. */
+   *  Rydbergs (d; an alkali metal's p) are left out: they take part in the
+   *  set, not in the list. */
   orbitals: LocalizedOrbital[];
   /** ⟨φᵢ|F|φⱼ⟩ in eV between the orbitals above, in their order. */
   couplings: number[][];
@@ -61,7 +69,7 @@ export interface LewisOrbitals {
   /** The share of the electrons the Lewis orbitals hold, 0–1. The rest is
    *  delocalization: what E(2) accounts for. */
   lewisShare: number;
-  /** How many d-type Rydberg orbitals were left out of the list. */
+  /** How many Rydberg orbitals were left out of the list. */
   rydbergs: number;
 }
 
@@ -78,13 +86,23 @@ const refuse = (refusal: string): LewisResult => ({ refusal });
  * molecule's drawn bonds, bond orders and formal charges.
  */
 export function lewisOrbitals(molecule: Molecule, space: OrbitalSpace): LewisResult {
-  const { atoms, bonds } = molecule;
+  const { atoms } = molecule;
   const { basis, overlap, hamiltonian } = space;
   const n = basis.length;
   const name = (atom: number) => `${atoms[atom].element}${atom + 1}`;
 
   // ── the drawn Lewis structure: bonds and orders as drawn, lone pairs from
-  //    the electrons left over on each atom
+  //    the electrons left over on each atom. A bond to an alkali metal is no
+  //    shared pair: the metal's electron is counted on its partner instead.
+  const cations = ionicContacts(molecule);
+  const alkali = (atom: number) => isAlkaliMetal(atoms[atom].element);
+  const bonds = molecule.bonds.filter((b) => !alkali(b.atom1Index) && !alkali(b.atom2Index));
+  const contactsOf = (atom: number) => molecule.bonds.filter((b) => b.atom1Index === atom || b.atom2Index === atom).length;
+  for (let a = 0; a < atoms.length; a++) {
+    if (alkali(a) && contactsOf(a) > 1) {
+      return refuse(`${name(a)} is drawn bonded to ${contactsOf(a)} atoms, and its one electron can go to only one of them`);
+    }
+  }
   const bondOrderSum = new Array<number>(atoms.length).fill(0);
   for (const bond of bonds) {
     if (bond.order < 1 || bond.order > 3) {
@@ -96,12 +114,13 @@ export function lewisOrbitals(molecule: Molecule, space: OrbitalSpace): LewisRes
   const lonePairs: number[] = [];
   for (let a = 0; a < atoms.length; a++) {
     const element = atoms[a].element;
-    if (isDBlock(element) || showsOnlyValenceS(element)) {
+    if (isDBlock(element) || (showsOnlyValenceS(element) && !isAlkaliMetal(element))) {
       return refuse(`${name(a)} is a metal, and a drawn Lewis structure does not describe its bonding`);
     }
     const valence = VALENCE_ELECTRONS[element];
     if (valence === undefined) return refuse(`there is no valence-electron count for ${element}`);
-    const electrons = valence - (atoms[a].charge ?? 0);
+    // an alkali metal gives its electron away; its partner takes it
+    const electrons = valence - (atoms[a].charge ?? 0) - (alkali(a) ? contactsOf(a) : 0) + cations[a].length;
     const left = electrons - bondOrderSum[a];
     if (left < 0) {
       return refuse(`${name(a)} is drawn with ${bondOrderSum[a]} bonds and has ${electrons} valence electrons to make `
@@ -189,6 +208,19 @@ export function lewisOrbitals(molecule: Molecule, space: OrbitalSpace): LewisRes
 
   // ── 5. each atom's leftover orbitals, made definite by its Fock block
   for (let a = 0; a < atoms.length; a++) {
+    // An alkali cation keeps its own orbitals as they are: in NBO's natural
+    // minimal basis its valence shell is the ns alone, so Na⁺'s 3s is its one
+    // empty valence orbital and its 3p are Rydbergs. Mixed by the Fock block
+    // they would come out sp hybrids toward the anion, half valence and half not.
+    if (alkali(a)) {
+      for (const mu of onAtom[a]) {
+        const vector = new Array<number>(n).fill(0);
+        vector[mu] = 1;
+        const rydberg = basis[mu].angular !== 's';
+        built.push({ vector, character: rydberg ? 'virtual' : 'lone vacancy', atoms: [a], lewis: false, rydberg });
+      }
+      continue;
+    }
     const taken = [
       ...lonePairVectors.filter((lp) => lp.atom === a).map((lp) => lp.vector),
       ...hybrids[a].map((h) => h.vector),

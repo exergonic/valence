@@ -71,9 +71,8 @@ const NBO_LINK = {
 
 /** The Lewis-structure list's note: what the orbitals are, and how to read
  *  E(2), including what it cannot be trusted for. */
-function lewisNote(list: LocalizedList, molecule: Molecule) {
+function lewisNote(list: LocalizedList) {
   const share = ((list.lewisShare ?? 0) * 100).toFixed(1);
-  const carriers = [...new Set(molecule.atoms.map((a) => a.element).filter((e) => e !== 'H'))];
   return {
     text: 'The Lewis structure you drew, made into orbitals the NBO way from the GFN2-xTB density (semiempirical): '
       + 'each lone pair from its own atom, each bond from its two atoms, each antibond its bond’s out-of-phase partner. '
@@ -87,7 +86,8 @@ function lewisNote(list: LocalizedList, molecule: Molecule) {
       + 'resonance, and GFN2’s empty orbitals sit low, so compare the numbers with each other rather than with NBO’s. '
       + 'Draw another resonance structure to see its Lewis orbitals.'
       + (list.rydbergs > 0
-        ? ` The ${list.rydbergs} orbitals left over on ${carriers.join(', ')}, mostly d, complete the set but are not listed.`
+        ? ` ${list.rydbergs} Rydberg-like orbitals — beyond the atoms’ valence shells: d, and an alkali metal’s p — `
+          + 'complete the set but are not listed.'
         : ''),
     link: NBO_LINK,
   };
@@ -599,7 +599,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     }
     writeNote(note, shown.refusal
       ? { text: `No Lewis-structure orbitals: ${shown.refusal}. These are Pipek–Mezey’s localized orbitals instead.`, link: NBO_LINK }
-      : shown.method === 'lewis' ? lewisNote(shown, molecule) : pipekMezeyNote(shown));
+      : shown.method === 'lewis' ? lewisNote(shown) : pipekMezeyNote(shown));
   }
 
   /**

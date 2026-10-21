@@ -15,9 +15,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import type { Atom, Molecule } from '../src/mol-parser';
 import { gfn2Ladders, gfn2OrbitalSpace } from '../src/chem/gfn2-xtb/orbital-ladder';
 import { lewisOrbitals, rankDonations, type LewisOrbitals } from '../src/chem/localized-orbitals/lewis-orbitals';
+import { localizeOrbitals } from '../src/chem/localized-orbitals/localize-pm';
+import { orderLocalizedOrbitals } from '../src/chem/localized-orbitals/order-localized';
 import type { LocalizedOrbital } from '../src/chem/localized-orbitals/order-localized';
 import { jacobiSymmetric } from '../src/utils/eigen';
 import { localGeometry, optimisedExample } from './helpers/local-geometry';
+import { embed3D } from '../src/geometry/embed';
 
 beforeAll(() => {
   const globals = globalThis as unknown as Record<string, unknown>;
@@ -185,5 +188,54 @@ describe('what a drawn Lewis structure cannot describe is refused, with the reas
   it('a transition metal: its bonding is beyond a Lewis structure', async () => {
     const { result } = await built(await optimisedExample('Tetracyanonickelate'));
     expect('refusal' in result && result.refusal).toMatch(/metal/);
+  });
+});
+
+/** NaOH as GFN2 has it: the Fortran xtb oracle's minimum (lenovo ~/naoh,
+ *  `--ohess vtight`, 2026-10-20), as Valence's own run. */
+const NAOH: Molecule = {
+  atoms: [
+    { element: 'Na', x: 0.2131748, y: 0.0226167, z: -0.0954598 },
+    { element: 'O', x: 1.9959748, y: 0.0100149, z: 0.2257780 },
+    { element: 'H', x: 2.7720367, y: -0.0002562, z: 0.7811393 },
+  ],
+  bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }, { atom1Index: 1, atom2Index: 2, order: 1 }],
+};
+
+describe('an alkali metal: the drawn Na–O bond is ionic (2026-10-21)', () => {
+  it('NaOH is Na⁺ and ⁻OH: the O–H σ and three O lone pairs; Na keeps its empty 3s', async () => {
+    const set = await lewis(NAOH);
+    const filled = set.orbitals.filter((o) => o.occupied);
+    expect(filled.map((o) => o.character).sort()).toEqual(['lone pair', 'lone pair', 'lone pair', 'sigma']);
+    expect(filled.every((o) => !o.atoms.includes(0))).toBe(true);
+    const sodium = set.orbitals.filter((o) => !o.occupied && o.atoms.includes(0));
+    expect(sodium.map((o) => o.character)).toEqual(['lone vacancy']);
+    // the 3p are Rydbergs in NBO's minimal basis for Na, left out of the list
+    expect(set.rydbergs).toBe(3);
+  });
+
+  it('the hydroxide lone pairs donate into the Na⁺ 3s: the covalent part of the ionic bond', async () => {
+    const set = await lewis(NAOH);
+    const [top] = rankDonations(set.orbitals, set.donation, 0.5 / KCAL);
+    expect(set.orbitals[top.donor].character).toBe('lone pair');
+    expect(set.orbitals[top.acceptor].character).toBe('lone vacancy');
+    expect(set.orbitals[top.acceptor].atoms).toEqual([0]);
+    expect(top.e2 * KCAL).toBeGreaterThan(10);
+  });
+
+  it("Pipek–Mezey names Na's empty orbitals its own, LP*, not σ*/π* toward the O", async () => {
+    const { space } = await built(NAOH);
+    const sets = localizeOrbitals(space, NAOH.atoms.map((atom) => atom.element))!;
+    const empties = orderLocalizedOrbitals(NAOH, space, sets).filter((o) => !o.occupied && o.atoms[0] === 0);
+    expect(empties).toHaveLength(4);
+    for (const o of empties) expect(o.character).toBe('lone vacancy');
+  });
+
+  it('an alkali metal drawn bonded to two atoms is refused: its one electron cannot go to both', async () => {
+    // drawn H–Na–O, the H and O each bonded to the Na: the count refuses it
+    // before the geometry matters, so the builder's start will do
+    const bridged = embed3D(sketch(['H', 'Na', 'O'], [[0, 1, 1], [1, 2, 1]])).separated;
+    const { result } = await built(bridged);
+    expect('refusal' in result && result.refusal).toMatch(/one electron/);
   });
 });

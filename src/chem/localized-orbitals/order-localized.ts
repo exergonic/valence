@@ -66,7 +66,7 @@ export type LocalizedCharacter =
   | 'sigma antibond' | 'pi antibond' | 'delta antibond'
   | 'antibond'       // avo_ibo: anti*  — an empty two-centre orbital past the gate
   | 'virtual'        // avo_ibo: (virt) / Virt
-  | 'lone vacancy';  // NBO: LP*        — an empty valence orbital on one atom (BF₃'s boron p); Lewis-structure orbitals only
+  | 'lone vacancy';  // NBO: LP*        — an empty valence orbital on one atom (BF₃'s boron p, Na⁺'s 3s)
 
 export interface LocalizedOrbital {
   /** Coefficients per AO, in the calculation frame and the solver's basis
@@ -353,6 +353,11 @@ function classify(
     return 'delocalized';
   }
 
+  // Our addition, the filled side's first test: an empty orbital this much on
+  // one atom is that atom's — NaOH's Na⁺ keeps its empty 3s and 3p at 0.91–1.00
+  // on the Na, and the two-centre test below took a 0.03 tail on the O for a
+  // second centre and named them σ* and π* (reported 2026-10-21)
+  if (first.total > LP_SHARE) return 'lone vacancy';
   if (second && twoCentre(BOND_SHARE)) {
     const kind = twoCentreType(first, second, elements, coefficients, basis, frameAtoms);
     return kind === 'pi' ? 'pi antibond' : kind === 'delta' ? 'delta antibond' : 'sigma antibond';
