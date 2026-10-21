@@ -5,7 +5,6 @@ import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
 import { writeNote, type InfoNote } from './info-note';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
-import { chargeSeparateNitrogen } from '../chem/charge-separate-nitrogen';
 import { chargedXAtoms, parseChargedLabel } from './charged-x-atoms';
 import { isMetal, lowestMultiplicity, spinName } from '../chem/elements';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
@@ -371,9 +370,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       const smiles = kekulizeSmiles(applet.smiles());
       const molBlock = applet.molFile();
       const t1 = performance.now();
-      // JSME draws nitro (nitrate, N-oxides) with five bonds to N; the build
-      // reads the charge-separated Lewis structure (charge-separate-nitrogen.ts)
-      let molecule = chargeSeparateNitrogen(withXAtomCharges(parseMolBlock(molBlock), applet.molFile(true)));
+      let molecule = withXAtomCharges(parseMolBlock(molBlock), applet.molFile(true));
       // A GFN2 optimisation hands back its own charges and vibrations with the
       // geometry; a fetched structure has neither.
       let gfn2Charges: number[] | null = null;

@@ -411,6 +411,13 @@ async function sketcherRefusedCharges(b: Browser) {
   check('one click turns JSME\'s I₃⁺ into I₃⁻', i3 === 'I[I-]I', i3);
   const sif6 = await chargeAtom('F[Si](F)(F)(F)(F)F', 'Si2+');
   check('one click turns JSME\'s SiF₆²⁺ into SiF₆²⁻', sif6 === 'F[Si-2](F)(F)(F)(F)F', sif6);
+
+  // JSME's polarnitro option (index.html): nitro written five-bonded comes out
+  // N⁺–O⁻, with its charges on the MOL block the build reads
+  await b.run(`window.jsmeApplet.readGenericMolecularInput('c1ccccc1N(=O)=O');`);
+  const nitro: string = await b.run(`return window.jsmeApplet.smiles();`);
+  const charges: string = await b.run(`return window.jsmeApplet.molFile().split('\\n').filter((l) => l.startsWith('M  CHG')).length;`);
+  check('JSME keeps nitro charge-separated, N⁺–O⁻', nitro === 'O=[N+]([O-])c1ccccc1' && Number(charges) === 2, `${nitro}, ${charges} charge line(s)`);
 }
 
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */

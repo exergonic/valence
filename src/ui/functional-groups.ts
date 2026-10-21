@@ -6,10 +6,10 @@
  * click on an atom bonds the group to it. The codes were read off JSME's
  * tooltip table and each checked by attaching it to methanol's O
  * (2026-10-20). JSME's `setTemplate`, which would take any SMILES, attached
- * nothing on click, so the list is JSME's. Two gaps: JSME draws nitro with
- * five bonds to N (the build makes it N⁺–O⁻, charge-separate-nitrogen.ts),
- * and it has no phenyl substituent — its benzene tool on an atom builds the
- * ring through that atom.
+ * nothing on click, so the list is JSME's. NO₂ comes in charge-separated,
+ * N⁺–O⁻, under JSME's polarnitro option (index.html). One gap: it has no
+ * phenyl substituent — its benzene tool on an atom builds the ring through
+ * that atom.
  */
 
 export interface FunctionalGroup {

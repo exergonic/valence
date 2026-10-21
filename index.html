@@ -536,7 +536,10 @@
         });
       })();
       function jsmeOnLoad() {
-        window.jsmeApplet = new JSApplet.JSME("jsme-stage", "100%", "100%", {"options": "newlook", "guicolor": "#f3f4f6"});
+        // polarnitro: JSME writes every five-bonded N as its charge-separated
+        // Lewis structure — nitro, nitrate, N-oxides, azide — read or drawn;
+        // by default it rewrote even [N+](=O)[O-] into N(=O)=O (NOTES.md)
+        window.jsmeApplet = new JSApplet.JSME("jsme-stage", "100%", "100%", {"options": "newlook,polarnitro", "guicolor": "#f3f4f6"});
         // JSME's own menus are clipped out of view and driven by our toolbar
         // (src/ui/sketcher-toolbar.ts), which mapped them at this scale and options
         window.jsmeApplet.setMenuScale(1);
