@@ -66,7 +66,7 @@ export type LocalizedCharacter =
   | 'sigma antibond' | 'pi antibond' | 'delta antibond'
   | 'antibond'       // avo_ibo: anti*  — an empty two-centre orbital past the gate
   | 'virtual'        // avo_ibo: (virt) / Virt
-  | 'lone vacancy';  // NBO: LP*        — an empty valence orbital on one atom (BF₃'s boron p, Na⁺'s 3s)
+  | 'lone vacancy';  // NBO: LV         — an empty valence orbital on one atom (BF₃'s boron p, Na⁺'s 3s)
 
 export interface LocalizedOrbital {
   /** Coefficients per AO, in the calculation frame and the solver's basis

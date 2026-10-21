@@ -40,6 +40,24 @@ export function aoWeights(coefficients: number[], overlap: number[][]): number[]
   return coefficients.map((c, m) => c * sc[m]);
 }
 
+/**
+ * n_A(φ) split by angular type, for every atom: how much of the orbital is
+ * the atom's s, its p and its d. The ratio is the hybrid an atom puts into
+ * the orbital, NBO's spᵡ with λ = p/s (a carbonyl C's σ toward O is near sp²);
+ * the parts sum to n_A(φ).
+ */
+export function shellPopulations(
+  coefficients: number[],
+  overlap: number[][],
+  basis: BasisFunction[],
+  atomCount: number,
+): Array<{ s: number; p: number; d: number }> {
+  const n = Array.from({ length: atomCount }, () => ({ s: 0, p: 0, d: 0 }));
+  const weights = aoWeights(coefficients, overlap);
+  for (let m = 0; m < basis.length; m++) n[basis[m].atomIndex][basis[m].angular] += weights[m];
+  return n;
+}
+
 /** n_A(φ) for every atom, in atom order. Sums to 1 for a normalized orbital. */
 export function atomicPopulations(
   coefficients: number[],

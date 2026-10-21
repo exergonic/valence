@@ -196,6 +196,23 @@ export interface LocalizedList {
   from: unknown;
 }
 
+/** What an orbital surface on screen is, for the hover tooltip (ui/tooltip.ts):
+ *  a localized orbital by its place in its list, or a canonical MO with what
+ *  the ladder says of it. Set on the meshes when they are drawn. */
+export type OrbitalTag =
+  | { kind: 'localized'; list: LocalizedList; index: number; overlap: number[][] }
+  | {
+    kind: 'canonical';
+    /** 1-based, as the ladder numbers it */
+    number: number;
+    energy: number;
+    label: string | null;
+    frontier: 'HOMO' | 'LUMO' | null;
+    coefficients: number[];
+    basis: BasisFunction[];
+    overlap: number[][];
+  };
+
 export interface SceneContext {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;

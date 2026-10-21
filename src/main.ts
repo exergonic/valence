@@ -232,11 +232,7 @@ async function main() {
   setupTheme(ctx);
   setupSplitter();
   setupExamples(ctx);
-  setupTooltip(
-    document.getElementById('canvas-container')!,
-    ctx.camera,
-    ctx.orbitalGroup,
-  );
+  setupTooltip(ctx, document.getElementById('canvas-container')!);
   setupContextMenu(ctx, document.getElementById('canvas-container')!);
   setupSketcherToolbar();
   const moPanel = setupMoPanel(ctx);

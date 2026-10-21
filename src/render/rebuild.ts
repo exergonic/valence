@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { activeIsoValue, isGfn2ChargeModel, type ChargeModel, type LocalizedList, type SceneContext } from './setup';
+import { activeIsoValue, isGfn2ChargeModel, type ChargeModel, type LocalizedList, type OrbitalTag, type SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
@@ -32,6 +32,7 @@ import { fockCouplings } from '../chem/localized-orbitals/fock-couplings';
 import { lewisOrbitals } from '../chem/localized-orbitals/lewis-orbitals';
 import { presentingFrame } from './view-orientation';
 import type { Molecule } from '../mol-parser';
+import type { BasisFunction } from '../chem/extended-huckel/assign-basis';
 import { resolveCharges } from '../chem/charge-model/bci-charges';
 import { labelPaletteFor } from './label-colors';
 
@@ -312,6 +313,32 @@ interface Gfn2Pick {
   /** The atoms it has a share on: the box its field is built in. */
   atoms: number[];
   phase: [number, number];
+  tag: OrbitalTag;
+}
+
+/** The hover tooltip's tag for a localized orbital. */
+function localizedTag(list: LocalizedList, index: number): OrbitalTag {
+  return { kind: 'localized', list, index, overlap: (list.from as { overlap: number[][] }).overlap };
+}
+
+/** The hover tooltip's tag for a canonical MO: its number, energy and irrep,
+ *  and HOMO or LUMO for a closed shell, `homo` being the HOMO's index. */
+function canonicalTag(
+  from: { basis: BasisFunction[]; overlap: number[][]; energies: number[]; coefficients: number[][] },
+  index: number,
+  label: string | null,
+  homo: number | null,
+): OrbitalTag {
+  return {
+    kind: 'canonical',
+    number: index + 1,
+    energy: from.energies[index],
+    label,
+    frontier: homo === null ? null : index === homo ? 'HOMO' : index === homo + 1 ? 'LUMO' : null,
+    coefficients: from.coefficients[index],
+    basis: from.basis,
+    overlap: from.overlap,
+  };
 }
 
 /**
@@ -327,7 +354,7 @@ function drawGfn2Orbitals(ctx: SceneContext, properties: Gfn2Properties, picks: 
     const key = `gfn2:${properties.key}:${pick.orbital}@${mode === 'percentile' ? 'p' : 'a'}${value}`;
     const surface = ctx.moSurfaces.get(key);
     if (surface) {
-      renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase);
+      renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase, pick.tag);
       continue;
     }
     if (ctx.gfn2SurfaceRequests.has(key)) continue;
@@ -360,17 +387,22 @@ function drawSelectedGfn2Orbitals(ctx: SceneContext, localized: LocalizedList | 
         coefficients: orbital.coefficients,
         atoms: atomsHolding(orbital.populations),
         phase: MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length],
+        tag: localizedTag(localized, index),
       });
     });
   } else {
     const index = ctx.display.moIndex;
     const ladder = gfn2LadderOnScreen(ctx);
     if (index !== null && ladder?.coefficients[index]) {
+      // a closed shell's HOMO is its last filled level; an open shell has none settled
+      let homo: number | null = null;
+      if (!ladder.spin) ladder.occupations.forEach((n, k) => { if (n > 0) homo = k; });
       picks.push({
         orbital: `${ladder.spin ?? 'alpha'}:${index}`,
         coefficients: ladder.coefficients[index],
         atoms: atomsHolding(ladder.atomShares[index]),
         phase: MO_PHASE_PAIRS[0],
+        tag: canonicalTag(ladder, index, ladder.labels[index], homo),
       });
     }
   }
@@ -641,7 +673,7 @@ function redrawScene(ctx: SceneContext) {
   }
 
   // extended Hückel's: computed on the main thread, cached by field and level
-  const picks: Array<{ key: string; coefficients: number[]; phase: [number, number] }> = [];
+  const picks: Array<{ key: string; coefficients: number[]; phase: [number, number]; tag: OrbitalTag }> = [];
   if (ctx.display.orbitalView === 'localized' && localized?.orbitals) {
     ctx.display.localizedSelection.forEach((index, slot) => {
       const orbital = localized.orbitals![index];
@@ -650,12 +682,21 @@ function redrawScene(ctx: SceneContext) {
         key: `${localized.method}:${index}`,
         coefficients: orbital.coefficients,
         phase: MO_PHASE_PAIRS[slot % MO_PHASE_PAIRS.length],
+        tag: localizedTag(localized, index),
       });
     });
   } else if (ctx.display.moIndex !== null && ctx.ehResult) {
     const index = ctx.display.moIndex;
     if (ctx.ehResult.coefficients[index]) {
-      picks.push({ key: `mo:${index}`, coefficients: ctx.ehResult.coefficients[index], phase: MO_PHASE_PAIRS[0] });
+      // extended Hückel fills its levels in pairs from the bottom
+      const electrons = ctx.ehResult.electronCount;
+      const homo = electrons % 2 === 0 && electrons > 0 ? electrons / 2 - 1 : null;
+      picks.push({
+        key: `mo:${index}`,
+        coefficients: ctx.ehResult.coefficients[index],
+        phase: MO_PHASE_PAIRS[0],
+        tag: canonicalTag(ctx.ehResult, index, null, homo),
+      });
     }
   }
 
@@ -686,12 +727,14 @@ function redrawScene(ctx: SceneContext) {
           surface = marchMoField(grid, level);
           ctx.moSurfaces.set(meshKey, surface);
         }
-        renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase);
+        renderMoIsosurface(ctx.moGroup, surface, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase, pick.tag);
       }
     } else {
       // the atomic orbitals themselves: which AO, which phase, how much
       for (const pick of picks) {
+        const drawn = ctx.moGroup.children.length;
         renderMoOrbitals(ctx.moGroup, ctx.currentMolecule, ctx.ehResult.basis, [pick.coefficients], 0, ctx.ehResult.frame, ctx.display.orbitalPreset, ctx.display.moOpacity, pick.phase);
+        for (const lobe of ctx.moGroup.children.slice(drawn)) lobe.userData = { ...lobe.userData, orbital: pick.tag };
       }
     }
     ctx.moGroup.visible = true;

@@ -130,7 +130,9 @@ const CHARACTER_LABEL: Record<LocalizedCharacter, string> = {
   'delta antibond': 'δ*',
   antibond: 'anti*',
   virtual: 'virt',
-  'lone vacancy': 'LP*',
+  // NBO's lone vacancy: LV since NBO 6 (NBO 3.1 and 5 printed LP*, which reads
+  // as a lone-pair antibond to anyone who has not met it — asked 2026-10-21)
+  'lone vacancy': 'LV',
 };
 /** How many coefficients the composition line lists. */
 const TOP_CONTRIBUTORS = 6;
@@ -1023,7 +1025,7 @@ function compositionText(basis: Array<{ label: string }>, coefficients: number[]
  * orbital is just `Deloc` — their table gives it no composition prefix. A
  * virtual that still lives on one atom reads `Cl4(virt)`.
  */
-function localizedType(molecule: Molecule, orbital: LocalizedOrbital): string {
+export function localizedType(molecule: Molecule, orbital: LocalizedOrbital): string {
   const name = (atom: number) => `${molecule.atoms[atom].element}${atom + 1}`;
   const joined = (atoms: number[]) => atoms.map(name).join('-');
   const kind = CHARACTER_LABEL[orbital.character];

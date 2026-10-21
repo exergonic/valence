@@ -51,6 +51,7 @@ export function renderEsp(group: THREE.Group, surface: EspSurfaceData, opacity: 
     opacity: Math.max(0.05, Math.min(0.95, opacity)),
     depthWrite: false,
   }));
-  front.userData = { lobeType: 'esp' };
+  // the hover tooltip reads the potential off the face under the pointer
+  front.userData = { lobeType: 'esp', potentials: surface.potentials };
   group.add(front);
 }

@@ -21,6 +21,7 @@
 import * as THREE from 'three';
 import type { MoSurfaceData } from '../chem/extended-huckel/mo-surface';
 import { MO_PHASE_PAIRS } from './mo-lobes';
+import type { OrbitalTag } from './setup';
 
 export function renderMoIsosurface(
   group: THREE.Group,
@@ -28,8 +29,12 @@ export function renderMoIsosurface(
   preset: 'glass' | 'glossy' | 'matte' | 'metallic' = 'glass',
   opacity = 0.85,
   phase: [number, number] = MO_PHASE_PAIRS[0],
+  tag: OrbitalTag | null = null,
 ): void {
   if (surface.vertexCount === 0) return;
+  // what the hover tooltip reads off the visible mesh: the orbital, and the
+  // sign of ψ at each vertex
+  const userData = tag ? { lobeType: 'orbital', orbital: tag, phases: surface.phases } : {};
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(surface.positions, 3));
@@ -71,13 +76,15 @@ export function renderMoIsosurface(
 
   if (alpha >= 1) {
     // fully opaque: one pass, no blending, no need for the far-side depth
-    group.add(new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
+    const opaque = new THREE.Mesh(geo, new THREE.MeshPhongMaterial({
       vertexColors: true,
       side: THREE.DoubleSide,
       depthWrite: true,
       shininess,
       specular,
-    })));
+    }));
+    opaque.userData = userData;
+    group.add(opaque);
     return;
   }
 
@@ -97,5 +104,6 @@ export function renderMoIsosurface(
     shininess,
     specular,
   }));
+  front.userData = userData;
   group.add(front);
 }

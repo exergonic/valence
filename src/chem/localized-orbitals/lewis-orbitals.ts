@@ -27,7 +27,7 @@
  *     pair, the occupancy-maximizing combination the bond and the other one its
  *     antibond.
  *  5. What an atom has left over is empty: an empty valence orbital (boron's
- *     p in BF₃, NBO's LP*) or, mostly d, a Rydberg-like polarization function.
+ *     p in BF₃, NBO's lone vacancy, LV) or, mostly d, a Rydberg-like polarization function.
  *
  * A bond drawn to an alkali metal is ionic, as in the VSEPR picture
  * (assign-orbitals.ts, ionicContacts): the metal's electron goes to the atom

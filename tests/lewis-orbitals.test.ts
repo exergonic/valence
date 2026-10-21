@@ -113,7 +113,7 @@ describe('E(2): the donations the textbook draws', () => {
     expect(set.orbitals[nitrogenLonePair].occupancy!).toBeLessThan(1.85);
   });
 
-  it('BF₃: each fluorine lone pair donates into boron’s empty p (LP*)', async () => {
+  it('BF₃: each fluorine lone pair donates into boron’s empty p (LV)', async () => {
     const molecule = await fromSketch(['B', 'F', 'F', 'F'], [[0, 1, 1], [0, 2, 1], [0, 3, 1]]);
     const set = await lewis(molecule);
     const vacancy = set.orbitals.findIndex((o) => o.character === 'lone vacancy');
@@ -223,7 +223,7 @@ describe('an alkali metal: the drawn Na–O bond is ionic (2026-10-21)', () => {
     expect(top.e2 * KCAL).toBeGreaterThan(10);
   });
 
-  it("Pipek–Mezey names Na's empty orbitals its own, LP*, not σ*/π* toward the O", async () => {
+  it("Pipek–Mezey names Na's empty orbitals its own, LV, not σ*/π* toward the O", async () => {
     const { space } = await built(NAOH);
     const sets = localizeOrbitals(space, NAOH.atoms.map((atom) => atom.element))!;
     const empties = orderLocalizedOrbitals(NAOH, space, sets).filter((o) => !o.occupied && o.atoms[0] === 0);
