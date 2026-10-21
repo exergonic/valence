@@ -7,7 +7,7 @@
 import type { Molecule } from '../../mol-parser';
 import { assignHybridization } from './hybridize';
 import { VALENCE_ELECTRONS } from '../valence-electrons';
-import { showsOnlyValenceS, valenceSOrbital } from '../elements';
+import { isAlkaliMetal, showsOnlyValenceS, valenceSOrbital } from '../elements';
 import { computePiDirection, getPiDirectionFromNeighbor, perpendicularToAllBonds } from './orient-pi';
 import { vecDot, crossProduct } from '../../utils/vec3';
 import * as THREE from 'three';
@@ -56,22 +56,48 @@ export function isVseprElement(element: string): boolean {
  * domain: when the metal is also bonded to one of the atom's own neighbours
  * (a cyclopentadienyl ring, an η² alkene), the atom shares the metal with its
  * ring rather than donating a pair, and counting it made every ferrocene
- * carbon read sp³. The metal itself has no neighbours here: the model does
+ * carbon read sp³. Nor is a bond to an alkali metal: that contact is ionic
+ * (ionicContacts). The metal itself has no neighbours here: the model does
  * not describe it.
  */
 export function sigmaNeighbors(molecule: Molecule): number[][] {
-  const { atoms, bonds } = molecule;
-  const bonded: number[][] = atoms.map(() => []);
-  for (const b of bonds) {
-    bonded[b.atom1Index].push(b.atom2Index);
-    bonded[b.atom2Index].push(b.atom1Index);
-  }
+  const { atoms } = molecule;
+  const bonded = bondedAtoms(molecule);
   const described = (i: number) => isVseprElement(atoms[i].element);
   return bonded.map((list, i) => {
     if (!described(i)) return [];
     return list.filter((j) => described(j)
-      || !list.some((k) => k !== j && bonded[j].includes(k)));
+      || (!isAlkaliMetal(atoms[j].element) && !list.some((k) => k !== j && bonded[j].includes(k))));
   });
+}
+
+function bondedAtoms(molecule: Molecule): number[][] {
+  const bonded: number[][] = molecule.atoms.map(() => []);
+  for (const b of molecule.bonds) {
+    bonded[b.atom1Index].push(b.atom2Index);
+    bonded[b.atom2Index].push(b.atom1Index);
+  }
+  return bonded;
+}
+
+/**
+ * Each atom's ionic contacts: the alkali metals bonded to it that gave it
+ * their electron. A bond drawn to Li, Na or K is not a shared pair: the metal
+ * gives its one valence electron to the atom it touches, so Na–O–H is Na⁺
+ * and ⁻OH — the O has three lone pairs and one bond, and the Na⁺ sits in the
+ * hollow between the lone pairs (asked for 2026-10-20: counted as a covalent
+ * bond, the O read AX₂E₂ like water and its lone pairs pointed the wrong way).
+ * The atom is counted one charge more negative for each. An alkali metal
+ * drawn bonded to several atoms gives its electron to none of them — it
+ * cannot go to all.
+ */
+export function ionicContacts(molecule: Molecule): number[][] {
+  const bonded = bondedAtoms(molecule);
+  const contacts: number[][] = molecule.atoms.map(() => []);
+  molecule.atoms.forEach((atom, i) => {
+    if (isAlkaliMetal(atom.element) && bonded[i].length === 1) contacts[bonded[i][0]].push(i);
+  });
+  return contacts;
 }
 
 /**
@@ -127,10 +153,12 @@ const STERIC_NUMBER: Record<string, number> = { s: 1, sp: 2, sp2: 3, sp3: 4, sp3
 export function electronDomainCounts(molecule: Molecule): number[] {
   const neighborsOf = sigmaNeighbors(molecule);
   const piBondsPerAtom = piBondCounts(molecule);
+  const fromMetals = ionicContacts(molecule);
   return molecule.atoms.map((atom, atomIdx) => {
     if (!isVseprElement(atom.element)) return 0;
     const neighborIndices = neighborsOf[atomIdx];
-    const hybrid = assignHybridization(atom.element, neighborIndices.length, piBondsPerAtom[atomIdx], atom.charge ?? 0);
+    const charge = (atom.charge ?? 0) - fromMetals[atomIdx].length;
+    const hybrid = assignHybridization(atom.element, neighborIndices.length, piBondsPerAtom[atomIdx], charge);
     const steric = STERIC_NUMBER[hybrid.hybridization] ?? 4;
     const lonePairs = Math.max(0, steric - neighborIndices.length);
     const conjugated = lonePairs > 0 && piBondsPerAtom[atomIdx] === 0
@@ -149,6 +177,8 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
   const neighborsOf = sigmaNeighbors(molecule);
 
   const piBondsPerAtom = piBondCounts(molecule);
+
+  const fromMetals = ionicContacts(molecule);
 
   const result: AtomOrbitals[] = [];
 
@@ -180,8 +210,10 @@ export function assignOrbitals(molecule: Molecule): AtomOrbitals[] {
     // The charge matters because it changes the electron count: a
     // methyl anion (C, 3 σ, −1) is isoelectronic with ammonia — 1 lone
     // pair → sp³ — where a neutral 3-σ carbon (CH₃ radical/cation) has
-    // none and reads sp².
-    const hybrid = assignHybridization(atom.element, neighborIndices.length, piBondsPerAtom[atomIdx], atom.charge ?? 0);
+    // none and reads sp². An electron taken from an alkali metal counts
+    // the same way (ionicContacts): Na–OH's O is hydroxide's.
+    const charge = (atom.charge ?? 0) - fromMetals[atomIdx].length;
+    const hybrid = assignHybridization(atom.element, neighborIndices.length, piBondsPerAtom[atomIdx], charge);
 
     // Step 2: count σ lone pairs from steric number − σ bonds.
     // (Steric number = σ bonds + lone pairs, by VSEPR)

@@ -57,9 +57,13 @@ export function isMetal(element: string): boolean {
  */
 export function showsOnlyValenceS(element: string): boolean {
   const z = atomicNumber(element);
-  const alkali = [3, 11, 19, 37, 55, 87].includes(z);
   const dOrFBlock = (z >= 21 && z <= 30) || (z >= 39 && z <= 48) || (z >= 57 && z <= 80) || z >= 89;
-  return alkali || dOrFBlock;
+  return isAlkaliMetal(element) || dOrFBlock;
+}
+
+/** Li, Na, K, Rb, Cs, Fr. */
+export function isAlkaliMetal(element: string): boolean {
+  return [3, 11, 19, 37, 55, 87].includes(atomicNumber(element));
 }
 
 /** The d block, Sc–Zn, Y–Cd and La–Hg (the lanthanides with it, whose

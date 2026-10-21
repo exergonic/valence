@@ -150,6 +150,22 @@ export function getLonePairDirections(
   return [];
 }
 
+/**
+ * The lone pairs of a bare anion — NaCl's Cl⁻, Li₂O's O²⁻: it has no σ bond
+ * to orient them by (its contacts are ionic, assign-orbitals.ts), so one
+ * faces each cation it touches, as a ligand's pair faces a metal, and the rest
+ * take the remaining sites of its electron-domain shape. Without this none
+ * were drawn. An anion with a σ bond (OH⁻ in NaOH) orients by the bond, and
+ * its cation sits in the hollow between the pairs.
+ */
+export function anionLonePairDirections(
+  cationDirs: [number, number, number][],
+  lonePairs: number,
+): [number, number, number][] {
+  const facing = cationDirs.slice(0, lonePairs).map(vecNormalize);
+  return [...facing, ...getLonePairDirections(facing, lonePairs)];
+}
+
 const COS_120 = -0.5;
 const SIN_120 = Math.sqrt(3) / 2;
 
