@@ -359,6 +359,60 @@ async function sketcherFunctionalGroup(b: Browser) {
   check('a group dragged straight from "Groups…" is bonded where it is dropped', dragged === 'COC#N' && row.includes('CN'), `${dragged}; row: ${row}`);
 }
 
+/** Charges JSME refuses (asked for 2026-10-20): its charge tool will not
+ *  charge a bonded halogen, and it infers I₃ and SiF₆ as cations. Ours gives
+ *  each centre its anion as an X atom in one click — ICl₄'s I, I₃'s middle
+ *  I, SiF₆'s Si — and Clean keeps the charge. */
+async function sketcherRefusedCharges(b: Browser) {
+  await b.open(url);
+  const centre = (selector: string) => b.run(`const r = document.querySelector('${selector}').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+  const press = async (selector: string) => {
+    const p = await centre(selector);
+    await b.moveTo(p.x, p.y);
+    await b.click(p.x, p.y);
+    await sleep(300);
+  };
+  const smiles = (): Promise<string> => b.run(`return window.jsmeApplet.smiles();`);
+  // the first press on JSME's drawing after a load is ignored: spend it on empty space
+  const corner = await b.run(`
+    const r = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150).getBoundingClientRect();
+    return { x: r.x + 20, y: r.y + r.height - 20 };`);
+  await b.moveTo(corner.x, corner.y);
+  await b.click(corner.x, corner.y);
+  // Read the drawing, choose the charge tool, click the atom labelled `label`;
+  // JSME's labels can lag a read (the stale-label trap), so click again while
+  // nothing has changed — at most three tries.
+  const chargeAtom = async (drawn: string, label: string) => {
+    await b.run(`window.jsmeApplet.readGenericMolecularInput('${drawn}'); window.jsmeApplet.repaint();`);
+    await sleep(400);
+    await press('#sketch-tools [data-tool="charge"]');
+    const start = await smiles();
+    let now = start;
+    for (let tries = 0; tries < 3 && now === start; tries++) {
+      const atom = await b.run(`
+        const svg = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150);
+        const r = [...svg.querySelectorAll('text')].find((t) => t.textContent === '${label}').getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+      await b.moveTo(atom.x - 20, atom.y - 20);
+      await b.moveTo(atom.x, atom.y);
+      await sleep(300);
+      await b.click(atom.x, atom.y);
+      await sleep(400);
+      now = await smiles();
+    }
+    return now;
+  };
+
+  const icl4 = await chargeAtom('ClI(Cl)(Cl)Cl', 'I');
+  await press('#sketch-tools [data-tool="clean"]');
+  const cleaned = await smiles();
+  check('the charge tool gives ICl₄ its anion, and Clean keeps it', icl4 === 'Cl[I-](Cl)(Cl)Cl' && cleaned === icl4, `${icl4} → ${cleaned}`);
+  const i3 = await chargeAtom('III', 'I+');
+  check('one click turns JSME\'s I₃⁺ into I₃⁻', i3 === 'I[I-]I', i3);
+  const sif6 = await chargeAtom('F[Si](F)(F)(F)(F)F', 'Si2+');
+  check('one click turns JSME\'s SiF₆²⁺ into SiF₆²⁻', sif6 === 'F[Si-2](F)(F)(F)(F)F', sif6);
+}
+
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */
 async function orbitalListStaysPut(b: Browser) {
   await b.open(url);
@@ -451,7 +505,7 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, orbitalListStaysPut, lewisStructureDonation]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, orbitalListStaysPut, lewisStructureDonation]) {
     try {
       await part(b);
     } catch (error) {

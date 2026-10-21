@@ -6,6 +6,7 @@ import type { Molecule } from '../mol-parser';
 import { writeNote, type InfoNote } from './info-note';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { chargeSeparateNitrogen } from '../chem/charge-separate-nitrogen';
+import { chargedXAtoms, parseChargedLabel } from './charged-x-atoms';
 import { isMetal, lowestMultiplicity, spinName } from '../chem/elements';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { computeLocalGeometry } from '../geometry/local-geometry';
@@ -193,6 +194,19 @@ function gfn2RunNotes(run: Gfn2Result): string[] {
   return notes;
 }
 
+/** The charges the sketch holds on X atoms (charged-x-atoms.ts): the V2000
+ *  block names such an atom by its label ("I-", or "Q"), the V3000 block
+ *  keeps the label whole. */
+function withXAtomCharges(molecule: Molecule, v3000: string): Molecule {
+  const labels = chargedXAtoms(v3000);
+  if (labels.size === 0) return molecule;
+  const atoms = molecule.atoms.map((atom, i) => {
+    const charged = parseChargedLabel(labels.get(i) ?? '');
+    return charged ? { ...atom, element: charged.element, charge: charged.charge } : atom;
+  });
+  return { ...molecule, atoms };
+}
+
 /**
  * Where GFN2-xTB's structure leaves the shape the VSEPR picture predicts
  * (compare-shape.ts): said, so a model failure becomes something to look at
@@ -359,7 +373,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       const t1 = performance.now();
       // JSME draws nitro (nitrate, N-oxides) with five bonds to N; the build
       // reads the charge-separated Lewis structure (charge-separate-nitrogen.ts)
-      let molecule = chargeSeparateNitrogen(parseMolBlock(molBlock));
+      let molecule = chargeSeparateNitrogen(withXAtomCharges(parseMolBlock(molBlock), applet.molFile(true)));
       // A GFN2 optimisation hands back its own charges and vibrations with the
       // geometry; a fetched structure has neither.
       let gfn2Charges: number[] | null = null;

@@ -18,6 +18,8 @@
  *
  * Any element past the nine buttons is JSME's X atom: "More…" opens our
  * periodic table, and the pick goes into JSME's X box and gets a button.
+ * The X atom also carries the charges JSME refuses (charged-x-atoms.ts): the
+ * charge tool falls back to it.
  *
  * An element or a drawing tool can also be dragged onto the sketch; the drop
  * does what a click with it does there (setupDragFromToolbar).
@@ -28,6 +30,7 @@
 import { setupPeriodicTable } from './periodic-table';
 import { groupByCode, setupGroupPalette, type FunctionalGroup } from './functional-groups';
 import { takesImplicitHydrogens } from '../chem/fill-hydrogens';
+import { chargedXAtoms, jmeAtomLabel } from './charged-x-atoms';
 
 /** setAction() codes for our tools. */
 const TOOL_ACTIONS: Record<string, number> = {
@@ -58,18 +61,66 @@ const TOOL_ACTIONS: Record<string, number> = {
  * It keeps everything the drawing says — the atoms in order, drawn
  * hydrogens (H–Ni–H keeps its three atoms; a SMILES round trip folds them
  * away), charges, the X box's elements, ring and E/Z stereo, chirality
- * (trans-2-methylcyclohexanol reads back the same SMILES). Returns the MOL
- * blocks before and after, or null for an empty sketch.
+ * (trans-2-methylcyclohexanol reads back the same SMILES). A charged X atom
+ * is the exception — a MOL read makes it a plain neutral atom — so those are
+ * put back after (restoreXAtoms). Returns the drawing before (to undo to)
+ * and the MOL block after, or null for an empty sketch.
  */
-function cleanLayout(applet: Window['jsmeApplet']): { before: string; after: string } | null {
+function cleanLayout(applet: Window['jsmeApplet']): { before: Drawing; after: string } | null {
   if (!applet.smiles()) return null;
-  const before: string = applet.molFile();
-  const lines = before.split('\n');
+  const before = drawingNow(applet);
+  const lines = before.molFile.split('\n');
   const atomCount = parseInt(lines[3]?.slice(0, 3) ?? '', 10);
   if (!Number.isFinite(atomCount)) return null;
   const zeroed = lines.map((line, i) => (i >= 4 && i < 4 + atomCount ? `    0.0000    0.0000    0.0000${line.slice(30)}` : line));
   applet.readMolFile(zeroed.join('\n'));
+  restoreXAtoms(applet, before.xAtoms);
   return { before, after: applet.molFile() };
+}
+
+/** A drawing as Clean keeps it to undo to: its MOL block, and the charged X
+ *  atoms the block cannot carry. */
+interface Drawing {
+  molFile: string;
+  xAtoms: Map<number, string>;
+}
+
+function drawingNow(applet: Window['jsmeApplet']): Drawing {
+  return { molFile: applet.molFile(), xAtoms: chargedXAtoms(applet.molFile(true)) };
+}
+
+function readDrawing(applet: Window['jsmeApplet'], drawing: Drawing): void {
+  applet.readMolFile(drawing.molFile);
+  restoreXAtoms(applet, drawing.xAtoms);
+}
+
+/**
+ * Give atoms back their X-atom charges after a MOL read: JSME's JME string
+ * with each such atom's label bracketed ("[I-]"), which JSME reads as the X
+ * atom again. A JME read keeps the coordinates, wedges and drawn hydrogens,
+ * and every format JSME writes lists the atoms in the same order.
+ */
+function restoreXAtoms(applet: Window['jsmeApplet'], xAtoms: Map<number, string>): void {
+  if (xAtoms.size === 0) return;
+  const jme = jmeTokens(applet);
+  for (const [index, label] of xAtoms) jme[jmeLabel(index)] = `[${label}]`;
+  applet.readMolecule(jme.join(' '));
+}
+
+/**
+ * Give one atom a charge JSME refused it, by reading the drawing back as a
+ * JME string with that atom's label set (charged-x-atoms.ts). Not the X key
+ * on the atom: that keeps the charge JSME had inferred and adds the label's
+ * to it — I₃'s I⁺ became "[I-+]". The other charged X atoms go in bracketed,
+ * so they stay. Returns the drawing before, to undo to.
+ */
+function setRefusedCharge(applet: Window['jsmeApplet'], atom: { index: number; element: string }, charge: number): Drawing {
+  const before = drawingNow(applet);
+  const jme = jmeTokens(applet);
+  for (const [index, label] of before.xAtoms) jme[jmeLabel(index)] = `[${label}]`;
+  jme[jmeLabel(atom.index)] = jmeAtomLabel(atom.element, charge);
+  applet.readMolecule(jme.join(' '));
+  return before;
 }
 
 /** A MOL block from its counts line on: the header carries a timestamp, so two
@@ -179,6 +230,77 @@ function clipJsmeMenus(container: HTMLElement, stage: HTMLElement): boolean {
 /** JSME outlines the atom or bond under the pointer in blue. */
 function pointerIsOnStructure(stage: HTMLElement): boolean {
   return !!jsmeParts(stage)?.drawing.querySelector('rect[stroke="blue"]');
+}
+
+/**
+ * The atom under JSME's hover box: its index, and the element and charge its
+ * label draws — "I+", "Si2+", "NH4+", "-O", or an X atom's "Si-2". JSME
+ * labels every atom but a plain carbon, in atom order, so the label's place
+ * among the drawing's labels is the atom's place among the JME string's
+ * atoms not labelled "C". Null over a bond, an unlabelled carbon (never a
+ * centre JSME refuses a charge that it could hold) or if the two disagree.
+ */
+function hoveredAtom(stage: HTMLElement, jme: string[]): { index: number; element: string; charge: number } | null {
+  const parts = jsmeParts(stage);
+  const hover = parts?.drawing.querySelector('rect[stroke="blue"]')?.getBoundingClientRect();
+  if (!parts || !hover) return null;
+  const x = hover.left + hover.width / 2;
+  const y = hover.top + hover.height / 2;
+  const labels = Array.from(parts.drawing.querySelectorAll('text'));
+  const k = labels.findIndex((text) => {
+    const box = text.getBoundingClientRect();
+    return x >= box.left - 3 && x <= box.right + 3 && y >= box.top - 3 && y <= box.bottom + 3;
+  });
+  const labelled: number[] = [];
+  for (let i = 0; i < Number(jme[0]); i++) if (jme[jmeLabel(i)] !== 'C') labelled.push(i);
+  if (k < 0 || labelled.length !== labels.length) return null;
+  const text = labels[k].textContent ?? '';
+  // the element is the label's first symbol that is not a hydrogen count ("HO" is an O)
+  const symbols = text.match(/[A-Z][a-z]?/g) ?? [];
+  const element = symbols.find((symbol) => symbol !== 'H') ?? symbols[0];
+  if (!element || !jme[jmeLabel(labelled[k])].replace(/[[\]]/g, '').startsWith(element)) return null;
+  const charge = /(\d*)([+-])(\d*)/.exec(text);
+  const size = charge ? Number(charge[1] || charge[3] || 1) : 0;
+  return { index: labelled[k], element, charge: charge?.[2] === '-' ? -size : size };
+}
+
+/** JSME's JME string as tokens: "<atoms> <bonds> <label> <x> <y> … <atom>
+ *  <atom> <order> …". Atom i's label is token jmeLabel(i). */
+function jmeTokens(applet: Window['jsmeApplet']): string[] {
+  return applet.jmeFile().trim().split(/\s+/);
+}
+
+function jmeLabel(index: number): number {
+  return 2 + 3 * index;
+}
+
+/** Did JSME just refuse a charge? It says so on its status line: "Charge
+ *  change not possible on the halogen !", "… on multibonded N or P !", and on
+ *  an X atom "Use X button to change charge on the X atom !". */
+function chargeRefused(stage: HTMLElement): boolean {
+  return Array.from(stage.querySelectorAll('svg text'))
+    .some((text) => /Charge change not possible|Use X button to change charge/.test(text.textContent ?? ''));
+}
+
+/** Elements JSME's charge tool has no rule for: a click does nothing, and
+ *  says nothing (its table covers H, B, C, N, O, P, S, Se and the halogens,
+ *  and the metals; Si falls through). */
+const NO_CHARGE_RULE = new Set(['Si']);
+
+/**
+ * The charge tool's next step where JSME refuses one. On one of JSME's own
+ * atoms the charge it shows is its inference from the bond count, and for a
+ * cation it is the wrong sign of the ion drawn — I₃ reads I⁺, SiF₆ Si²⁺ — so
+ * the first click turns it to the anion; an uncharged one (ICl₄, BrF₄, SF₅)
+ * becomes the anion too, as the hypervalent ions a lesson draws mostly are.
+ * On our X atom it cycles anion → cation (IF₆⁺) → neutral. Neutral hands the
+ * atom back to JSME, which may infer its cation again.
+ */
+function nextCharge(charge: number, onXAtom: boolean): number {
+  if (!onXAtom) return charge > 0 ? -charge : charge === 0 ? -1 : 0;
+  if (charge === 0) return -1;
+  if (charge === -1) return 1;
+  return 0;
 }
 
 /** Where JSME drew the atom of a one-atom sketch: the centre of the first
@@ -466,14 +588,15 @@ export function setupSketcherToolbar(): void {
     return pickGroup(group);
   };
 
-  // A clean replaces JSME's molecule, and JSME's own undo cannot step back
-  // over it (measured: Ctrl+Z after a clean leaves the clean layout). So the
-  // drawing from before is kept, and Undo puts it back — while the clean
-  // layout is still what is drawn; any edit since, and Undo is JSME's again.
-  // JSME rescales a drawing it reads to its standard bond length, so a drawing
-  // with a stretched bond comes back uniformly smaller (×0.78 after one long
-  // drag): the same picture, at JSME's scale.
-  let cleaned: { before: string; after: string } | null = null;
+  // A clean replaces JSME's molecule, and so does a charge JSME refused
+  // (below); JSME's own undo cannot step back over either (measured: Ctrl+Z
+  // after a clean leaves the clean layout). So the drawing from before is
+  // kept, and Undo puts it back — while the result is still what is drawn;
+  // any edit since, and Undo is JSME's again. JSME rescales a drawing it reads
+  // to its standard bond length, so a drawing with a stretched bond comes back
+  // uniformly smaller (×0.78 after one long drag): the same picture, at
+  // JSME's scale.
+  let readBack: { before: Drawing; after: string } | null = null;
 
   for (const bar of [document.getElementById('sketch-tools'), elementRow]) {
     bar?.addEventListener('click', (event) => {
@@ -481,14 +604,14 @@ export function setupSketcherToolbar(): void {
       const applet = window.jsmeApplet;
       if (!button || !applet) return;
       const tool = button.dataset.tool;
-      if (tool === 'undo' && cleaned && drawingOf(applet.molFile()) === drawingOf(cleaned.after)) {
-        applet.readMolFile(cleaned.before);
-        cleaned = null;
+      if (tool === 'undo' && readBack && drawingOf(applet.molFile()) === drawingOf(readBack.after)) {
+        readDrawing(applet, readBack.before);
+        readBack = null;
         reselect();
       } else if (tool === 'undo' || tool === 'redo') {
         pressKey(stage, tool === 'undo' ? 'z' : 'y', true);
       } else if (tool === 'clean') {
-        cleaned = cleanLayout(applet) ?? cleaned;
+        readBack = cleanLayout(applet) ?? readBack;
         reselect();
       } else if (tool === 'clear') {
         // JSME's clear() empties the molecule but does not redraw, so the old
@@ -561,6 +684,34 @@ export function setupSketcherToolbar(): void {
       }
     };
     setTimeout(() => convert(5), 0);
+  });
+
+  // The charge tool where JSME refuses (charged-x-atoms.ts): JSME takes the
+  // click first; when the drawing is unchanged and its status line says the
+  // charge was not possible, the atom clicked gets the next charge as an X
+  // atom, and Undo can take it back (readBack).
+  let chargeClick: { atom: { index: number; element: string; charge: number }; onXAtom: boolean; before: string } | null = null;
+  stage.addEventListener('mousedown', (event) => {
+    chargeClick = null;
+    const applet = window.jsmeApplet;
+    const tool = buttons().find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.tool;
+    if (event.button !== 0 || tool !== 'charge' || !applet) return;
+    const before: string = applet.jmeFile();
+    const atom = hoveredAtom(stage, before.trim().split(/\s+/));
+    if (atom) chargeClick = { atom, onXAtom: chargedXAtoms(applet.molFile(true)).has(atom.index), before };
+  }, true);
+  stage.addEventListener('mouseup', () => {
+    const click = chargeClick;
+    chargeClick = null;
+    if (!click) return;
+    setTimeout(() => {
+      const applet = window.jsmeApplet;
+      const refused = chargeRefused(stage) || NO_CHARGE_RULE.has(click.atom.element);
+      if (!refused || applet.jmeFile() !== click.before) return;
+      const before = setRefusedCharge(applet, click.atom, nextCharge(click.atom.charge, click.onXAtom));
+      readBack = { before, after: applet.molFile() };
+      reselect();
+    }, 0);
   });
 
   // JSME builds its menus asynchronously after the applet exists; clip them as
