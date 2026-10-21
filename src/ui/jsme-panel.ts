@@ -14,6 +14,7 @@ import {
 } from '../geometry/gfn2-refine';
 import { parameterGapWarnings } from '../geometry/parameter-warnings';
 import { ringPuckerWarnings } from '../geometry/ring-pucker';
+import { vseprShapeMismatches } from '../chem/vsepr/compare-shape';
 import { fetch3D, computeFormula } from '../geometry/resolve3d';
 import { symmetrizeMolecule } from '../geometry/symmetrize';
 import type { PubChemInfo } from '../geometry/resolve3d';
@@ -190,6 +191,23 @@ function gfn2RunNotes(run: Gfn2Result): string[] {
       : 'GFN2-xTB Hessian: minimum — no imaginary mode.');
   }
   return notes;
+}
+
+/**
+ * Where GFN2-xTB's structure leaves the shape the VSEPR picture predicts
+ * (compare-shape.ts): said, so a model failure becomes something to look at
+ * rather than a silent wrong answer — GFN2 makes SeF₄ a square pyramid, where
+ * VSEPR and experiment say seesaw (NOTES.md, 2026-10-20). Neither side is
+ * assumed right.
+ */
+function gfn2ShapeNotes(molecule: Molecule): string[] {
+  return vseprShapeMismatches(molecule).map((m) => {
+    const atom = `${molecule.atoms[m.atomIndex].element}${m.atomIndex + 1}`;
+    const found = m.measured ? `${m.measured} (bond angles ${m.measuredAngles})` : `bond angles ${m.measuredAngles}`;
+    return `${atom} is not the shape VSEPR predicts. VSEPR: ${m.formula}, ${m.predicted} (bond angles `
+      + `${m.predictedAngles}). GFN2-xTB: ${found}. Either can be wrong — VSEPR is a counting rule, GFN2-xTB a `
+      + 'semiempirical model — and experiment decides between them.';
+  });
 }
 
 /**
@@ -390,7 +408,8 @@ export function mountJsmePanel(ctx: SceneContext) {
         const notes: { warnings: string[]; info: (string | InfoNote)[] } = { warnings: [...local.warnings], info: [] };
         if (local.engine === 'gfn2' && local.gfn2) {
           if (!local.gfn2.converged) notes.warnings.unshift('GFN2-xTB structure, not fully converged.');
-          notes.info.push(GFN2_NOTE, ...gfn2RunNotes(local.gfn2), ...gfn2SpinNote(local.gfn2, local.molecule, false));
+          notes.info.push(GFN2_NOTE, ...gfn2RunNotes(local.gfn2), ...gfn2ShapeNotes(molecule),
+            ...gfn2SpinNote(local.gfn2, local.molecule, false));
         } else {
           // Said in the header, not just the log: the structure on screen is a
           // starting guess, and bond lengths and angles read off it mean little.
@@ -464,7 +483,8 @@ export function mountJsmePanel(ctx: SceneContext) {
         // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
         // the geometry no longer comes from MMFF94, so calling it "approximate"
         // would be stale.
-        const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info];
+        const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...gfn2ShapeNotes(next),
+          ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info];
         showMoleculeHeader(next, { source: 'gfn2', warnings: refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'], info });
       } catch (error) {
         showRenderError(error instanceof Gfn2Cancelled
