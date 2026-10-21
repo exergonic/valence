@@ -33,6 +33,7 @@ import { marchSignedField } from '../utils/march-tetrahedra';
 import type { Vec3 } from '../utils/vec3';
 import { fitChargesToPotential, mkFitPoints, fibonacciSphere } from '../chem/charge-model/esp-fit';
 import { cm5Corrections, cm5Covers, hirshfeldCharges, type RadialDensity } from '../chem/charge-model/cm5';
+import { coreDensity, coreReach } from '../chem/charge-model/core-density';
 import {
   optimize_lbfgs,
   optimize_steepest_descent,
@@ -1184,10 +1185,50 @@ const ESP_DENSITY_PAD = 4.0;
 const ESP_GRID_POINTS = 400_000;
 const DENSITY_GRADIENT_STEP_BOHR = 0.02;
 
+type FramedAtom = { element: string; x: number; y: number; z: number };
+
+/**
+ * Each atom's free-atom core density added over the grid (core-density.ts),
+ * within its reach only: GFN2's density is its valence shells', and the
+ * ESP's surface is drawn on the all-electron density, as the convention has it.
+ */
+function addCoreDensity(values: Float32Array, origin: Vec3, dimensions: Vec3, spacing: number, atoms: FramedAtom[]): void {
+  for (const atom of atoms) {
+    const reach = coreReach(atom.element) * ANGSTROM_PER_BOHR;
+    if (reach === 0) continue;
+    const centre = [atom.x, atom.y, atom.z];
+    const from = [0, 1, 2].map((c) => Math.max(0, Math.floor((centre[c] - reach - origin[c]) / spacing)));
+    const to = [0, 1, 2].map((c) => Math.min(dimensions[c] - 1, Math.ceil((centre[c] + reach - origin[c]) / spacing)));
+    for (let gz = from[2]; gz <= to[2]; gz++) {
+      for (let gy = from[1]; gy <= to[1]; gy++) {
+        for (let gx = from[0]; gx <= to[0]; gx++) {
+          const r = Math.hypot(
+            origin[0] + gx * spacing - centre[0], origin[1] + gy * spacing - centre[1], origin[2] + gz * spacing - centre[2],
+          ) / ANGSTROM_PER_BOHR;
+          values[gx + dimensions[0] * (gy + dimensions[1] * gz)] += coreDensity(atom.element, r);
+        }
+      }
+    }
+  }
+}
+
+/** The core density at a point (bohr), summed over the atoms. */
+function coreDensityAt(atoms: FramedAtom[], x: number, y: number, z: number): number {
+  let sum = 0;
+  for (const atom of atoms) {
+    sum += coreDensity(atom.element, Math.hypot(
+      x - atom.x / ANGSTROM_PER_BOHR, y - atom.y / ANGSTROM_PER_BOHR, z - atom.z / ANGSTROM_PER_BOHR,
+    ));
+  }
+  return sum;
+}
+
 /**
  * The ESP as the textbook draws it, from GFN2's own density: the surface is
- * where that density falls to 0.001 e/bohr³ — so it bulges over lone pairs and
- * π clouds instead of following fixed spheres — and the colour is the exact
+ * where that density — its valence shells', with each atom's free-atom core
+ * added back (addCoreDensity) — falls to 0.001 e/bohr³, so it bulges over lone
+ * pairs and π clouds instead of following fixed spheres, and wraps a cation
+ * whose valence electron has gone (NaOH's Na⁺). The colour is the exact
  * electrostatic potential of the calculation's charge distribution at each
  * point (each atom's nucleus-plus-core, less the integral of the valence
  * density), with no multipole truncation and no charge-penetration error. The
@@ -1207,6 +1248,7 @@ export async function espSurface(key: number): Promise<Gfn2EspSurface | null> {
   for (let i = 0; i < count; i++) values[i] = rho.get(i);
   grid.delete?.();
   rho.delete?.();
+  addCoreDensity(values, origin, dimensions, spacing, atoms);
 
   // a density has one sign, so only the positive sheet comes back
   const sheets = marchSignedField({ values, origin, dimensions, spacing }, ESP_DENSITY_LEVEL, () => [0, 0, 0]);
@@ -1242,14 +1284,18 @@ export async function espSurface(key: number): Promise<Gfn2EspSurface | null> {
     }
   }
   const around = kept.calc.densityValues(probes);
-  probes.delete?.();
   const uniqueNormals: number[] = [];
+  const total = (col: number) => {
+    const p = [0, 1, 2].map((c) => probes.get(c, col));
+    return around.get(col) + coreDensityAt(atoms, p[0], p[1], p[2]);
+  };
   for (let u = 0; u < n; u++) {
-    const g = [0, 1, 2].map((axis) => around.get(6 * u + 2 * axis) - around.get(6 * u + 2 * axis + 1));
+    const g = [0, 1, 2].map((axis) => total(6 * u + 2 * axis) - total(6 * u + 2 * axis + 1));
     const length = Math.hypot(g[0], g[1], g[2]) || 1;
     uniqueNormals.push(-g[0] / length, -g[1] / length, -g[2] / length);
   }
   around.delete?.();
+  probes.delete?.();
 
   // the exact potential, once per point; Eh/e to the app's e/Å
   const at = bohrPoints(M, points);
