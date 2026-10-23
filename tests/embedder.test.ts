@@ -4,7 +4,8 @@ import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { embed3D, honourWedges } from '../src/geometry/embed';
-import { BUTANE, PENTANE, OCTANE, HEXAN_2_AMINE, HEXAN_2_AMINE_WEDGED, NEOPENTANE, DIMETHYLBUTANE, METHYLHEXANOL, CIS_BUTENE, TRANS_BUTENE } from './references/sketches';
+import { BUTANE, PENTANE, OCTANE, HEXAN_2_AMINE, HEXAN_2_AMINE_WEDGED, NEOPENTANE, DIMETHYLBUTANE, METHYLHEXANOL, CIS_BUTENE, TRANS_BUTENE, DIPHENYLETHANE, DIPHENYLETHYLENE_BROMONIUM } from './references/sketches';
+import { getCovalentRadius } from '../src/chem/radii';
 
 describe('place3D', () => {
   it('should place isolated atom at origin', () => {
@@ -206,5 +207,35 @@ describe('honourWedges — the wedges are read from the page', () => {
       expect(a.y).toBeCloseTo(turned.atoms[i].y, 9);
       expect(a.z).toBeCloseTo(turned.atoms[i].z, 9);
     });
+  });
+});
+
+describe('two rings on one carbon', () => {
+  // Ring H's were pointed outward from the centroid of every ring atom, so
+  // with two phenyls on one carbon the inner atoms' H's pointed into their own
+  // ring; and the rings, seeded flat from the page, met at their ortho H's.
+  // The overlap pass then tore the rings — C–C 1.85 Å, C–H 0.65 Å — and GFN2
+  // found nothing from that start (2026-10-23).
+  it.each([
+    ['1,1-diphenylethane', DIPHENYLETHANE],
+    ['the 1,1-diphenylethylene bromonium', DIPHENYLETHYLENE_BROMONIUM],
+  ])('%s starts with whole rings and no clash', (_, mol) => {
+    const { atoms, bonds } = embed3D(parseMolBlock(mol)).separated;
+    const distance = (i: number, j: number) =>
+      Math.hypot(atoms[i].x - atoms[j].x, atoms[i].y - atoms[j].y, atoms[i].z - atoms[j].z);
+    for (const b of bonds) {
+      const pair = [atoms[b.atom1Index].element, atoms[b.atom2Index].element];
+      if (!pair.every((e) => e === 'C' || e === 'H')) continue; // the bromonium's C–Br is not this test's
+      const full = getCovalentRadius(pair[0]) + getCovalentRadius(pair[1]);
+      const ratio = distance(b.atom1Index, b.atom2Index) / full;
+      expect(ratio, `${pair.join('–')} ${b.atom1Index + 1}-${b.atom2Index + 1}`).toBeGreaterThan(0.8);
+      expect(ratio, `${pair.join('–')} ${b.atom1Index + 1}-${b.atom2Index + 1}`).toBeLessThan(1.15);
+    }
+    const bonded = new Set(bonds.map((b) => `${Math.min(b.atom1Index, b.atom2Index)}-${Math.max(b.atom1Index, b.atom2Index)}`));
+    for (let i = 0; i < atoms.length; i++) {
+      for (let j = i + 1; j < atoms.length; j++) {
+        if (!bonded.has(`${i}-${j}`)) expect(distance(i, j), `${i + 1}···${j + 1}`).toBeGreaterThan(1.5);
+      }
+    }
   });
 });

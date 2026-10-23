@@ -132,6 +132,81 @@ export function hasRingBonds(molecule: Molecule): boolean {
   return ringBonds(molecule).size > 0;
 }
 
+/** Å: a nonbonded contact this close in a start is a clash — well under any
+ *  real one (a geminal H···H is 1.78 Å). */
+const CLASH = 1.5;
+
+/**
+ * Rings are seeded flat from the sketch, so their orientation is the
+ * drawing's, never chosen: two rings on one carbon (1,1-diphenylethane) start
+ * coplanar, their inner ortho H's 0.61 Å apart, and the overlap pass then
+ * squeezed each of those C–H bonds to 0.83 Å (2026-10-23). A ring hung on a
+ * single bond is free to turn about it — the real molecule's phenyls twist
+ * out of each other's way — so where the ring's side of such a bond clashes
+ * with the rest, it is turned to the angle (in 30° steps) that leaves the
+ * most room. The smaller side turns, when both hold a ring.
+ */
+function turnClashingRings(molecule: Molecule, pos: Vec3[], adj: number[][], rings: Set<string>, ringAtoms: Set<number>): void {
+  const n = molecule.atoms.length;
+  // the atoms on `from`'s side of the bond from–across
+  const sideOf = (from: number, across: number) => {
+    const side = new Set<number>([from]);
+    const queue = [from];
+    while (queue.length > 0) {
+      const atom = queue.shift()!;
+      for (const nb of adj[atom]) {
+        if ((atom === from && nb === across) || side.has(nb)) continue;
+        side.add(nb);
+        queue.push(nb);
+      }
+    }
+    return side;
+  };
+  const distance = (i: number, j: number) => Math.hypot(pos[i][0] - pos[j][0], pos[i][1] - pos[j][1], pos[i][2] - pos[j][2]);
+
+  for (const bond of molecule.bonds) {
+    const [a, b] = [bond.atom1Index, bond.atom2Index];
+    if (bond.order !== 1 || rings.has(`${Math.min(a, b)}-${Math.max(a, b)}`)) continue;
+    const sides = [sideOf(a, b), sideOf(b, a)].filter((side) => [...side].some((i) => ringAtoms.has(i)));
+    if (sides.length === 0) continue;
+    const turning = sides.reduce((small, side) => (side.size < small.size ? side : small));
+    const rest = Array.from({ length: n }, (_, i) => i).filter((i) => !turning.has(i));
+    // the closest contact across the bond (the bond itself is the only one
+    // bonded, and its length does not change as the side turns)
+    const room = () => {
+      let closest = Infinity;
+      for (const i of turning) {
+        for (const j of rest) if (!(i === pivot && j === fixed)) closest = Math.min(closest, distance(i, j));
+      }
+      return closest;
+    };
+    const pivot = turning.has(a) ? a : b;
+    const fixed = pivot === a ? b : a;
+    if (room() >= CLASH) continue;
+
+    const axis = vecNormalize(vecSub(pos[pivot], pos[fixed]));
+    const start = new Map([...turning].map((i) => [i, pos[i]]));
+    const turnTo = (angle: number) => {
+      const [cosT, sinT] = [Math.cos(angle), Math.sin(angle)];
+      for (const [i, p] of start) {
+        const v = rotateRodrigues(vecSub(p, pos[fixed]), axis, cosT, sinT);
+        pos[i] = [pos[fixed][0] + v[0], pos[fixed][1] + v[1], pos[fixed][2] + v[2]];
+      }
+    };
+    let best = 0;
+    let bestRoom = room();
+    for (let k = 1; k < 12; k++) {
+      turnTo((k * Math.PI) / 6);
+      const r = room();
+      if (r > bestRoom) {
+        bestRoom = r;
+        best = k;
+      }
+    }
+    turnTo((best * Math.PI) / 6);
+  }
+}
+
 // The 3D embedder: graph-walk placement along ideal hybrid vectors at
 // covalent bond lengths, each torsion chosen as the atom is placed (anti about
 // single bonds, the sketch's cis/trans about double bonds — setTorsion). Its
@@ -241,19 +316,15 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   // so a flat ring's leftover "equatorial" vectors point INTO the ring
   // and adjacent H's collide (0.62 Å on cyclooctane). Place ring H's
   // chemically instead: the first H axial (along the ring normal), the
-  // second equatorial (outward from the ring centroid). The axial H's
-  // of adjacent carbons are then parallel and the equatorial ones
-  // diverge — no collisions.
+  // second equatorial — outward, along the bisector of the atom's own two
+  // ring bonds, turned away from them. The axial H's of adjacent carbons
+  // are then parallel and the equatorial ones diverge — no collisions.
+  // "Outward" is the atom's own ring's: it was taken from the centroid of
+  // every ring atom, and with two rings on one carbon (1,1-diphenylethane)
+  // that centroid lies between the rings, so the inner atoms' H's pointed
+  // into their own ring — 0.35 Å from a ring carbon, which the overlap pass
+  // then tore to 1.85 Å from its neighbour (2026-10-23).
   if (ringAtoms.size > 0) {
-    const centroid: [number, number, number] = [0, 0, 0];
-    for (const i of ringAtoms) {
-      centroid[0] += pos[i][0];
-      centroid[1] += pos[i][1];
-      centroid[2] += pos[i][2];
-    }
-    centroid[0] /= ringAtoms.size;
-    centroid[1] /= ringAtoms.size;
-    centroid[2] /= ringAtoms.size;
     for (const i of ringAtoms) {
       const ringNbs = adj[i].filter((nb) => ringAtoms.has(nb));
       if (ringNbs.length !== 2) continue;
@@ -274,20 +345,12 @@ export function place3D(molecule: Molecule): [number, number, number][] {
       const ln = Math.hypot(...n);
       if (ln < 1e-9) continue;
       n = [n[0] / ln, n[1] / ln, n[2] / ln];
-      // Outward = away from the centroid, projected onto the ring plane.
-      const out = [
-        pos[i][0] - centroid[0],
-        pos[i][1] - centroid[1],
-        pos[i][2] - centroid[2],
-      ];
+      // Outward: opposite the sum of the two ring-bond directions, which
+      // lies in their plane and bisects the ring angle (never zero here —
+      // the bonds are not collinear, or the normal above would be).
+      const out = [-(u1[0] + u2[0]), -(u1[1] + u2[1]), -(u1[2] + u2[2])];
       const lo = Math.hypot(...out);
-      let eq: [number, number, number] = lo > 1e-9
-        ? [out[0] / lo, out[1] / lo, out[2] / lo]
-        : [1, 0, 0];
-      const ndot = n[0] * eq[0] + n[1] * eq[1] + n[2] * eq[2];
-      eq = [eq[0] - ndot * n[0], eq[1] - ndot * n[1], eq[2] - ndot * n[2]];
-      const le = Math.hypot(...eq);
-      if (le > 1e-9) eq = [eq[0] / le, eq[1] / le, eq[2] / le];
+      const eq: [number, number, number] = [out[0] / lo, out[1] / lo, out[2] / lo];
 
       // A trigonal ring atom (three neighbours: an aromatic or vinylic CH)
       // has only the in-plane slot; axial first put benzene's H's straight up
@@ -425,6 +488,8 @@ export function place3D(molecule: Molecule): [number, number, number][] {
       queue.push(nb);
     }
   }
+
+  turnClashingRings(molecule, pos, adj, rings, ringAtoms);
 
   // The drawn wedge and hash bonds fix each stereocenter's configuration, and
   // the graph walk knows nothing about them. This runs last, after the torsion
