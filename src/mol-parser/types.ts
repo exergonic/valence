@@ -23,6 +23,13 @@ export interface Bond {
    * the bond is the narrow end — the stereocenter.
    */
   stereo?: 1 | 6;
+  /**
+   * Longer than a full bond in the structure shown (bond-integrity.ts): a
+   * partial bond GFN2 stretched — an unsymmetrical bromonium's long C–Br — or,
+   * in a result shown only on request, one that came apart. Drawn dashed; the
+   * sketch's order still stands everywhere else.
+   */
+  stretched?: true;
 }
 
 export interface Molecule {

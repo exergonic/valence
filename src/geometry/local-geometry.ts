@@ -22,7 +22,7 @@
 import type { Molecule } from '../mol-parser';
 import { Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, type Gfn2Progress, type Gfn2Result } from './gfn2-refine';
 import { embed3D, finite, honourWedges, type EmbedResult } from './embed';
-import { bondingChange } from './bond-integrity';
+import { assessBonding, markStretchedBonds } from './bond-integrity';
 
 export interface LocalGeometry extends EmbedResult {
   /** 'gfn2': a GFN2-xTB optimisation — converged, or the lowest point of a run
@@ -35,6 +35,13 @@ export interface LocalGeometry extends EmbedResult {
   /** Why the start is shown (engine 'unrefined'), as a sentence for the Info
    *  log. */
   unrefinedReason?: string;
+  /** A sentence for each drawn bond GFN2 stretched into a partial bond. */
+  partialBonds?: string[];
+  /** GFN2's result, when a drawn bond came apart in it: set aside — the start
+   *  is what this geometry shows — and shown only when the user asks. */
+  setAside?: LocalGeometry;
+  /** With `setAside`: the sentence naming the drawn bond that came apart. */
+  brokenBond?: string;
 }
 
 /** How the start gets optimised — the worker in the app. A test passes the
@@ -79,9 +86,27 @@ export async function computeLocalGeometry(
   const finished = honourWedges(sketch, refined.molecule);
   // ...but it must still be the molecule drawn. GFN2 moves nuclei, not bonds,
   // and a bad start once came back "converged" with two H2 molecules in it
-  // (bond-integrity.ts). A result whose bonding is not the sketch's is set
-  // aside, and the start is shown, saying why.
-  const changed = bondingChange(finished.molecule);
-  if (changed) return unrefined(`GFN2-xTB's result no longer had the bonds drawn — ${changed} — so it was set aside`);
-  return { ...finished, engine: 'gfn2', gfn2: refined };
+  // (bond-integrity.ts). A bond that formed sets the result aside; a drawn
+  // bond that only stretched is shown, dashed, as the partial bond it is; one
+  // that came apart sets the result aside too, but keeps it for the user to
+  // ask for.
+  const verdict = assessBonding(finished.molecule, refined.bondOrders);
+  if (verdict.formed) {
+    return unrefined(`GFN2-xTB's result no longer had the bonds drawn — ${verdict.formed} — so it was set aside`);
+  }
+  const shown: LocalGeometry = {
+    ...finished,
+    molecule: markStretchedBonds(finished.molecule, verdict.stretched),
+    engine: 'gfn2',
+    gfn2: refined,
+    partialBonds: verdict.partial,
+  };
+  if (verdict.broken) {
+    return {
+      ...unrefined(`GFN2-xTB's result no longer had the bonds drawn — ${verdict.broken} — so it was set aside`),
+      setAside: shown,
+      brokenBond: verdict.broken,
+    };
+  }
+  return shown;
 }

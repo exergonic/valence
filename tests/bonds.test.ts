@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
-import { bondCylinders, bondPerpendicular } from '../src/render/bonds';
+import { bondCylinders, bondPerpendicular, dashSpans, renderBonds } from '../src/render/bonds';
 import type { Atom, Bond } from '../src/mol-parser';
 
 const R = 0.1;
@@ -33,6 +33,36 @@ describe('bondCylinders', () => {
     // 4 is the MOL aromatic bond type; 0 is malformed input
     expect(bondCylinders(4, R)).toEqual([{ offset: 0, radius: R }]);
     expect(bondCylinders(0, R)).toEqual([{ offset: 0, radius: R }]);
+  });
+});
+
+describe('dashSpans', () => {
+  it('a partial bond is a row of whole, evenly spaced dashes inside the bond', () => {
+    const spans = dashSpans(2.6); // the phenylbutene bromonium's long C–Br
+    expect(spans).toHaveLength(10);
+    for (const [from, to] of spans) {
+      expect(from).toBeGreaterThan(0);
+      expect(to).toBeLessThan(1);
+      expect(to - from).toBeCloseTo(spans[0][1] - spans[0][0], 10);
+    }
+    for (let k = 1; k < spans.length; k++) expect(spans[k][0]).toBeGreaterThan(spans[k - 1][1]);
+  });
+
+  it('even a short one has three dashes', () => {
+    expect(dashSpans(0.4)).toHaveLength(3);
+  });
+});
+
+describe('renderBonds', () => {
+  it('draws a stretched bond as dashes, a full one as one cylinder', () => {
+    const atoms = [atom('C', 0, 0), atom('Br', 2.6, 0)];
+    const full = new THREE.Group();
+    renderBonds(full, atoms, [{ atom1Index: 0, atom2Index: 1, order: 1 }]);
+    expect(full.children).toHaveLength(1);
+    const dashed = new THREE.Group();
+    renderBonds(dashed, atoms, [{ atom1Index: 0, atom2Index: 1, order: 2, stretched: true }]);
+    expect(dashed.children).toHaveLength(dashSpans(2.6).length); // one line, whatever the order
+    for (const mesh of dashed.children) expect(mesh.userData.lobeType).toBe('bond');
   });
 });
 

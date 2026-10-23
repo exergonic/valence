@@ -977,6 +977,20 @@ button, input, select, textarea { font-family: inherit; }
 }
 #mol-link:hover { text-decoration: underline; }
 
+/* A GFN2 result set aside (a drawn bond came apart), shown on request */
+#mol-set-aside {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 9px;
+  border-radius: 6px;
+  border: 1px solid var(--accent-soft-border);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+#mol-set-aside:hover { border-color: var(--accent); }
+#mol-set-aside.hidden { display: none; }
+
 /* ── The inspector: the active model view's controls ──
    Docked on the right, the mirror of the sketcher on the left. Its sections
    show by the view (data-view, set in model-views.ts): one shared section, then

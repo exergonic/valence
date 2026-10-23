@@ -38,6 +38,18 @@ export function bondCylinders(order: number, radius: number): { offset: number; 
   }
 }
 
+/** A dashed bond's period (one dash and one gap) in Å, and the dash's share of
+ *  it: short enough that a 2.6 Å partial bond reads as a row of dashes. */
+const DASH_PERIOD = 0.26;
+const DASH_FILL = 0.55;
+
+/** The dashes of a partial bond `length` Å long, as spans from atom 1 to
+ *  atom 2: whole dashes, each centred in its period, never fewer than three. */
+export function dashSpans(length: number): [number, number][] {
+  const n = Math.max(3, Math.round(length / DASH_PERIOD));
+  return Array.from({ length: n }, (_, k) => [(k + (1 - DASH_FILL) / 2) / n, (k + (1 + DASH_FILL) / 2) / n]);
+}
+
 /** Unit vector perpendicular to the bond axis, preferring one that lies in the
  *  plane of a neighbouring bond: that is what puts a double bond's second line
  *  in the molecular plane, the way a textbook drawing shows it.  Collinear
@@ -99,10 +111,17 @@ export function renderBonds(
     const perpendicular = bondPerpendicular(atoms, bonds, bond, dir);
     // `span` is the stretch of the bond a mesh covers, as fractions from atom 1
     // to atom 2: the vibration reads it to move a half-bond with its atoms
-    const pieces = stick
+    const whole = stick
       ? halves(bond).map(({ span, color }) => ({ span, material: makeAtomMaterial(style, color, env), layer: atomLayer(style) }))
       : [{ span: [0, 1] as [number, number], material: new THREE.MeshPhongMaterial({ color: 0xcccccc }), layer: 0 }];
-    for (const cylinder of bondCylinders(bond.order, radius)) {
+    // A drawn bond GFN2 stretched past a full bond (bond-integrity.ts) is drawn
+    // as the textbook draws a partial bond: one dashed line, whatever the
+    // sketch's order. A dash takes the material of the half its middle is in.
+    const pieces = bond.stretched
+      ? dashSpans(length).map((span) => ({ ...whole[(span[0] + span[1]) / 2 > 0.5 ? whole.length - 1 : 0], span }))
+      : whole;
+    const cylinders = bond.stretched ? [{ offset: 0, radius }] : bondCylinders(bond.order, radius);
+    for (const cylinder of cylinders) {
       for (const { span, material, layer } of pieces) {
         const geo = new THREE.CylinderGeometry(cylinder.radius, cylinder.radius, length * (span[1] - span[0]), stick ? 16 : 8);
         const mesh = new THREE.Mesh(geo, material);

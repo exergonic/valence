@@ -1,4 +1,4 @@
-import { bondingChange } from '../geometry/bond-integrity';
+import { assessBonding, markStretchedBonds } from '../geometry/bond-integrity';
 import type { SceneContext } from '../render';
 import { rebuildDisplay, buildScene } from '../render';
 import { parseMolBlock } from '../mol-parser';
@@ -8,7 +8,7 @@ import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { chargedXAtoms, parseChargedLabel } from './charged-x-atoms';
 import { isMetal, lowestMultiplicity, spinName } from '../chem/elements';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
-import { computeLocalGeometry } from '../geometry/local-geometry';
+import { computeLocalGeometry, type LocalGeometry } from '../geometry/local-geometry';
 import {
   cancelGfn2, Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, GFN2_NOTE, SADDLE_FREQUENCY_THRESHOLD, type Gfn2Progress, type Gfn2Result,
 } from '../geometry/gfn2-refine';
@@ -303,6 +303,7 @@ export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
   warningsEl.textContent = info.warnings?.join('\n') ?? '';
 
   showInfoLog(info.info ?? []);
+  document.getElementById('mol-set-aside')!.classList.add('hidden');
 
   // Collapsible PubChem record — only populated on successful PubChem lookups.
   const dataDetails = document.getElementById('mol-data')!;
@@ -346,6 +347,16 @@ export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
   }
 }
 
+/** The header's button for a GFN2 result set aside because a drawn bond came
+ *  apart in it; `label` says what a press shows. Every new header hides it,
+ *  so it is offered after the header is written. */
+function offerSetAside(label: string, show: () => void) {
+  const button = document.getElementById('mol-set-aside') as HTMLButtonElement;
+  button.textContent = label;
+  button.onclick = show;
+  button.classList.remove('hidden');
+}
+
 export function mountJsmePanel(ctx: SceneContext) {
   const renderBtn = document.getElementById('render-btn')! as HTMLButtonElement;
   ctx.rerender = () => rebuildDisplay(ctx);
@@ -371,10 +382,6 @@ export function mountJsmePanel(ctx: SceneContext) {
       const molBlock = applet.molFile();
       const t1 = performance.now();
       let molecule = withXAtomCharges(parseMolBlock(molBlock), applet.molFile(true));
-      // A GFN2 optimisation hands back its own charges and vibrations with the
-      // geometry; a fetched structure has neither.
-      let gfn2Charges: number[] | null = null;
-      let vibrations: NormalMode[] | null = null;
       const t2 = performance.now();
       if (molecule.atoms.length === 0) return;
 
@@ -393,6 +400,8 @@ export function mountJsmePanel(ctx: SceneContext) {
         molecule = snapped.molecule;
         const caveats = result.info.source === 'pubchem' ? mmff94ConformerCaveats(molecule) : [];
         showMoleculeHeader(molecule, { ...result.info, info: [...caveats, ...snapped.info] });
+        // a fetched structure brings no GFN2 charges or vibrations
+        showMolecule(ctx, molecule, null, null);
       } else {
         // GFN2 is the only local engine (preloaded at startup), and a larger
         // molecule takes tens of seconds, so the overlay counts as it goes and
@@ -409,33 +418,52 @@ export function mountJsmePanel(ctx: SceneContext) {
           );
           return;
         }
-        molecule = local.molecule;
-        gfn2Charges = local.gfn2?.charges ?? null;
-        vibrations = local.gfn2?.vibrations ?? null;
-        const snapped = snapToSymmetry(molecule);
-        molecule = snapped.molecule;
-        // the header keeps the structural warnings (a drawn wedge the engine
-        // could not keep among them); the verbose caveats go to the Info log
-        const notes: { warnings: string[]; info: (string | InfoNote)[] } = { warnings: [...local.warnings], info: [] };
-        if (local.engine === 'gfn2' && local.gfn2) {
-          if (!local.gfn2.converged) notes.warnings.unshift('GFN2-xTB structure, not fully converged.');
-          notes.info.push(GFN2_NOTE, ...gfn2RunNotes(local.gfn2), ...gfn2ShapeNotes(molecule),
-            ...gfn2SpinNote(local.gfn2, local.molecule, false));
-        } else {
-          // Said in the header, not just the log: the structure on screen is a
-          // starting guess, and bond lengths and angles read off it mean little.
-          notes.warnings.unshift(`Unoptimised structure — ${local.unrefinedReason ?? 'GFN2-xTB did not run'}.`);
-          notes.info.push(
-            'The structure shown is the embedder\'s starting guess: ideal VSEPR directions and typical bond '
-            + 'lengths, not an energy minimum. Read its shape, not its numbers.',
-          );
-        }
-        if (metal && !forceLocal) {
-          notes.info.push(`Built locally, without asking PubChem or CIR: the sketch contains a metal (${metal}). `
-            + 'PubChem has no 3D structure for most metal compounds, and CIR builds them by rule, roughly.');
-        }
-        notes.info.push(...snapped.info);
-        showMoleculeHeader(molecule, { source: local.engine === 'gfn2' ? 'gfn2' : 'local', ...notes });
+        // One local geometry on screen: the header, the Info log, the scene.
+        // `onRequest` is said first in the header when it is a set-aside
+        // result the user asked to see.
+        const present = (shown: LocalGeometry, onRequest?: string) => {
+          const snapped = snapToSymmetry(shown.molecule);
+          const next = snapped.molecule;
+          // the header keeps the structural warnings (a drawn wedge the engine
+          // could not keep among them); the verbose caveats go to the Info log
+          const notes: { warnings: string[]; info: (string | InfoNote)[] } = { warnings: [...shown.warnings], info: [] };
+          if (shown.engine === 'gfn2' && shown.gfn2) {
+            if (!shown.gfn2.converged) notes.warnings.unshift('GFN2-xTB structure, not fully converged.');
+            notes.info.push(GFN2_NOTE, ...gfn2RunNotes(shown.gfn2), ...(shown.partialBonds ?? []),
+              ...gfn2ShapeNotes(next), ...gfn2SpinNote(shown.gfn2, shown.molecule, false));
+          } else {
+            // Said in the header, not just the log: the structure on screen is a
+            // starting guess, and bond lengths and angles read off it mean little.
+            notes.warnings.unshift(`Unoptimised structure — ${shown.unrefinedReason ?? 'GFN2-xTB did not run'}.`);
+            notes.info.push(
+              'The structure shown is the embedder\'s starting guess: ideal VSEPR directions and typical bond '
+              + 'lengths, not an energy minimum. Read its shape, not its numbers.',
+            );
+          }
+          if (onRequest) notes.warnings.unshift(onRequest);
+          if (metal && !forceLocal) {
+            notes.info.push(`Built locally, without asking PubChem or CIR: the sketch contains a metal (${metal}). `
+              + 'PubChem has no 3D structure for most metal compounds, and CIR builds them by rule, roughly.');
+          }
+          notes.info.push(...snapped.info);
+          showMoleculeHeader(next, { source: shown.engine === 'gfn2' ? 'gfn2' : 'local', ...notes });
+          showMolecule(ctx, next, shown.gfn2?.charges ?? null, shown.gfn2?.vibrations ?? null);
+        };
+
+        // A result in which a drawn bond came apart is set aside, the start
+        // shown — but the bond may have broken because the chemistry says so
+        // (an open carbocation), so the header offers it, and back again.
+        const setAside = local.setAside;
+        const showStart = () => {
+          present(local);
+          if (setAside) offerSetAside('Show GFN2-xTB\'s result', showSetAside);
+        };
+        const showSetAside = () => {
+          present(setAside!, `GFN2-xTB's result, shown on request: ${local.brokenBond}, drawn dashed — `
+            + 'this is no longer the molecule drawn.');
+          offerSetAside('Show the unoptimised start', showStart);
+        };
+        showStart();
         console.log('[render-timing]', {
           jsme: +(t1 - t0).toFixed(1),
           parse: +(t2 - t1).toFixed(1),
@@ -443,8 +471,6 @@ export function mountJsmePanel(ctx: SceneContext) {
           local: +(t4 - t3).toFixed(1),
         });
       }
-
-      showMolecule(ctx, molecule, gfn2Charges, vibrations);
     } finally {
       renderBtn.textContent = 'Build 3D model';
       renderBtn.disabled = false;
@@ -482,21 +508,37 @@ export function mountJsmePanel(ctx: SceneContext) {
           showRenderError('GFN2-xTB found no usable geometry from this structure — the geometry is unchanged.');
           return;
         }
-        // the same guard as the local pipeline's: not the molecule drawn, not shown
-        const changed = bondingChange(refined.molecule);
-        if (changed) {
-          showRenderError(`GFN2-xTB's result no longer had the bonds drawn (${changed}) — the geometry is unchanged.`);
+        // the same guard as the local pipeline's: a bond formed, not shown; a
+        // drawn bond stretched, shown dashed; one came apart, the structure on
+        // screen stays, and GFN2's result is offered
+        const verdict = assessBonding(refined.molecule, refined.bondOrders);
+        if (verdict.formed) {
+          showRenderError(`GFN2-xTB's result no longer had the bonds drawn (${verdict.formed}) — the geometry is unchanged.`);
           return;
         }
-        const snapped = snapToSymmetry(refined.molecule);
-        const next = snapped.molecule;
-        showMolecule(ctx, next, refined.charges, refined.vibrations);
-        // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
-        // the geometry no longer comes from MMFF94, so calling it "approximate"
-        // would be stale.
-        const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...gfn2ShapeNotes(next),
-          ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info];
-        showMoleculeHeader(next, { source: 'gfn2', warnings: refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'], info });
+        const show = (onRequest?: string) => {
+          const snapped = snapToSymmetry(markStretchedBonds(refined.molecule, verdict.stretched));
+          const next = snapped.molecule;
+          showMolecule(ctx, next, refined.charges, refined.vibrations);
+          // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
+          // the geometry no longer comes from MMFF94, so calling it "approximate"
+          // would be stale.
+          const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...verdict.partial, ...gfn2ShapeNotes(next),
+            ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info];
+          const warnings = refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'];
+          if (onRequest) warnings.unshift(onRequest);
+          showMoleculeHeader(next, { source: 'gfn2', warnings, info });
+        };
+        if (verdict.broken) {
+          const broken = verdict.broken;
+          showRenderError(`GFN2-xTB's result no longer had the bonds drawn (${broken}) — the geometry is unchanged.`);
+          offerSetAside('Show GFN2-xTB\'s result', () => {
+            hideRenderError();
+            show(`GFN2-xTB's result, shown on request: ${broken}, drawn dashed — this is no longer the molecule drawn.`);
+          });
+          return;
+        }
+        show();
       } catch (error) {
         showRenderError(error instanceof Gfn2Cancelled
           ? 'GFN2-xTB refinement cancelled — the geometry is unchanged.'

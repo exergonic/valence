@@ -180,6 +180,11 @@ export interface Gfn2Result {
    *  Null when the engine's cached SCF does not describe the returned point
    *  — a wrong-geometry charge array is worse than none. */
   charges: number[] | null;
+  /** The Wiberg bond order of each bond in `molecule.bonds`, in that order, at
+   *  the returned geometry — what the bonding guard reads to tell a drawn bond
+   *  that stretched from one that came apart (bond-integrity.ts). Null on the
+   *  same terms as `charges`. */
+  bondOrders: number[] | null;
   /** The lowest harmonic vibration at the returned geometry (cm⁻¹, negative
    *  for an imaginary mode), or null when the check was skipped — the run did
    *  not converge, the molecule is above the size gate, or the Hessian failed.
@@ -695,6 +700,7 @@ export async function optimizeWithGfn2(
   }
 
   let charges: number[] | null = null;
+  let bondOrders: number[] | null = null;
   if (best.evaluates) {
     try {
       const q = best.calc.charges();
@@ -704,6 +710,13 @@ export async function optimizeWithGfn2(
       }
     } catch {
       // no charges rather than another geometry's
+    }
+    try {
+      const wiberg = best.calc.bondOrders();
+      bondOrders = molecule.bonds.map((b) => wiberg.get(b.atom1Index, b.atom2Index) as number);
+      wiberg.delete?.();
+    } catch {
+      // no bond orders: the guard then treats every stretched bond as broken
     }
   }
   release(best.calc);
@@ -716,6 +729,7 @@ export async function optimizeWithGfn2(
     converged: best.converged,
     milliseconds: performance.now() - started,
     charges,
+    bondOrders,
     lowestFrequency: lowest?.frequency ?? null,
     saddleEscapes,
     // the vibrations come free with the curvature check — and only mean
