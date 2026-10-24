@@ -5,6 +5,7 @@ import { vseprBondVectors, SQUARE_PLANAR_VECTORS } from '../chem/vsepr/ideal-vse
 import { electronDomainCounts } from '../chem/vsepr/assign-orbitals';
 import { dElectronCount } from '../chem/d-electron-count';
 import { getCovalentRadius } from '../chem/radii';
+import { newBondLimit } from './bond-integrity';
 
 /**
  * The starting length of a bond (Å): the sum of the two atoms' single-bond
@@ -133,7 +134,10 @@ export function hasRingBonds(molecule: Molecule): boolean {
 }
 
 /** Å: a nonbonded contact this close in a start is a clash — well under any
- *  real one (a geminal H···H is 1.78 Å). */
+ *  real one (a geminal H···H is 1.78 Å). A pair is also a clash when the
+ *  bonding guard would call it a new bond (`newBondLimit`): the
+ *  1,1-diphenylethylene bromonium started with its Br 1.89 Å from a phenyl's
+ *  ortho carbon, past 1.5 Å but well inside C···Br's 2.36 Å (2026-10-24). */
 const CLASH = 1.5;
 
 /**
@@ -143,8 +147,8 @@ const CLASH = 1.5;
  * squeezed each of those C–H bonds to 0.83 Å (2026-10-23). A ring hung on a
  * single bond is free to turn about it — the real molecule's phenyls twist
  * out of each other's way — so where the ring's side of such a bond clashes
- * with the rest, it is turned to the angle (in 30° steps) that leaves the
- * most room. The smaller side turns, when both hold a ring.
+ * with the rest, it is turned to the angle (in 15° steps) that leaves the
+ * most room, the pass repeating while it helps. The smaller side turns, when both hold a ring.
  */
 function turnClashingRings(molecule: Molecule, pos: Vec3[], adj: number[][], rings: Set<string>, ringAtoms: Set<number>): void {
   const n = molecule.atoms.length;
@@ -164,46 +168,62 @@ function turnClashingRings(molecule: Molecule, pos: Vec3[], adj: number[][], rin
   };
   const distance = (i: number, j: number) => Math.hypot(pos[i][0] - pos[j][0], pos[i][1] - pos[j][1], pos[i][2] - pos[j][2]);
 
-  for (const bond of molecule.bonds) {
-    const [a, b] = [bond.atom1Index, bond.atom2Index];
-    if (bond.order !== 1 || rings.has(`${Math.min(a, b)}-${Math.max(a, b)}`)) continue;
-    const sides = [sideOf(a, b), sideOf(b, a)].filter((side) => [...side].some((i) => ringAtoms.has(i)));
-    if (sides.length === 0) continue;
-    const turning = sides.reduce((small, side) => (side.size < small.size ? side : small));
-    const rest = Array.from({ length: n }, (_, i) => i).filter((i) => !turning.has(i));
-    // the closest contact across the bond (the bond itself is the only one
-    // bonded, and its length does not change as the side turns)
-    const room = () => {
-      let closest = Infinity;
-      for (const i of turning) {
-        for (const j of rest) if (!(i === pivot && j === fixed)) closest = Math.min(closest, distance(i, j));
-      }
-      return closest;
-    };
-    const pivot = turning.has(a) ? a : b;
-    const fixed = pivot === a ? b : a;
-    if (room() >= CLASH) continue;
+  // a pair sharing a neighbour is exempt, as in the guard: its distance is
+  // set by the angle between two bonds, and no turn changes it
+  const shareNeighbour = (i: number, j: number) => adj[i].some((k) => adj[j].includes(k));
+  const STEPS = 24; // 15° apart
 
-    const axis = vecNormalize(vecSub(pos[pivot], pos[fixed]));
-    const start = new Map([...turning].map((i) => [i, pos[i]]));
-    const turnTo = (angle: number) => {
-      const [cosT, sinT] = [Math.cos(angle), Math.sin(angle)];
-      for (const [i, p] of start) {
-        const v = rotateRodrigues(vecSub(p, pos[fixed]), axis, cosT, sinT);
-        pos[i] = [pos[fixed][0] + v[0], pos[fixed][1] + v[1], pos[fixed][2] + v[2]];
+  // Turning one ring changes what the next one sees — two phenyls on one
+  // carbon have to settle together — so the pass repeats while it helps.
+  for (let pass = 0; pass < 4; pass++) {
+    let turnedAny = false;
+    for (const bond of molecule.bonds) {
+      const [a, b] = [bond.atom1Index, bond.atom2Index];
+      if (bond.order !== 1 || rings.has(`${Math.min(a, b)}-${Math.max(a, b)}`)) continue;
+      const sides = [sideOf(a, b), sideOf(b, a)].filter((side) => [...side].some((i) => ringAtoms.has(i)));
+      if (sides.length === 0) continue;
+      const turning = sides.reduce((small, side) => (side.size < small.size ? side : small));
+      const rest = Array.from({ length: n }, (_, i) => i).filter((i) => !turning.has(i));
+      const pivot = turning.has(a) ? a : b;
+      const fixed = pivot === a ? b : a;
+      // the tightest contact across the bond, as its distance less the distance
+      // that makes it a clash: negative is a clash
+      const room = () => {
+        let tightest = Infinity;
+        for (const i of turning) {
+          for (const j of rest) {
+            if ((i === pivot && j === fixed) || shareNeighbour(i, j)) continue;
+            const limit = Math.max(CLASH, newBondLimit(molecule.atoms[i].element, molecule.atoms[j].element));
+            tightest = Math.min(tightest, distance(i, j) - limit);
+          }
+        }
+        return tightest;
+      };
+      if (room() >= 0) continue;
+
+      const axis = vecNormalize(vecSub(pos[pivot], pos[fixed]));
+      const start = new Map([...turning].map((i) => [i, pos[i]]));
+      const turnTo = (angle: number) => {
+        const [cosT, sinT] = [Math.cos(angle), Math.sin(angle)];
+        for (const [i, p] of start) {
+          const v = rotateRodrigues(vecSub(p, pos[fixed]), axis, cosT, sinT);
+          pos[i] = [pos[fixed][0] + v[0], pos[fixed][1] + v[1], pos[fixed][2] + v[2]];
+        }
+      };
+      let best = 0;
+      let bestRoom = room();
+      for (let k = 1; k < STEPS; k++) {
+        turnTo((2 * Math.PI * k) / STEPS);
+        const r = room();
+        if (r > bestRoom) {
+          bestRoom = r;
+          best = k;
+        }
       }
-    };
-    let best = 0;
-    let bestRoom = room();
-    for (let k = 1; k < 12; k++) {
-      turnTo((k * Math.PI) / 6);
-      const r = room();
-      if (r > bestRoom) {
-        bestRoom = r;
-        best = k;
-      }
+      turnTo((2 * Math.PI * best) / STEPS);
+      if (best !== 0) turnedAny = true;
     }
-    turnTo((best * Math.PI) / 6);
+    if (!turnedAny) break;
   }
 }
 

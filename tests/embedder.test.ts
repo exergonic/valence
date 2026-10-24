@@ -6,6 +6,9 @@ import type { Molecule } from '../src/mol-parser';
 import { embed3D, honourWedges } from '../src/geometry/embed';
 import { BUTANE, PENTANE, OCTANE, HEXAN_2_AMINE, HEXAN_2_AMINE_WEDGED, NEOPENTANE, DIMETHYLBUTANE, METHYLHEXANOL, CIS_BUTENE, TRANS_BUTENE, DIPHENYLETHANE, DIPHENYLETHYLENE_BROMONIUM } from './references/sketches';
 import { getCovalentRadius } from '../src/chem/radii';
+import { isMoleculeDrawn } from '../src/geometry/bond-integrity';
+import { EXAMPLES } from '../src/ui/examples';
+import * as SKETCHES from './references/sketches';
 
 describe('place3D', () => {
   it('should place isolated atom at origin', () => {
@@ -236,6 +239,30 @@ describe('two rings on one carbon', () => {
       for (let j = i + 1; j < atoms.length; j++) {
         if (!bonded.has(`${i}-${j}`)) expect(distance(i, j), `${i + 1}···${j + 1}`).toBeGreaterThan(1.5);
       }
+    }
+  });
+});
+
+describe('every start in the suite', () => {
+  // The embedder's start is what GFN2 starts from, and what the app shows when
+  // GFN2 gives nothing. Two bugs tore rings apart before anyone saw them
+  // (C–H 0.65 Å, C–C 1.85 Å — 1,1-diphenylethane, 2026-10-23), found only
+  // because a molecule failed. So every sketch and example the suite has must
+  // start as the molecule drawn by the bonding guard's own rule, with no bond
+  // shorter than 0.75× its covalent radii sum (a triple bond starts at 0.78×).
+  const cases: [string, Molecule][] = [
+    ...EXAMPLES.map((e) => [e.name, { ...parseMolBlock(e.mol), multiplicity: e.multiplicity }] as [string, Molecule]),
+    ...Object.entries(SKETCHES).filter(([, mol]) => typeof mol === 'string')
+      .map(([name, mol]) => [name, parseMolBlock(mol as string)] as [string, Molecule]),
+  ];
+  it.each(cases)('%s starts as the molecule drawn', (_, molecule) => {
+    const start = embed3D(molecule).separated;
+    expect(isMoleculeDrawn(start)).toBe(true);
+    const { atoms } = start;
+    for (const b of start.bonds) {
+      const [p, q] = [atoms[b.atom1Index], atoms[b.atom2Index]];
+      const ratio = Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z) / (getCovalentRadius(p.element) + getCovalentRadius(q.element));
+      expect(ratio, `${p.element}${b.atom1Index + 1}–${q.element}${b.atom2Index + 1}`).toBeGreaterThan(0.75);
     }
   });
 });
