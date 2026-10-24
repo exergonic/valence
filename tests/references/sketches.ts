@@ -301,3 +301,17 @@ export const DIPHENYLETHYLENE_BROMONIUM = HEADER + ` 15 17  0  0  0  0  0  0  0 
 M  CHG  1   2   1
 M  END
 `;
+
+/** BrCH2–CH2⁺, the Br on a wedge — the 2-bromoethyl cation as the user drew
+ *  it in JSME (2026-10-24). Wedged, the Br starts turned toward C2's empty p
+ *  orbital and closes the ring to the ethylene bromonium; on a plain bond it
+ *  starts in C2's plane and stays open (a minimum 20 kcal/mol higher). */
+export const BROMOETHYL_CATION_WEDGED = HEADER + `  3  2  0  0  0  0  0  0  0  0999 V2000
+    0.0000    0.7000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2124    0.0000    0.0000 C   0  3  0  0  0  0  0  0  0  0  0  0
+    0.9282    1.7480    0.0000 Br  0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  1  0  0  0
+M  CHG  1   2   1
+M  END
+`;

@@ -179,6 +179,10 @@ export interface Gfn2Result {
    *  that stretched from one that came apart (bond-integrity.ts). Null on the
    *  same terms as `charges`. */
   bondOrders: number[] | null;
+  /** GFN2's whole Wiberg matrix at the returned geometry, indexed by atom —
+   *  the guard reads it for a close 1,3 pair, whose ring may have closed.
+   *  Null on the same terms as `charges`. */
+  bondOrderMatrix: number[][] | null;
   /** The lowest harmonic vibration at the returned geometry (cm⁻¹, negative
    *  for an imaginary mode), or null when the check was skipped — the run did
    *  not converge, the molecule is above the size gate, or the Hessian failed.
@@ -403,11 +407,12 @@ export async function optimizeWithGfn2(
   // touched: its lowest point that is still the molecule drawn is kept, as
   // the held run's start (and its stand-in, if that run cannot finish).
   let holding = false;
+  let heldApart: [number, number][] = []; // pairs the free result bonded
   let watched: { flat: number[]; energy: number } | null = null;
   const energyAt = (calc: ReturnType<typeof buildCalculator>, flat: number[]) => {
     const result = evaluate(M, calc, flat);
     if (!holding) return result;
-    const wall = heldRestraint(moleculeAt(flat));
+    const wall = heldRestraint(moleculeAt(flat), heldApart);
     return {
       energy: result.energy + wall.energy,
       gradient: result.gradient.map((row, i) => row.map((g, c) => g + wall.gradient[i][c])),
@@ -757,6 +762,7 @@ export async function optimizeWithGfn2(
   const readProperties = (calc: ReturnType<typeof buildCalculator>) => {
     let charges: number[] | null = null;
     let bondOrders: number[] | null = null;
+    let bondOrderMatrix: number[][] | null = null;
     try {
       const q = calc.charges();
       if (q.size() === count) {
@@ -769,13 +775,16 @@ export async function optimizeWithGfn2(
     try {
       const wiberg = calc.bondOrders();
       bondOrders = molecule.bonds.map((b) => wiberg.get(b.atom1Index, b.atom2Index) as number);
+      bondOrderMatrix = Array.from({ length: count }, (_, i) =>
+        Array.from({ length: count }, (_, j) => wiberg.get(i, j) as number));
       wiberg.delete?.();
     } catch {
       // no bond orders: the guard then treats every stretched bond as broken
     }
-    return { charges, bondOrders };
+    return { charges, bondOrders, bondOrderMatrix };
   };
-  const { charges, bondOrders } = best.evaluates ? readProperties(best.calc) : { charges: null, bondOrders: null };
+  const { charges, bondOrders, bondOrderMatrix } = best.evaluates
+    ? readProperties(best.calc) : { charges: null, bondOrders: null, bondOrderMatrix: null };
   release(best.calc);
 
   // The free result is GFN2's answer, and it stands. But if it no longer has
@@ -784,7 +793,7 @@ export async function optimizeWithGfn2(
   // the embedder's start — from the watched point, in what is left of the
   // budget (the Hessian and saddle checks do not apply: the wall holds it).
   let held: Gfn2Held | null = null;
-  const verdict = assessBonding(best.geometry, bondOrders);
+  const verdict = assessBonding(best.geometry, bondOrders, bondOrderMatrix);
   if (verdict.broken || verdict.formed) {
     stage = 'holding';
     report();
@@ -792,21 +801,25 @@ export async function optimizeWithGfn2(
     const point = watched as { flat: number[]; energy: number } | null;
     const from = point ? moleculeAt(point.flat) : molecule;
     holding = true;
+    heldApart = verdict.formedPairs;
     const relaxed = relax(from);
     holding = false;
-    if (relaxed && isMoleculeDrawn(relaxed.geometry)) {
+    if (relaxed && isMoleculeDrawn(relaxed.geometry, heldApart)) {
       try {
         // GFN2's own energy there, and the cache put back at that point
         const flat = relaxed.geometry.atoms.flatMap((a) => [a.x, a.y, a.z]);
         const energy = energyAt(relaxed.calc, flat).energy;
+        const { charges: heldCharges, bondOrders: heldOrders } = readProperties(relaxed.calc);
         held = { molecule: relaxed.geometry, energyHartree: energy, restrained: true,
-          converged: relaxed.converged, ...readProperties(relaxed.calc) };
+          converged: relaxed.converged, charges: heldCharges, bondOrders: heldOrders };
       } catch {
         // the held point did not evaluate: fall back to the watched one
       }
     }
     if (relaxed) release(relaxed.calc);
-    if (!held && point) {
+    // the watched point stands in only if it kept the formed pairs apart too
+    // (a 1,3 closure is not something the run watched for)
+    if (!held && point && isMoleculeDrawn(moleculeAt(point.flat), heldApart)) {
       held = { molecule: moleculeAt(point.flat), energyHartree: point.energy, restrained: false,
         converged: false, charges: null, bondOrders: null };
     }
@@ -822,6 +835,7 @@ export async function optimizeWithGfn2(
     milliseconds: performance.now() - started,
     charges,
     bondOrders,
+    bondOrderMatrix,
     lowestFrequency: lowest?.frequency ?? null,
     saddleEscapes,
     // the vibrations come free with the curvature check — and only mean

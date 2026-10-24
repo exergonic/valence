@@ -567,7 +567,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       // the same guard as the local pipeline's: a drawn bond stretched,
       // shown dashed; one came apart or a new one formed, the held structure
       // shown (or the screen left as it was), and GFN2's result offered
-      const verdict = assessBonding(refined.molecule, refined.bondOrders);
+      const verdict = assessBonding(refined.molecule, refined.bondOrders, refined.bondOrderMatrix);
       const show = (onRequest?: string) => {
         const snapped = snapToSymmetry(markBondingChanges(refined.molecule, verdict));
         const next = snapped.molecule;

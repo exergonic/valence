@@ -97,7 +97,7 @@ export async function computeLocalGeometry(
   // isomerization) or a bad start (two H₂ molecules out of a clash, once) —
   // and shows the molecule drawn instead: relaxed with its bonds held, or the
   // start when there is no held structure. The free result stays a click away.
-  const verdict = assessBonding(finished.molecule, refined.bondOrders);
+  const verdict = assessBonding(finished.molecule, refined.bondOrders, refined.bondOrderMatrix);
   const free: LocalGeometry = {
     ...finished,
     molecule: markBondingChanges(finished.molecule, verdict),

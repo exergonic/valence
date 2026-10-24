@@ -94,3 +94,24 @@ H    2.42026    6.85124   -1.10521
   [1, 16, 1], [1, 17, 1], [6, 18, 1], [7, 19, 1], [8, 20, 1], [9, 21, 1], [10, 22, 1],
   [11, 23, 1], [12, 24, 1], [13, 25, 1], [14, 26, 1], [15, 27, 1],
 ]);
+
+/** `molecule` with its charge on carbon `atom` (numbered from 1), not on Br. */
+function carbocation(m: Molecule, atom: number): Molecule {
+  return { ...m, atoms: m.atoms.map((a, i) => ({ element: a.element, x: a.x, y: a.y, z: a.z, ...(i === atom - 1 ? { charge: 1 } : {}) })) };
+}
+
+/**
+ * The 2-bromoethyl cation drawn open (Br on C1, the charge on C2), as GFN2
+ * left it: closed to the ethylene bromonium, C1–Br and C2···Br both 1.98 Å
+ * (Wiberg 0.86 each). Exported from the app by the user (2026-10-24), the
+ * sketch's bonds — no C2–Br.
+ */
+export const BROMOETHYL_CATION_CLOSED = carbocation(molecule(`
+C    0.0981   -0.2289   -0.0373
+C   -0.1120    0.2124    1.3451
+Br  -0.6655    1.5920    0.0430
+H    1.1013   -0.2255   -0.4574
+H   -0.5948   -0.9354   -0.4885
+H   -0.9592   -0.1698    1.9098
+H    0.7368    0.5401    1.9409
+`, [[1, 2, 1], [1, 3, 1], [1, 4, 1], [1, 5, 1], [2, 6, 1], [2, 7, 1]]), 2);

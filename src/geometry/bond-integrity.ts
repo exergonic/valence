@@ -28,8 +28,10 @@
  *   bond-perception programs use. H2 (0.74 A against 1.02 A) is caught; a
  *   1,3 pair is exempt because its distance is set by the angle between two
  *   real bonds — diborane's B···B, 1.77 A across the bridging hydrogens, is
- *   one, and so is every geminal H···H. A formed bond still sets the result
- *   aside: it is the signature of a bad start.
+ *   one, and so is every geminal H···H — unless GFN2 gives it a single-bond
+ *   Wiberg order (FORMED_ACROSS_WIBERG): then a three-membered ring has
+ *   closed, as when the 2-bromoethyl cation drawn open becomes the ethylene
+ *   bromonium. A formed bond sets the result aside, as a broken one does.
  */
 import type { Molecule } from '../mol-parser';
 import { getCovalentRadius } from '../chem/radii';
@@ -53,6 +55,16 @@ export function newBondLimit(element1: string, element2: string): number {
  * itself lists no bond below 0.10.
  */
 const PARTIAL_WIBERG = 0.1;
+/**
+ * The Wiberg order at which a 1,3 pair inside bonding distance has closed a
+ * three-membered ring — a new bond — rather than sitting where its two bonds'
+ * angle puts it. Measured 2026-10-24, the only close 1,3 pairs in the
+ * examples and the sketches the user brought: diborane's B···B 0.55 at 1.81 Å
+ * (three-centre bridges, drawn as such: not a new bond) and the 2-bromoethyl
+ * cation's C2···Br 0.86 at 1.98 Å when it closes to the ethylene bromonium
+ * (its drawn C1–Br is 0.86 too). Single-bond-like, with room either side.
+ */
+const FORMED_ACROSS_WIBERG = 0.75;
 
 export interface BondingVerdict {
   /** Every drawn bond longer than a full bond, by index into `bonds` — the
@@ -72,10 +84,16 @@ export interface BondingVerdict {
 /**
  * Grade the optimised `molecule` (the sketch's bonds, GFN2's coordinates)
  * against the bonds drawn. `bondOrders` are GFN2's Wiberg orders, one per
- * bond in `molecule.bonds`, or null when the run could not give them. Atoms
- * are numbered from 1 in the sentences, as in the export files.
+ * bond in `molecule.bonds`, or null when the run could not give them;
+ * `bondOrderMatrix` is GFN2's whole Wiberg matrix, read only for a close 1,3
+ * pair — without it a 1,3 pair is never a new bond. Atoms are numbered from
+ * 1 in the sentences, as in the export files.
  */
-export function assessBonding(molecule: Molecule, bondOrders: number[] | null): BondingVerdict {
+export function assessBonding(
+  molecule: Molecule,
+  bondOrders: number[] | null,
+  bondOrderMatrix: number[][] | null = null,
+): BondingVerdict {
   const { atoms, bonds } = molecule;
   const label = (i: number) => `${atoms[i].element}${i + 1}`;
   const distance = (i: number, j: number) =>
@@ -108,22 +126,30 @@ export function assessBonding(molecule: Molecule, bondOrders: number[] | null): 
   for (let i = 0; i < atoms.length; i++) {
     for (let j = i + 1; j < atoms.length; j++) {
       if (neighbours[i].has(j)) continue;
-      if ([...neighbours[i]].some((k) => neighbours[j].has(k))) continue;
       const r = distance(i, j);
-      if (r < newBondLimit(atoms[i].element, atoms[j].element)) {
-        verdict.formedPairs.push([i, j]);
-        verdict.formed ??= `${label(i)} and ${label(j)}, not bonded in the sketch, are ${r.toFixed(2)} Å apart — a new bond`;
-      }
+      if (r >= newBondLimit(atoms[i].element, atoms[j].element)) continue;
+      const across = [...neighbours[i]].some((k) => neighbours[j].has(k));
+      const wiberg = bondOrderMatrix?.[i]?.[j];
+      if (across && !(wiberg !== undefined && wiberg >= FORMED_ACROSS_WIBERG)) continue;
+      verdict.formedPairs.push([i, j]);
+      verdict.formed ??= `${label(i)} and ${label(j)}, not bonded in the sketch, are ${r.toFixed(2)} Å apart`
+        + `${across ? `, Wiberg ${wiberg!.toFixed(2)} — a new bond closing a three-membered ring` : ' — a new bond'}`;
     }
   }
   return verdict;
 }
 
 /** Is this still the molecule drawn, strictly — every drawn bond within a
- *  full bond's length and no new one? (A partial bond does not pass.) */
-export function isMoleculeDrawn(molecule: Molecule): boolean {
+ *  full bond's length and no new one? (A partial bond does not pass.) A pair
+ *  in `apart` — one that formed a bond in a free result, 1,3 or not — must
+ *  also be outside bonding distance. */
+export function isMoleculeDrawn(molecule: Molecule, apart: [number, number][] = []): boolean {
   const verdict = assessBonding(molecule, null);
-  return verdict.stretched.length === 0 && !verdict.formed;
+  const { atoms } = molecule;
+  const outside = ([i, j]: [number, number]) =>
+    Math.hypot(atoms[i].x - atoms[j].x, atoms[i].y - atoms[j].y, atoms[i].z - atoms[j].z)
+      >= newBondLimit(atoms[i].element, atoms[j].element);
+  return verdict.stretched.length === 0 && !verdict.formed && apart.every(outside);
 }
 
 /** How far inside the guard's limits the held structure's wall sits, and its
@@ -142,9 +168,12 @@ const BOHR = 0.529177210903; // Å
  * stiff harmonic wall. HELD keeps the wall a little inside the guard, so a
  * held structure passes it: a bond pushing on the wall overshoots by about
  * its force over 2k — 0.01 Å for 0.03 Eh/bohr, against a 0.05 Å margin.
- * Energy in Eh and gradient in Eh/bohr, per atom, from coordinates in Å.
+ * The guard's 1,3 exemption is the wall's too, except for the pairs in
+ * `apart`: those that formed a bond in the free result, held apart however
+ * they are related (a three-membered ring that closed). Energy in Eh and
+ * gradient in Eh/bohr, per atom, from coordinates in Å.
  */
-export function heldRestraint(molecule: Molecule): { energy: number; gradient: number[][] } {
+export function heldRestraint(molecule: Molecule, apart: [number, number][] = []): { energy: number; gradient: number[][] } {
   const { atoms, bonds } = molecule;
   const gradient = atoms.map(() => [0, 0, 0]);
   let energy = 0;
@@ -178,6 +207,10 @@ export function heldRestraint(molecule: Molecule): { energy: number; gradient: n
       if ([...neighbours[i]].some((k) => neighbours[j].has(k))) continue;
       wall(i, j, newBondLimit(atoms[i].element, atoms[j].element) / HELD, 'above');
     }
+  }
+  for (const [i, j] of apart) {
+    if (![...neighbours[i]].some((k) => neighbours[j].has(k))) continue; // walled above
+    wall(i, j, newBondLimit(atoms[i].element, atoms[j].element) / HELD, 'above');
   }
   return { energy, gradient };
 }

@@ -24,8 +24,8 @@ import { localGeometry } from './helpers/local-geometry';
 import type { LocalGeometry } from '../src/geometry/local-geometry';
 import { EXAMPLES } from '../src/ui/examples';
 import { HEXAN_2_AMINE_BROKEN } from './references/broken-results';
-import { DIPHENYLETHYLENE_BROMONIUM, PHENYLBUTENE_BROMONIUM } from './references/bromonium-ions';
-import { DIPHENYLETHYLENE_BROMONIUM as DIPHENYLETHYLENE_BROMONIUM_SKETCH } from './references/sketches';
+import { BROMOETHYL_CATION_CLOSED, DIPHENYLETHYLENE_BROMONIUM, PHENYLBUTENE_BROMONIUM } from './references/bromonium-ions';
+import { BROMOETHYL_CATION_WEDGED, DIPHENYLETHYLENE_BROMONIUM as DIPHENYLETHYLENE_BROMONIUM_SKETCH } from './references/sketches';
 import { NAOH } from './references/oracle-minima';
 
 const ACCEPTED = ['Diborane', 'Phosphorus pentachloride', 'Sulfur hexafluoride', 'Tetrachloronickelate', 'Benzene'];
@@ -56,6 +56,7 @@ const run = (molecule: Molecule, bondOrders: number[] | null): Gfn2Result => ({
   milliseconds: 1,
   charges: null,
   bondOrders,
+  bondOrderMatrix: null,
   lowestFrequency: null,
   saddleEscapes: 0,
   multiplicity: 1,
@@ -204,5 +205,52 @@ describe('the held structure', () => {
     expect(local!.bondingChange).toMatch(/C3–Br2 bond came apart/);
     expect(local!.setAside?.engine).toBe('gfn2');
     expect(local!.held!.energyHartree).toBeGreaterThan(local!.setAside!.gfn2!.energyHartree);
+  }, 120_000);
+});
+
+describe('a three-membered ring that closes', () => {
+  // A 1,3 pair is exempt from the distance test — its bonds' angle sets its
+  // distance — unless GFN2's Wiberg order there is single-bond-like. The
+  // 2-bromoethyl cation drawn open closes to the ethylene bromonium (C2···Br
+  // 0.86); diborane's B···B across its bridges (0.55) stays as drawn.
+  const matrixOf = async (molecule: Molecule) => {
+    const pairs: [number, number][] = [];
+    for (let i = 0; i < molecule.atoms.length; i++) for (let j = i + 1; j < molecule.atoms.length; j++) pairs.push([i, j]);
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const probe = { ...molecule, bonds: pairs.map(([i, j]) => ({ atom1Index: i, atom2Index: j, order: 1 })) };
+    const orders = (await propertiesAt(probe, vendorFile))!.bondOrders;
+    const matrix = molecule.atoms.map(() => molecule.atoms.map(() => 0));
+    pairs.forEach(([i, j], k) => { matrix[i][j] = orders[k]; matrix[j][i] = orders[k]; });
+    return matrix;
+  };
+
+  it('catches the bromonium the open cation closed into', async () => {
+    const verdict = assessBonding(BROMOETHYL_CATION_CLOSED, null, await matrixOf(BROMOETHYL_CATION_CLOSED));
+    expect(verdict.formed).toMatch(/^C2 and Br3, not bonded in the sketch, are 1\.98 Å apart, Wiberg 0\.8\d — a new bond closing a three-membered ring$/);
+    expect(verdict.formedPairs).toEqual([[1, 2]]);
+    // without GFN2's orders a 1,3 pair is never a new bond
+    expect(assessBonding(BROMOETHYL_CATION_CLOSED, null).formed).toBeNull();
+  }, 60_000);
+
+  it("leaves diborane's B···B, across its drawn bridges, as drawn", async () => {
+    const { optimisedExample } = await import('./helpers/local-geometry');
+    const diborane = await optimisedExample('Diborane');
+    expect(assessBonding(diborane, null, await matrixOf(diborane)).formed).toBeNull();
+  }, 120_000);
+
+  it('holds a formed 1,3 pair apart in the held structure', () => {
+    expect(heldRestraint(BROMOETHYL_CATION_CLOSED).energy).toBe(0); // 1,3: not walled by default
+    expect(heldRestraint(BROMOETHYL_CATION_CLOSED, [[1, 2]]).energy).toBeGreaterThan(0);
+    expect(isMoleculeDrawn(BROMOETHYL_CATION_CLOSED)).toBe(true);
+    expect(isMoleculeDrawn(BROMOETHYL_CATION_CLOSED, [[1, 2]])).toBe(false);
+  });
+
+  it('builds the wedged cation: the open cation held, the bromonium behind the button', async () => {
+    const local = await localGeometry(parseMolBlock(BROMOETHYL_CATION_WEDGED));
+    expect(local?.engine).toBe('held');
+    expect(local!.bondingChange).toMatch(/three-membered ring/);
+    const [, c2, br] = local!.molecule.atoms;
+    expect(Math.hypot(c2.x - br.x, c2.y - br.y, c2.z - br.z)).toBeGreaterThan(2.36); // open, outside bonding distance
+    expect(local!.setAside!.molecule.formedContacts).toEqual([[1, 2]]);
   }, 120_000);
 });
