@@ -5,7 +5,13 @@ GFN2-xTB implementation, used as the default geometry engine of Valence's local
 pipeline.
 
 - **Upstream:** <https://github.com/peterspackman/occ>
-- **Commit:** `826d76966a14b880d6e47e367c72db1be3f26395` (tag `v0.9.4`)
+- **Commit:** `5644eaf5632bb65b81f70082c873b30324b49b82` — **untagged**: main
+  after `v0.9.5`, its version already bumped to 0.9.6 but not released (no
+  tag, GitHub release, PyPI or npm package as of 2026-10-23). It is the
+  commit that makes GFN2's D4 self-consistent (peterspackman/occ#58), which
+  makes the analytic gradient exact; pinned there, not at main's head, to
+  take the fix and nothing past it. Move to the `v0.9.6` tag when it exists.
+  (Before 2026-10-23: `826d769`, tag `v0.9.4`.)
 - **Licence:** LGPL-3.0-or-later. OCC is dual-licensed
   `(GPL-3.0-or-later OR LGPL-3.0-or-later)`; Valence takes the **LGPL** branch.
   OCC is © Peter Spackman and contributors; the complete corresponding source is
@@ -20,9 +26,11 @@ Requires the Emscripten SDK **6.0.10** (exact — same emcc + flags + sources
 yields bit-identical wasm across machines; verify with `md5sum`), CMake ≥
 3.16 and Ninja. Pinned-commit checkouts: a pristine reference at
 `C:/Users/mccan/Code/third-party/occ` (never build in it). Agents rebuild on
-this machine in `C:/Users/mccan/Code/occ-win` — a fresh clone at the pinned
-commit with the patches below applied (port with `git diff`/`git apply` from
-a patched tree and require the stat to match). The lenovo checkout
+this machine in `C:/Users/mccan/Code/occ-096` — a fresh clone at the pinned
+commit with the patches below applied (port with `git apply --3way` and
+require the stat to match). `C:/Users/mccan/Code/occ-win` is the patched
+v0.9.4 tree and build the previous vendored engine came from, kept as the
+way back. The lenovo checkout
 (`~/Code/occ`) is a cold spare; do not build there. Verify patches with `git
 diff` against upstream before building.
 
@@ -30,7 +38,7 @@ diff` against upstream before building.
 
 ```bash
 git clone https://github.com/peterspackman/occ.git && cd occ
-git checkout 826d76966a14b880d6e47e367c72db1be3f26395
+git checkout 5644eaf5632bb65b81f70082c873b30324b49b82
 ```
 
 **2. Prune the bindings in `src/occjs.cpp`.** Register only what the app calls:
@@ -53,7 +61,7 @@ EMSCRIPTEN_BINDINGS(occ) {
     // register_dma_bindings();         // register_mults_bindings();
     // register_volume_bindings();      // register_cg_bindings();
     function("setLogFile", &occ::log::set_log_file);
-    constant("version", std::string("0.9.4"));
+    constant("version", std::string("0.9.6"));  // upstream's string at the pin
 }
 ```
 
@@ -175,8 +183,8 @@ GFN2 parameters (`share/xtb`), the D4 tables (`share/dftd4`), COSMO/SMD data
 
 | file | raw | gzip |
 |---|---|---|
-| `occjs.wasm` | 3,173 KiB | 980 KiB |
-| `occjs.data` | 326 KiB | 70 KiB |
+| `occjs.wasm` | 3,032 KiB | 931 KiB |
+| `occjs.data` | 326 KiB | 68 KiB |
 | `occjs.js` | 122 KiB | 31 KiB |
 
 About **0.5 MiB brotli** in total (estimated from the gzip ratio), lazily loaded,
@@ -234,6 +242,35 @@ charges + atomic dipoles + quadrupoles sum at 8 and 15 Å (water to 4
 decimals in e/Å) while parting from it near the atoms, where the clouds
 overlap (pyridine 2.5 Å past the N: −108 exact against −159 kcal/mol/e from
 the multipoles). 20 000 points: 35 ms for water, 0.6 s for benzene.
+
+### The 5644eaf build (2026-10-23)
+
+`occjs.wasm` md5 `2650b3a51a9d2e43a0b17ea7b86babbc`, `occjs.js`
+`38aa21079103bc5ab3c1a897c409ab73`; `occjs.data` unchanged
+(`85dca9fb9e8fb2377fe012acce6cc44e` — upstream's `share/` did not change).
+The Valence patch applied to the new commit with `git apply --3way`, every
+file clean; the regenerated `occ-valence.patch` differs from the v0.9.4 one
+in hunk offsets only.
+
+The point of it: D4 is now self-consistent, so the analytic gradient is the
+derivative of the energy. Largest |analytic − numerical| component (h = 10⁻³
+bohr), and the single point against the oracle on identical geometries:
+
+| | gradient, v0.9.4 | gradient, 5644eaf | E 5644eaf − xtb |
+|---|---|---|---|
+| water | 9.3e-6 | 1.4e-7 | +0.22 µEh |
+| cyclopropenyl anion | 4.6e-4 | 2.3e-7 | +0.36 µEh (was +6.8) |
+| pyridine | 9.8e-5 | 2.0e-7 | +0.71 µEh (was +3.1) |
+| phenol | 2.5e-4 | 3.1e-7 | +0.88 µEh (was +4.1) |
+| PCl₅ | 7.3e-7 | 8.9e-8 | +1.1 µEh (unchanged) |
+| 2-phenylbut-2-ene + Br⁺ | 2.0e-4 | 3.2e-7 | +1.4 µEh (was +9.0) |
+| 1,1-diphenylethylene + Br⁺ | 1.7e-4 | 2.7e-7 | +1.8 µEh (was +13) |
+
+Water's single point is now −5.070324858 Eh (oracle −5.070325081194). At
+the app's optimised structures the charges move by about 0.001 e (benzene
+±0.0298 → ±0.0287), dipoles by under 0.01 D, and geometries, NaOH's bend
+(155.6°) and water's vibrations (1540, 3642, 3650 cm⁻¹) not at all at the
+precision AGENTS.md quotes them. The full suite passes unchanged.
 
 ## API notes for callers
 

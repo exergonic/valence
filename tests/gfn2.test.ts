@@ -23,6 +23,7 @@ import { parseMolBlock } from '../src/mol-parser';
 import { SADDLE_FREQUENCY_THRESHOLD } from '../src/geometry/gfn2-refine';
 import { EXAMPLES } from '../src/ui/examples';
 import { gfn2Ladders } from '../src/chem/gfn2-xtb/orbital-ladder';
+import { atomicNumber } from '../src/chem/elements';
 
 beforeAll(() => {
   // The worker module registers `self.onmessage` at import time.
@@ -510,6 +511,45 @@ describe('Berny and the inexact analytic gradient', () => {
     // minimum) — but the escape only runs below 16 atoms and only when the
     // false stop is a saddle. The check is the safeguard that always applies.
     expect(result!.saddleEscapes).toBe(0);
+  }, 180_000);
+});
+
+describe('the analytic gradient is the exact derivative', () => {
+  // The vendored build (OCC 5644eaf) makes D4 self-consistent, which puts its
+  // charge response into the gradient (peterspackman/occ#58). On v0.9.4 the
+  // largest |analytic − numerical| component was 4.6e-4 Eh/bohr on the
+  // cyclopropenyl anion and ~2e-4 on the bromonium ions; now ≤ 3e-7.
+  it('matches the numerical gradient on the polar molecules 0.9.4 got wrong', async () => {
+    const { PHENYLBUTENE_BROMONIUM, DIPHENYLETHYLENE_BROMONIUM } = await import('./references/bromonium-ions');
+    const coordinates = [
+      [-0.38805807296094, -0.55379677203097, -0.00000516874794], [1.96428381555042, -0.33618719672166, 0.00000798989796],
+      [-0.4817129625322, 0.79178857900362, -0.00000671254584], [0.90831673450787, -0.18163055167206, -0.00000886276546],
+      [-1.01558024601627, -1.45147946730454, 0.00000575624305], [-0.98794926854887, 1.73130540872561, 0.00000699791823],
+    ];
+    const anion: Molecule = {
+      atoms: ['C', 'H', 'C', 'C', 'H', 'H'].map((element, i) =>
+        ({ ...atom(element, coordinates[i][0], coordinates[i][1], coordinates[i][2]), charge: i === 0 ? -1 : 0 })),
+      bonds: [],
+    };
+    const createOccModule = (await import('../vendor/occ-wasm/occjs.js')).default as any;
+    const M = await createOccModule({ locateFile: vendorFile });
+    const BOHR = 0.529177210903;
+    for (const molecule of [anion, PHENYLBUTENE_BROMONIUM, DIPHENYLETHYLENE_BROMONIUM]) {
+      const n = molecule.atoms.length;
+      const positions = M.Mat3N.create(n);
+      molecule.atoms.forEach((a, i) => { positions.set(0, i, a.x); positions.set(1, i, a.y); positions.set(2, i, a.z); });
+      const calc = M.XtbCalculator.fromMolecule(new M.Molecule(M.IVec.fromArray(molecule.atoms.map((a) => atomicNumber(a.element))), positions));
+      calc.charge = molecule.atoms.reduce((s, a) => s + (a.charge ?? 0), 0);
+      const bohr = M.Mat3N.create(n);
+      molecule.atoms.forEach((a, i) => { bohr.set(0, i, a.x / BOHR); bohr.set(1, i, a.y / BOHR); bohr.set(2, i, a.z / BOHR); });
+      calc.updateStructure(bohr);
+      const analytic = calc.energyAndGradient(false, 0).gradient;
+      const numerical = calc.energyAndGradient(true, 1e-3).gradient;
+      let worst = 0;
+      for (let i = 0; i < n; i++) for (let c = 0; c < 3; c++) worst = Math.max(worst, Math.abs(analytic.get(c, i) - numerical.get(c, i)));
+      expect(worst).toBeLessThan(5e-6);
+      calc.delete();
+    }
   }, 180_000);
 });
 
