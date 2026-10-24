@@ -5,6 +5,7 @@ import { parseMolBlock } from '../mol-parser';
 import type { Molecule } from '../mol-parser';
 import { writeNote, type InfoNote } from './info-note';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
+import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { chargedXAtoms, parseChargedLabel } from './charged-x-atoms';
 import { isMetal, lowestMultiplicity, spinName } from '../chem/elements';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
@@ -261,12 +262,12 @@ function showInfoLog(notes: (string | InfoNote)[]) {
 /** What the header shows besides the formula and weight, which are read off
  *  the molecule itself. */
 type HeaderInfo = Omit<PubChemInfo, 'source' | 'formula' | 'weight'> & {
-  source: PubChemInfo['source'] | 'example';
+  source: PubChemInfo['source'] | 'example' | 'atom';
   info?: (string | InfoNote)[];
 };
 
 const SOURCE_LABEL: Record<HeaderInfo['source'], string> = {
-  pubchem: 'PubChem 3D', cir: 'CIR', gfn2: 'GFN2-xTB', local: 'Unoptimised', example: 'Example',
+  pubchem: 'PubChem 3D', cir: 'CIR', gfn2: 'GFN2-xTB', local: 'Unoptimised', example: 'Example', atom: 'Single atom',
 };
 
 /**
@@ -433,7 +434,10 @@ export function mountJsmePanel(ctx: SceneContext) {
       // most of them, and CIR's are built by rule — H₃Si–Ni came back with a
       // 2.59 Å Si–Ni bond where GFN2 finds 2.17 Å, in a fifth of a second.
       const metal = molecule.atoms.find((a) => isMetal(a.element))?.element ?? null;
-      const result = forceLocal || metal ? null : await fetch3D(smiles, molecule);
+      // a single atom (nothing the filler adds hydrogens to) is a point: there is
+      // nothing for PubChem or CIR to build
+      const atom = fillMissingHydrogens(molecule).atoms.length === 1;
+      const result = forceLocal || metal || atom ? null : await fetch3D(smiles, molecule);
       const t3 = performance.now();
       if (result) {
         // fetch3D validates the returned structure against the sketch and
@@ -479,6 +483,15 @@ export function mountJsmePanel(ctx: SceneContext) {
             notes.warnings.unshift(held.warning);
             notes.info.push(GFN2_NOTE, held.info, ...gfn2ShapeNotes(next),
               ...gfn2SpinNote(shown.gfn2, shown.molecule, false));
+          } else if (shown.engine === 'atom') {
+            notes.info.push('A single atom is a point: there is no geometry to optimise, and GFN2-xTB is not asked '
+              + 'to. Its charge, spin and orbitals come from GFN2-xTB\'s single point, as for any structure.');
+            // with no run to report it, the spin is said here (a non-singlet always says why)
+            const spin = shown.molecule.multiplicity ?? lowestMultiplicity(shown.molecule.atoms);
+            if (spin > 1) {
+              notes.info.push(`The single point runs as a ${spinName(spin)}: the electron count is odd, so a singlet `
+                + 'is impossible and a doublet is the lowest spin it allows.');
+            }
           } else {
             // Said in the header, not just the log: the structure on screen is a
             // starting guess, and bond lengths and angles read off it mean little.
@@ -489,12 +502,13 @@ export function mountJsmePanel(ctx: SceneContext) {
             );
           }
           if (onRequest) notes.warnings.unshift(onRequest);
-          if (metal && !forceLocal) {
+          if (metal && !forceLocal && shown.engine !== 'atom') {
             notes.info.push(`Built locally, without asking PubChem or CIR: the sketch contains a metal (${metal}). `
               + 'PubChem has no 3D structure for most metal compounds, and CIR builds them by rule, roughly.');
           }
           notes.info.push(...snapped.info);
-          showMoleculeHeader(next, { source: shown.engine === 'unrefined' ? 'local' : 'gfn2', ...notes });
+          const source = shown.engine === 'unrefined' ? 'local' : shown.engine === 'atom' ? 'atom' : 'gfn2';
+          showMoleculeHeader(next, { source, ...notes });
           // a held structure has its own charges, and no vibrations (it is not a minimum)
           const charges = shown.engine === 'held' ? shown.held?.charges ?? null : shown.gfn2?.charges ?? null;
           showMolecule(ctx, next, charges, shown.engine === 'gfn2' ? shown.gfn2?.vibrations ?? null : null);
@@ -541,6 +555,10 @@ export function mountJsmePanel(ctx: SceneContext) {
   refineOnScreen = async () => {
     const current = ctx.currentMolecule;
     if (!current) return;
+    if (current.atoms.length === 1) {
+      showRenderError('A single atom is a point — there is no geometry to refine.');
+      return;
+    }
     // A chosen spin must fit the electron count: an even count pairs into
     // singlets, triplets, quintets; an odd one into doublets, quartets, sextets.
     const spinChoice = (document.getElementById('ctrl-gfn2-spin') as HTMLSelectElement | null)?.value ?? 'auto';

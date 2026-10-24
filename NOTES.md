@@ -5350,3 +5350,19 @@ does), but that would be the embedder "doing too much" — choosing a
 conformer the drawing did not ask for. A plain bond lies where the
 embedder's rules put it; a wedge or hash says what leaves the plane, and
 having to say so is itself the lesson (AGENTS.md, Decisions).
+
+## A single atom (2026-10-24, ISSUES.md "bare lithium")
+
+A bare Li showed "Unoptimised structure — GFN2-xTB could not treat this
+structure ([object Object])". Two things: Berny cannot be built for one atom
+(OCC throws a C++ exception), and that exception reaches JavaScript as a
+`CppException` holding only a pointer — this build exports no decoder — so
+`String()` made it "[object Object]". GFN2's single point is fine on every
+lone atom tried (Li a doublet, Na⁺, Xe, He, Cl⁻, Ni). Now a single atom (after
+the filler: bare C is CH₄) skips the lookups and the optimiser and shows as
+"Single atom", the single point giving every view its charge, spin and
+orbitals — He's lone pair and empty valence, Li's open-shell α orbitals
+(Pipek–Mezey, the Lewis view refusing an open shell), Xe's and Cl⁻'s four
+lone pairs. Refine declines one, and the worker refuses it in words; its
+errors are now described, never stringified objects. A lone atom is also
+framed with its orbital lobes: on the atom alone, Li's 2s overflowed the view.

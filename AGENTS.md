@@ -80,6 +80,9 @@ This code is written for **chemists who code**, not software engineers.
      produces nothing shows the embedder's start, labelled unoptimised.
    - **Every start is the molecule drawn** by the guard's own rule — tested
      for every sketch and example (`tests/embedder.test.ts`).
+   - **A single atom** (nothing the filler adds hydrogens to) is a point: no
+     lookup, no optimiser, no refinement — only the single point every
+     structure gets.
    - **Spin**: the lowest multiplicity the electron count allows (singlet if
      even, doublet if odd), unless the structure has its own (an example) or
      one is chosen under "Refine with GFN2-xTB". A run that is not a singlet

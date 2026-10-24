@@ -817,6 +817,9 @@ export function frameCamera(ctx: SceneContext) {
   const center = new THREE.Vector3(...frame.centre);
 
   const box = new THREE.Box3().setFromObject(ctx.moleculeGroup);
+  // a lone atom has no extent of its own: its orbital lobes are the picture,
+  // and framed on the atom alone, Li's 2s filled the screen past its edges
+  if (ctx.currentMolecule?.atoms.length === 1) box.expandByObject(ctx.orbitalGroup);
   const size = box.getSize(new THREE.Vector3()).length();
   const dist = size * 1.5;
   ctx.camera.position.copy(center).addScaledVector(new THREE.Vector3(...frame.toward), dist);

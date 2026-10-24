@@ -640,3 +640,33 @@ describe('the claims AGENTS.md makes of GFN2-xTB', () => {
     expect(result.energyHartree).toBeCloseTo(-4.7806745, 4);
   }, 180_000);
 });
+
+// A single atom is a point (a bare Li, Xe, Cl⁻): nothing to optimise, and
+// Berny cannot be built for it — it threw a C++ exception the app once showed
+// as "[object Object]" (ISSUES.md). The pipeline skips the optimiser; the
+// single point every structure gets still gives the views what they read.
+describe('a single atom', () => {
+  it('skips the optimiser', async () => {
+    const { computeLocalGeometry } = await import('../src/geometry/local-geometry');
+    let asked = false;
+    const local = await computeLocalGeometry({ atoms: [atom('Li', 0, 0, 0)], bonds: [] }, undefined,
+      async () => { asked = true; return null; });
+    expect(local?.engine).toBe('atom');
+    expect(asked).toBe(false);
+  });
+
+  it('is refused by the optimiser in words', async () => {
+    await expect(refine({ atoms: [atom('Xe', 0, 0, 0)], bonds: [] })).rejects.toThrow('a single atom has no geometry to optimise');
+  });
+
+  it('still gets its single point: charge, spin and orbitals', async () => {
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const lithium = (await propertiesAt({ atoms: [atom('Li', 0, 0, 0)], bonds: [] }, vendorFile))!;
+    expect(lithium.multiplicity).toBe(2); // one valence electron
+    expect(lithium.charges[0]).toBeCloseTo(0, 3);
+    expect(lithium.alpha.energies.length).toBeGreaterThan(0);
+    const chloride = (await propertiesAt({ atoms: [{ ...atom('Cl', 0, 0, 0), charge: -1 }], bonds: [] }, vendorFile))!;
+    expect(chloride.multiplicity).toBe(1);
+    expect(chloride.charges[0]).toBeCloseTo(-1, 3);
+  });
+});

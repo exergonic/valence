@@ -29,8 +29,9 @@ export interface LocalGeometry extends EmbedResult {
    *  that stopped short (`gfn2.converged` says which). 'held': GFN2's free
    *  result changed the bonding, and this is the molecule drawn, relaxed with
    *  its bonds held (`held`). 'unrefined': the embedder's starting structure,
-   *  because GFN2 produced nothing usable. */
-  engine: 'gfn2' | 'held' | 'unrefined';
+   *  because GFN2 produced nothing usable. 'atom': a single atom — a point,
+   *  with no geometry to optimise. */
+  engine: 'gfn2' | 'held' | 'unrefined' | 'atom';
   /** The free run, when engine is 'gfn2' or 'held' — energy, steps, time,
    *  charges, the Hessian verdict and any saddle escapes. */
   gfn2?: Gfn2Result;
@@ -63,6 +64,11 @@ export async function computeLocalGeometry(
   const start = finite(separated) ? separated : placed;
   // A start that is not even finite has nothing to show: refuse.
   if (!finite(start)) return null;
+  // A single atom (a bare Li, Xe, Cl⁻ — nothing the filler adds hydrogens to)
+  // is a point: there is no geometry to optimise, so GFN2's optimiser is not
+  // asked. The background single point still gives every view its charges,
+  // spin and orbitals.
+  if (start.atoms.length === 1) return { molecule: start, warnings: [], engine: 'atom' };
 
   const unrefined = (reason: string): LocalGeometry => ({
     ...honourWedges(sketch, start),

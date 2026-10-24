@@ -373,6 +373,10 @@ export async function optimizeWithGfn2(
   const molecule = fillMissingHydrogens(input);
   const count = molecule.atoms.length;
   if (count === 0) return null;
+  // A single atom is a point: nothing to optimise, and Berny cannot even be
+  // built for it (it throws). The local pipeline never asks; this says so to
+  // anything that does.
+  if (count === 1) throw new Error('a single atom has no geometry to optimise');
 
   const M = await (locateFile ? loadGfn2(locateFile) : loadGfn2());
   const totalCharge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
@@ -1576,6 +1580,21 @@ async function run(task: Task, id: number, molecule?: Molecule, surface?: Orbita
   }
 }
 
+/**
+ * An error as a sentence. The engine's own C++ exceptions reach JavaScript as
+ * a `CppException` holding only a pointer — its text needs a decoder this
+ * build does not export — and `String()` of one is "[object Object]", which
+ * the app once showed a user (a bare lithium atom).
+ */
+function describeError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === 'string' && error) return error;
+  if ((error as { constructor?: { name?: string } })?.constructor?.name === 'CppException') {
+    return 'the engine raised an internal error it does not describe';
+  }
+  return 'an unexpected error';
+}
+
 self.onmessage = async (e: MessageEvent<{ id: number; task: Task; molecule?: Molecule; surface?: OrbitalSurfaceRequest; key?: number }>) => {
   const { id, task, molecule, surface, key } = e.data;
   try {
@@ -1584,7 +1603,7 @@ self.onmessage = async (e: MessageEvent<{ id: number; task: Task; molecule?: Mol
   } catch (error) {
     // Never fail silently: the caller surfaces this, and a console line keeps
     // it diagnosable in a worker's devtools too.
-    const message = String((error as Error)?.message ?? error);
+    const message = describeError(error);
     console.error('[gfn2] refinement failed:', message);
     self.postMessage({ id, result: null, error: message });
   }
