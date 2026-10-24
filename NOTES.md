@@ -5286,3 +5286,38 @@ scattered through the map, the pipeline and the conventions, are one dated
 (already here). One rule went because its code had: Code Style's "the
 optimizer is the exception", which governed `src/optimize/fast-system.ts` and
 `tests/fast-system.test.ts` — the hand-rolled optimiser, removed long ago.
+
+## The held structure; formed bonds; Keep optimising (2026-10-24)
+
+Decided with the user: when GFN2's free result changes the bonding (a drawn
+bond comes apart, or a new one forms), show the molecule drawn — relaxed —
+by default, with the free result behind the header button. "Relaxed" is the
+**held structure**: after the free run, and never inside it (the user's
+worry, rightly: freezing a bond mid-run would have kept the
+diphenylethylene bromonium from ever opening), a second optimisation on GFN2
+plus a flat-bottomed wall at the guard's own limits (`heldRestraint`, 0.98 of
+them, k = 1 Eh/bohr²), from the lowest point the free run passed while still
+the molecule drawn (watched, never steered). The diphenylethylene bromonium:
+free ion 2.75 Å / Wiberg 0.09; held, C–Br 2.501 Å (wall 2.497), converged,
+passes the guard, 2.2 kcal/mol above the free result, in ~0.1 s after it.
+Formed bonds now take the same path; their new contacts are drawn dashed
+from `formedContacts`, never added to `bonds` (VSEPR and Lewis read bonds).
+
+**Keep optimising**: the "Refine with GFN2-xTB" handler, offered in the
+header when a free run stops short. Testing it (budget cut to 1.5 s) found
+that a Berny run stopped by the clock was **thrown away**: `relax` handed over
+to the ladder, itself out of time, which returned nothing — "found no usable
+geometry", the embedder's start shown after real progress. Now Berny's
+unconverged point is kept and the lower of it and the ladder's returned.
+Diphenylethane at 1.5 s: stopped after 18 steps, shown, one press → converged
+in 7 more.
+
+**Every start, tested**: `tests/embedder.test.ts` embeds every example and
+reference sketch and requires the guard's own verdict (the molecule drawn)
+and no bond under 0.75× its radii sum. It failed the old embedder on
+diphenylethane — and, on its first run, the current one on the
+diphenylethylene bromonium: Br 1.89 Å from an ortho carbon, past the ring
+turner's 1.5 Å clash but inside C···Br's 2.36 Å new-bond limit. The turner
+now uses the guard's limit (`newBondLimit`, one rule), skips 1,3 pairs as the
+guard does, and repeats in 15° steps while a pass helps (two phenyls on one
+carbon settle together).

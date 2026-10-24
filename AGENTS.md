@@ -75,8 +75,11 @@ This code is written for **chemists who code**, not software engineers.
      Hessian verdict, and a saddle is pushed down its imaginary mode and
      re-optimised.
    - **A 30 s budget** for the whole run. A run that stops short shows the
-     lowest structure it reached, labelled not fully converged; a run that
+     lowest structure it reached, labelled not fully converged — wherever it
+     stopped, Berny included — and offers to keep optimising; a run that
      produces nothing shows the embedder's start, labelled unoptimised.
+   - **Every start is the molecule drawn** by the guard's own rule — tested
+     for every sketch and example (`tests/embedder.test.ts`).
    - **Spin**: the lowest multiplicity the electron count allows (singlet if
      even, doublet if odd), unless the structure has its own (an example) or
      one is chosen under "Refine with GFN2-xTB". A run that is not a singlet
@@ -124,11 +127,18 @@ Made with the user; the reasons are in NOTES.md under the date.
   so. A ligand's bond to a transition metal stays a donor domain. A
   transition metal, lanthanide or alkali metal shows only its valence s
   orbital; the main group's metals and noble gases get the full picture.
-- **Stretched and broken bonds** (2026-10-23): a drawn bond past 1.3× its
-  covalent radii sum is graded by GFN2's Wiberg order — at 0.1 or more a
-  partial bond, shown dashed; below, it came apart, and the result is set
-  aside behind a header button that shows it, and the start again. A bond
-  that formed sets the result aside, unoffered.
+- **Stretched, broken and formed bonds** (2026-10-23, 2026-10-24): a drawn
+  bond past 1.3× its covalent radii sum is graded by GFN2's Wiberg order — at
+  0.1 or more a partial bond, shown dashed. Below, it came apart; and an
+  undrawn pair within bonding distance formed a bond. Either way GFN2's free
+  result is set aside, and what is shown is the **held structure**: the
+  molecule drawn, relaxed again with its bonds held at the guard's limits —
+  after the free run, never inside it. The free result (its new contacts
+  dashed) is behind a header button, and back. With no held structure, the
+  start stands in.
+- **Keep optimising** (2026-10-24): a free run that stops short offers it in
+  the header — another run from the best structure reached, with a fresh
+  budget, as often as the user likes; no unlimited mode.
 - **The hover, per view** (2026-10-21): VSEPR the lobe's hybrid; Charge Model
   the ESP under the pointer; Localized the orbital's NBO hybrid on the atom
   and its E(2) with the anchor; Delocalized the MO, the lobe's atom by s/p/d
