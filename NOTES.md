@@ -5270,3 +5270,19 @@ geometry; the app's own minimum gives 2.22 D. And the limitations section
 still called GFN2's Mulliken charges "the default charge model" — ESP-fitted
 has been the default since 2026-10-12. NaOH's oracle minimum now lives once,
 in tests/references/oracle-minima.ts (it was copied into two test files).
+
+## AGENTS.md streamlined (2026-10-24)
+
+5,157 words → 2,828, no rule changed. The file map had grown into a
+specification — each file's mechanism, the decision behind it, the case that
+prompted it — which the modules' header comments already carried (checked
+file by file before cutting: sketcher-toolbar, charged-x-atoms, the
+localized-orbital and charge-model modules, place3d, the render modules,
+tooltip, sdf-data; the generated core-density table names its ORCA source;
+`index.html` explains polarnitro and the `<rect>` rewrite; the smoke script
+covers the JSME checks). The map now says only where; the user's decisions,
+scattered through the map, the pipeline and the conventions, are one dated
+"Decisions" section; the pipeline keeps its rules and loses its history
+(already here). One rule went because its code had: Code Style's "the
+optimizer is the exception", which governed `src/optimize/fast-system.ts` and
+`tests/fast-system.test.ts` — the hand-rolled optimiser, removed long ago.
