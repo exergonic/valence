@@ -3,8 +3,8 @@ dist/
 .DS_Store
 *.local
 
-AGENTS.md
-NOTES.md
+# this machine's private details (the repository is public)
+AGENTS.local.md
 PLAN.md
 
 # Dev-only bench assets (Ketcher standalone build, OpenChemLib bundle) —
