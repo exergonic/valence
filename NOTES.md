@@ -5321,3 +5321,32 @@ turner's 1.5 Å clash but inside C···Br's 2.36 Å new-bond limit. The turner
 now uses the guard's limit (`newBondLimit`, one rule), skips 1,3 pairs as the
 guard does, and repeats in 15° steps while a pass helps (two phenyls on one
 carbon settle together).
+
+## A three-membered ring that closes (2026-10-24)
+
+The user drew the reverse of the bromonium case: BrCH₂–CH₂⁺ (the 2-bromoethyl
+cation), the Br on a wedge. GFN2 closed it to the ethylene bromonium (C1–Br
+and C2–Br both 1.98 Å, Wiberg 0.86 each; a minimum, lowest mode 446 cm⁻¹),
+and the guard said nothing: C2 and Br share C1, and a 1,3 pair was exempt —
+its distance is normally set by the angle between two bonds. Distance cannot
+tell the cases apart: diborane's B···B, across its drawn bridges, sits at
+1.05× its radii sum, the bromonium's C2···Br at 1.01×. GFN2's Wiberg order
+can: B···B 0.55 (three-centre bridging, drawn as such), C2···Br 0.86. No other
+close 1,3 pair exists in the examples. So a close 1,3 pair is a new bond at
+Wiberg ≥ 0.75 (the worker now returns the whole Wiberg matrix), and the held
+structure keeps such a pair apart (its wall skips 1,3 pairs otherwise).
+Two points either side — the same thin calibration as the 0.1 cut (ISSUES.md).
+
+**On a plain bond the Br never closes**: the embedder sets the C1–C2 torsion
+anti to C2's hydrogen, which puts the Br in the CH₂⁺ plane, and GFN2 finds a
+true minimum there — the open cation, all frequencies real (lowest 250 cm⁻¹),
+20.4 kcal/mol above the bromonium. The user's wedge turns the Br 60° toward
+C2's empty p orbital, and the ring closes. The torsion the embedder picks
+decides which minimum a carbocation reaches.
+
+Decided with the user: the embedder stays as it is. It could set a
+substituent beside an empty p orbital at 90° to its plane (what the wedge
+does), but that would be the embedder "doing too much" — choosing a
+conformer the drawing did not ask for. A plain bond lies where the
+embedder's rules put it; a wedge or hash says what leaves the plane, and
+having to say so is itself the lesson (AGENTS.md, Decisions).

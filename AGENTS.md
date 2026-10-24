@@ -130,12 +130,22 @@ Made with the user; the reasons are in NOTES.md under the date.
 - **Stretched, broken and formed bonds** (2026-10-23, 2026-10-24): a drawn
   bond past 1.3× its covalent radii sum is graded by GFN2's Wiberg order — at
   0.1 or more a partial bond, shown dashed. Below, it came apart; and an
-  undrawn pair within bonding distance formed a bond. Either way GFN2's free
+  undrawn pair within bonding distance formed a bond — a 1,3 pair only when
+  GFN2 gives it a single-bond Wiberg order (0.75 or more: a three-membered
+  ring closing, not a bridge drawn as such). Either way GFN2's free
   result is set aside, and what is shown is the **held structure**: the
   molecule drawn, relaxed again with its bonds held at the guard's limits —
   after the free run, never inside it. The free result (its new contacts
   dashed) is behind a header button, and back. With no held structure, the
   start stands in.
+- **Wedges say what leaves the plane** (2026-10-24): the embedder does not
+  guess a torsion to reach a chemically preferred conformer. A plain bond
+  starts where the embedder's own rules put it — anti about a single bond,
+  which beside a trigonal centre is in that centre's plane — and a drawn
+  wedge or hash is how the user says a substituent sits above or below.
+  Stating what is in the plane and what is not is a teaching point in its
+  own right: the 2-bromoethyl cation closes to the bromonium only with its
+  Br wedged; on a plain bond it stays open, a minimum 20 kcal/mol higher.
 - **Keep optimising** (2026-10-24): a free run that stops short offers it in
   the header — another run from the best structure reached, with a fresh
   budget, as often as the user likes; no unlimited mode.
