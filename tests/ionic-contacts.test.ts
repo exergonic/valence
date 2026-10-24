@@ -12,15 +12,7 @@ import type { Atom, Molecule } from '../src/mol-parser';
 import { assignOrbitals, electronDomainCounts } from '../src/chem/vsepr/assign-orbitals';
 import { anionLonePairDirections } from '../src/chem/vsepr/orient-lone-pairs';
 import { embed3D } from '../src/geometry/embed';
-
-const NAOH: Molecule = {
-  atoms: [
-    { element: 'Na', x: 0.2131748, y: 0.0226167, z: -0.0954598 },
-    { element: 'O', x: 1.9959748, y: 0.0100149, z: 0.2257780 },
-    { element: 'H', x: 2.7720367, y: -0.0002562, z: 0.7811393 },
-  ],
-  bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }, { atom1Index: 1, atom2Index: 2, order: 1 }],
-};
+import { NAOH } from './references/oracle-minima';
 
 /** Atoms drawn in a row, bonded in that order, as a sketch. */
 function chain(elements: string[]): Molecule {

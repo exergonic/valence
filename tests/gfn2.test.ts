@@ -562,3 +562,81 @@ function waterAngle(molecule: Molecule): number {
   const cos = (u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (Math.hypot(...u) * Math.hypot(...v));
   return (Math.acos(Math.max(-1, Math.min(1, cos))) * 180) / Math.PI;
 }
+
+/**
+ * The claims AGENTS.md makes of GFN2-xTB, held here, each against the Fortran
+ * xtb oracle (6.7.1, `--gfn 2`, lenovo ~/claims and ~/naoh) at a geometry the
+ * test names. AGENTS.md states the claim and points here; the figures live
+ * only in this block. Experiment: water's dipole 1.85 D, angle 104.5°;
+ * pyridine's dipole 2.19 D; NaOH linear.
+ */
+describe('the claims AGENTS.md makes of GFN2-xTB', () => {
+  const debye = (molecule: Molecule, charges: number[]) => {
+    const mu = [0, 0, 0];
+    molecule.atoms.forEach((a, i) => { mu[0] += charges[i] * a.x; mu[1] += charges[i] * a.y; mu[2] += charges[i] * a.z; });
+    return Math.hypot(mu[0], mu[1], mu[2]) * 4.80320471; // e·Å → D
+  };
+
+  // At the fixed water geometry above (O–H 0.958 Å, 104°): oracle full 2.278 D,
+  // q only 1.594 D. The full dipole overshoots experiment; the point charges
+  // alone undershoot it — so the labels need not add up to the arrow.
+  it("water's full dipole overshoots experiment, its point charges alone undershoot it", async () => {
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const p = (await propertiesAt(water, vendorFile))!;
+    expect(Math.hypot(...p.dipole!)).toBeCloseTo(2.278, 2);
+    expect(debye(water, p.charges)).toBeCloseTo(1.594, 2);
+    expect(Math.hypot(...p.dipole!)).toBeGreaterThan(1.85);
+    expect(debye(water, p.charges)).toBeLessThan(1.85);
+  }, 180_000);
+
+  // At GFN2's own minimum: oracle 107.22°, against experiment's 104.5°.
+  it("opens water's angle past experiment's", async () => {
+    const result = (await refine(water))!;
+    const [o, h1, h2] = result.molecule.atoms;
+    const u = [h1.x - o.x, h1.y - o.y, h1.z - o.z];
+    const v = [h2.x - o.x, h2.y - o.y, h2.z - o.z];
+    const angle = (Math.acos((u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (Math.hypot(...u) * Math.hypot(...v))) * 180) / Math.PI;
+    expect(Math.abs(angle - 107.22)).toBeLessThan(0.2);
+  }, 180_000);
+
+  // At GFN2's own minimum (the app's example, optimised): oracle full 2.101 D,
+  // q only 1.050 D. The full dipole lands near experiment's 2.19 D; the point
+  // charges give half of it.
+  it("puts pyridine's full dipole near experiment, its point charges at half", async () => {
+    const { optimisedExample } = await import('./helpers/local-geometry');
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const pyridine = await optimisedExample('Pyridine');
+    const p = (await propertiesAt(pyridine, vendorFile))!;
+    expect(Math.abs(Math.hypot(...p.dipole!) - 2.101)).toBeLessThan(0.02);
+    expect(Math.abs(debye(pyridine, p.charges) - 1.050)).toBeLessThan(0.02);
+  }, 180_000);
+
+  // At GFN2's own minimum: oracle Mulliken C −0.029; MMFF94's BCI model puts
+  // −0.15 on the same carbons. GFN2's charges are not comparable to BCI's in
+  // magnitude.
+  it("gives benzene's carbons a fifth of the BCI model's charge", async () => {
+    const { optimisedExample } = await import('./helpers/local-geometry');
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const { chargeModelResult } = await import('../src/chem/charge-model/bci-charges');
+    const benzene = await optimisedExample('Benzene');
+    const p = (await propertiesAt(benzene, vendorFile))!;
+    const carbons = benzene.atoms.map((a, i) => (a.element === 'C' ? i : -1)).filter((i) => i >= 0);
+    for (const c of carbons) expect(p.charges[c]).toBeCloseTo(-0.029, 2);
+    const bci = chargeModelResult(benzene)!.charges;
+    for (const c of carbons) expect(bci[c]).toBeCloseTo(-0.15, 2);
+  }, 180_000);
+
+  // From the oracle's minimum (154.6°, −4.7806745 Eh; linear 0.40 kcal/mol
+  // higher): GFN2 keeps NaOH bent where experiment has it linear.
+  it('bends NaOH, where experiment has it linear', async () => {
+    const { NAOH } = await import('./references/oracle-minima');
+    const { breakSymmetry } = await import('../src/geometry/embed');
+    const result = (await refine(breakSymmetry(NAOH)))!;
+    const [na, o, h] = result.molecule.atoms;
+    const u = [na.x - o.x, na.y - o.y, na.z - o.z];
+    const v = [h.x - o.x, h.y - o.y, h.z - o.z];
+    const angle = (Math.acos((u[0] * v[0] + u[1] * v[1] + u[2] * v[2]) / (Math.hypot(...u) * Math.hypot(...v))) * 180) / Math.PI;
+    expect(Math.abs(angle - 154.6)).toBeLessThan(2);
+    expect(result.energyHartree).toBeCloseTo(-4.7806745, 4);
+  }, 180_000);
+});

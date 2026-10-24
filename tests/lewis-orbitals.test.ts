@@ -21,6 +21,7 @@ import type { LocalizedOrbital } from '../src/chem/localized-orbitals/order-loca
 import { jacobiSymmetric } from '../src/utils/eigen';
 import { localGeometry, optimisedExample } from './helpers/local-geometry';
 import { embed3D } from '../src/geometry/embed';
+import { NAOH } from './references/oracle-minima';
 
 beforeAll(() => {
   const globals = globalThis as unknown as Record<string, unknown>;
@@ -190,17 +191,6 @@ describe('what a drawn Lewis structure cannot describe is refused, with the reas
     expect('refusal' in result && result.refusal).toMatch(/metal/);
   });
 });
-
-/** NaOH as GFN2 has it: the Fortran xtb oracle's minimum (lenovo ~/naoh,
- *  `--ohess vtight`, 2026-10-20), as Valence's own run. */
-const NAOH: Molecule = {
-  atoms: [
-    { element: 'Na', x: 0.2131748, y: 0.0226167, z: -0.0954598 },
-    { element: 'O', x: 1.9959748, y: 0.0100149, z: 0.2257780 },
-    { element: 'H', x: 2.7720367, y: -0.0002562, z: 0.7811393 },
-  ],
-  bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }, { atom1Index: 1, atom2Index: 2, order: 1 }],
-};
 
 describe('an alkali metal: the drawn Na–O bond is ionic (2026-10-21)', () => {
   it('NaOH is Na⁺ and ⁻OH: the O–H σ and three O lone pairs; Na keeps its empty 3s', async () => {
