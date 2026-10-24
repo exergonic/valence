@@ -243,8 +243,6 @@ Each module's header comment says what it does and why; this list says where.
 ## Environment
 - **Bun** at `C:\Users\mccan\scoop\shims\bun.exe` (Scoop); `bunx` runs package
   binaries. **Node.js** at `C:\Users\mccan\scoop\apps\nodejs\current\node.exe`.
-- **OpenCode Desktop** does not inherit the full Windows PATH — use full paths
-  if commands fail.
 - **The oracles are on `lenovo`** (`ssh lenovo` on the LAN; off it, the
   Tailscale route in `AGENTS.local.md`, which is gitignored). A GFN2
   question — a geometry, a minimum, an energy, a frequency — is checked
