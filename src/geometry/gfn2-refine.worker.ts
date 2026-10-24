@@ -25,6 +25,7 @@
  *   - the preloaded share/ tree is mounted at '/'.
  */
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
+import { assessBonding, heldRestraint, isMoleculeDrawn } from './bond-integrity';
 import { atomicNumber, lowestMultiplicity } from '../chem/elements';
 import { normalModes, SADDLE_FREQUENCY_THRESHOLD, type NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { alignToPrincipalAxes, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
@@ -151,8 +152,9 @@ const PROGRESS_EVERY = 10;
 /** What a long run tells the page while it works. */
 export interface Gfn2Progress {
   /** 'optimising' (either rung), 'curvature' (the Hessian), 'saddle' (pushed
-   *  off a saddle and re-optimising). */
-  stage: 'optimising' | 'curvature' | 'saddle';
+   *  off a saddle and re-optimising), 'holding' (the free result changed the
+   *  bonding; relaxing the drawn molecule with its bonds held). */
+  stage: 'optimising' | 'curvature' | 'saddle' | 'holding';
   /** Energy evaluations so far, over the whole run. */
   evaluations: number;
   /** Lowest energy seen so far (hartree), or null before the first. */
@@ -193,6 +195,33 @@ export interface Gfn2Result {
    *  like `molecule.atoms`; null when the Hessian check did not run (above
    *  the size gate, not converged) or the point is a saddle. */
   vibrations: NormalMode[] | null;
+  /** When the free result no longer has the drawn bonding (a drawn bond came
+   *  apart, or a new one formed — bond-integrity.ts), the drawn molecule as
+   *  best GFN2 can give it: shown in its place, the free result behind a
+   *  button. Null when the free result keeps the drawn bonding. */
+  held: Gfn2Held | null;
+}
+
+/**
+ * The drawn molecule, relaxed with its bonding held (decided with the user
+ * 2026-10-24): after the free run, a second optimisation from the best point
+ * the free run reached while still the molecule drawn, on GFN2's energy plus
+ * a wall at the bonding guard's limits (`heldRestraint`) — so it never
+ * touches the free run, which runs to its natural end. When that second run
+ * cannot finish, the watched point itself. Never a minimum: the wall holds it.
+ */
+export interface Gfn2Held {
+  /** The structure, Å, same atom order and bonds as the result's. */
+  molecule: Molecule;
+  /** GFN2's own energy there, without the wall's, hartree. */
+  energyHartree: number;
+  /** true: the restrained optimisation's result; false: the lowest point the
+   *  free run reached while still the molecule drawn (partway, not stationary). */
+  restrained: boolean;
+  /** The restrained optimisation met its gate (false for a watched point). */
+  converged: boolean;
+  charges: number[] | null;
+  bondOrders: number[] | null;
 }
 
 let modulePromise: Promise<any> | null = null;
@@ -319,10 +348,13 @@ const energyComponents = (totalHartree: number) => ({
  * GFN2-xTB geometry optimisation.
  *
  * The optimiser is OCC's own Berny (internal coordinates — 6–35 steps on the
- * app's molecules), with the converged point checked against the exact
- * gradient because OCC's analytic one is wrong for polar species (see
- * `relax`). When Berny cannot finish, mmff94-ts's Cartesian optimisers take
- * over through the library's `EnergyGradientFn` oracle (see `ladder`).
+ * app's molecules), its converged point held to a Cartesian gradient gate
+ * (see `relax`). When Berny cannot finish, mmff94-ts's Cartesian optimisers
+ * take over through the library's `EnergyGradientFn` oracle (see `ladder`).
+ *
+ * If the result no longer has the drawn bonding, the molecule drawn is
+ * relaxed again with its bonds held (`held`), after the free run and apart
+ * from it.
  *
  * Then the curvature: a converged run is only a minimum if the Hessian agrees.
  * If it is a saddle, the structure is pushed down the imaginary mode both ways,
@@ -361,6 +393,31 @@ export async function optimizeWithGfn2(
   let stage: Gfn2Progress['stage'] = 'optimising';
   const report = () => onProgress?.({ stage, evaluations, energyHartree: lowestEnergy });
 
+  // The molecule at flat coordinates (Å).
+  const moleculeAt = (flat: number[]): Molecule => ({
+    ...molecule,
+    atoms: molecule.atoms.map((atom, i) => ({ ...atom, x: flat[3 * i], y: flat[3 * i + 1], z: flat[3 * i + 2] })),
+  });
+  // While `holding`, every evaluation is GFN2's plus the held structure's
+  // wall (bond-integrity.ts). Otherwise the free run is watched, and never
+  // touched: its lowest point that is still the molecule drawn is kept, as
+  // the held run's start (and its stand-in, if that run cannot finish).
+  let holding = false;
+  let watched: { flat: number[]; energy: number } | null = null;
+  const energyAt = (calc: ReturnType<typeof buildCalculator>, flat: number[]) => {
+    const result = evaluate(M, calc, flat);
+    if (!holding) return result;
+    const wall = heldRestraint(moleculeAt(flat));
+    return {
+      energy: result.energy + wall.energy,
+      gradient: result.gradient.map((row, i) => row.map((g, c) => g + wall.gradient[i][c])),
+    };
+  };
+  const watch = (flat: number[], energy: number) => {
+    if (holding || (watched && energy >= watched.energy)) return;
+    if (isMoleculeDrawn(moleculeAt(flat))) watched = { flat: [...flat], energy };
+  };
+
   // The engine throws on some trial geometries: a wild line-search trial can
   // fail the SCC, and the analytic gradient throws outright when the
   // multipole-on SCC does not converge (measured on PCl5: 2 of 289 calls). The
@@ -387,7 +444,8 @@ export async function optimizeWithGfn2(
       evaluations += 1;
       if (evaluations % PROGRESS_EVERY === 0) report();
       try {
-        const result = evaluate(M, calc, work.atoms.flatMap((a) => [a.x, a.y, a.z]));
+        const flat = work.atoms.flatMap((a) => [a.x, a.y, a.z]);
+        const result = energyAt(calc, flat);
         if (!Number.isFinite(result.energy) || calc.lastResult()?.converged === false) {
           throw new Error('GFN2: the SCC did not converge at a trial geometry');
         }
@@ -395,6 +453,7 @@ export async function optimizeWithGfn2(
           if (++spuriousDrops > budgets.spuriousDrops) throw new Error('GFN2: aborting on spurious SCF solutions');
           throw new Error('GFN2: spurious SCF solution (implausible energy drop)');
         }
+        watch(flat, result.energy);
         // to the library's unit, kcal/mol/Å
         const gradient = result.gradient.map((row) => row.map((g) => g * FORCE_UNIT));
         if (!gradient.every((row) => row.every(Number.isFinite))) throw new Error('GFN2: non-finite gradient');
@@ -486,7 +545,7 @@ export async function optimizeWithGfn2(
     let evaluates = true;
     let gradientMax = Infinity;
     try {
-      const final = evaluate(M, calc, geometry.atoms.flatMap((a) => [a.x, a.y, a.z]));
+      const final = energyAt(calc, geometry.atoms.flatMap((a) => [a.x, a.y, a.z]));
       energy = final.energy;
       gradientMax = Math.max(...final.gradient.flat().map(Math.abs));
     } catch {
@@ -520,10 +579,11 @@ export async function optimizeWithGfn2(
     let gradientMax = Infinity;
     try {
       for (; steps < BERNY_MAX_STEPS && performance.now() < deadline; steps++) {
-        const result = evaluate(M, calc, positions);
+        const result = energyAt(calc, positions);
         if (!Number.isFinite(result.energy) || calc.lastResult()?.converged === false) {
           throw new Error('GFN2: the SCC did not converge at a Berny step');
         }
+        watch(positions, result.energy);
         evaluations += 1;
         gradientMax = Math.max(...result.gradient.flat().map(Math.abs));
         energy = result.energy;
@@ -593,8 +653,20 @@ export async function optimizeWithGfn2(
       relaxed = { ...again, iterations: relaxed.iterations + again.iterations };
     }
     if (relaxed?.converged && relaxed.gradientMax <= BERNY_GRADIENT_MAX) return relaxed;
-    if (relaxed) release(relaxed.calc);
-    return ladder(start);
+    // Berny did not finish — out of steps, out of time, or held past its gate
+    // — but where it got to is kept: the ladder may do better from the start,
+    // or (out of time itself) nothing at all, and a run that stops short must
+    // still show the lowest structure it reached, not the embedder's start.
+    const fallback = ladder(start);
+    if (!relaxed) return fallback;
+    const stopped: Relaxed = { ...relaxed, converged: false };
+    if (!fallback) return stopped;
+    if (fallback.converged || fallback.energy <= stopped.energy) {
+      release(stopped.calc);
+      return fallback;
+    }
+    release(fallback.calc);
+    return stopped;
   };
 
   /** The vibrations at a relaxed point — the lowest one's frequency (cm⁻¹,
@@ -680,11 +752,13 @@ export async function optimizeWithGfn2(
     lowest = curvature(best);
   }
 
-  let charges: number[] | null = null;
-  let bondOrders: number[] | null = null;
-  if (best.evaluates) {
+  // The charges and the Wiberg orders a calculator's cache holds, read only
+  // when it describes the geometry returned.
+  const readProperties = (calc: ReturnType<typeof buildCalculator>) => {
+    let charges: number[] | null = null;
+    let bondOrders: number[] | null = null;
     try {
-      const q = best.calc.charges();
+      const q = calc.charges();
       if (q.size() === count) {
         charges = [];
         for (let i = 0; i < count; i++) charges.push(q.get(i));
@@ -693,14 +767,51 @@ export async function optimizeWithGfn2(
       // no charges rather than another geometry's
     }
     try {
-      const wiberg = best.calc.bondOrders();
+      const wiberg = calc.bondOrders();
       bondOrders = molecule.bonds.map((b) => wiberg.get(b.atom1Index, b.atom2Index) as number);
       wiberg.delete?.();
     } catch {
       // no bond orders: the guard then treats every stretched bond as broken
     }
-  }
+    return { charges, bondOrders };
+  };
+  const { charges, bondOrders } = best.evaluates ? readProperties(best.calc) : { charges: null, bondOrders: null };
   release(best.calc);
+
+  // The free result is GFN2's answer, and it stands. But if it no longer has
+  // the drawn bonding, the drawn molecule is relaxed again with its bonding
+  // held, so the picture shown by default is the molecule drawn rather than
+  // the embedder's start — from the watched point, in what is left of the
+  // budget (the Hessian and saddle checks do not apply: the wall holds it).
+  let held: Gfn2Held | null = null;
+  const verdict = assessBonding(best.geometry, bondOrders);
+  if (verdict.broken || verdict.formed) {
+    stage = 'holding';
+    report();
+    // set inside `watch`, a closure: read it once, typed
+    const point = watched as { flat: number[]; energy: number } | null;
+    const from = point ? moleculeAt(point.flat) : molecule;
+    holding = true;
+    const relaxed = relax(from);
+    holding = false;
+    if (relaxed && isMoleculeDrawn(relaxed.geometry)) {
+      try {
+        // GFN2's own energy there, and the cache put back at that point
+        const flat = relaxed.geometry.atoms.flatMap((a) => [a.x, a.y, a.z]);
+        const energy = energyAt(relaxed.calc, flat).energy;
+        held = { molecule: relaxed.geometry, energyHartree: energy, restrained: true,
+          converged: relaxed.converged, ...readProperties(relaxed.calc) };
+      } catch {
+        // the held point did not evaluate: fall back to the watched one
+      }
+    }
+    if (relaxed) release(relaxed.calc);
+    if (!held && point) {
+      held = { molecule: moleculeAt(point.flat), energyHartree: point.energy, restrained: false,
+        converged: false, charges: null, bondOrders: null };
+    }
+  }
+
   return {
     // the spin rides along, so the views that read it (the MO filling) know
     molecule: multiplicity > 1 ? { ...best.geometry, multiplicity } : best.geometry,
@@ -716,6 +827,7 @@ export async function optimizeWithGfn2(
     // the vibrations come free with the curvature check — and only mean
     // something at a minimum
     vibrations: lowest && lowest.frequency >= SADDLE_FREQUENCY_THRESHOLD ? lowest.modes : null,
+    held: held && multiplicity > 1 ? { ...held, molecule: { ...held.molecule, multiplicity } } : held,
   };
 }
 

@@ -20,28 +20,34 @@
  * first's, and never an unconverged run presented as converged.
  */
 import type { Molecule } from '../mol-parser';
-import { Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, type Gfn2Progress, type Gfn2Result } from './gfn2-refine';
+import { Gfn2Cancelled, Gfn2Unavailable, refineWithGfn2, type Gfn2Held, type Gfn2Progress, type Gfn2Result } from './gfn2-refine';
 import { embed3D, finite, honourWedges, type EmbedResult } from './embed';
-import { assessBonding, markStretchedBonds } from './bond-integrity';
+import { assessBonding, markBondingChanges } from './bond-integrity';
 
 export interface LocalGeometry extends EmbedResult {
   /** 'gfn2': a GFN2-xTB optimisation — converged, or the lowest point of a run
-   *  that stopped short (`gfn2.converged` says which). 'unrefined': the
-   *  embedder's starting structure, because GFN2 produced nothing. */
-  engine: 'gfn2' | 'unrefined';
-  /** The run, when engine is 'gfn2' — energy, steps, time, charges, the
-   *  Hessian verdict and any saddle escapes. */
+   *  that stopped short (`gfn2.converged` says which). 'held': GFN2's free
+   *  result changed the bonding, and this is the molecule drawn, relaxed with
+   *  its bonds held (`held`). 'unrefined': the embedder's starting structure,
+   *  because GFN2 produced nothing usable. */
+  engine: 'gfn2' | 'held' | 'unrefined';
+  /** The free run, when engine is 'gfn2' or 'held' — energy, steps, time,
+   *  charges, the Hessian verdict and any saddle escapes. */
   gfn2?: Gfn2Result;
+  /** The held structure's own record, when engine is 'held'. */
+  held?: Gfn2Held;
   /** Why the start is shown (engine 'unrefined'), as a sentence for the Info
    *  log. */
   unrefinedReason?: string;
   /** A sentence for each drawn bond GFN2 stretched into a partial bond. */
   partialBonds?: string[];
-  /** GFN2's result, when a drawn bond came apart in it: set aside — the start
-   *  is what this geometry shows — and shown only when the user asks. */
+  /** GFN2's free result, when it no longer had the drawn bonding (a drawn bond
+   *  came apart, or a new one formed): set aside — the held structure, or
+   *  the start, is what this geometry shows — and shown when the user asks
+   *  (decided with the user 2026-10-24). */
   setAside?: LocalGeometry;
-  /** With `setAside`: the sentence naming the drawn bond that came apart. */
-  brokenBond?: string;
+  /** With `setAside`: the sentence naming the bond that came apart or formed. */
+  bondingChange?: string;
 }
 
 /** How the start gets optimised — the worker in the app. A test passes the
@@ -84,29 +90,37 @@ export async function computeLocalGeometry(
   // The engine's geometry is the authority — no post-hoc repair; only the
   // drawn wedges are asserted, because the sketch is the specification.
   const finished = honourWedges(sketch, refined.molecule);
-  // ...but it must still be the molecule drawn. GFN2 moves nuclei, not bonds,
-  // and a bad start once came back "converged" with two H2 molecules in it
-  // (bond-integrity.ts). A bond that formed sets the result aside; a drawn
-  // bond that only stretched is shown, dashed, as the partial bond it is; one
-  // that came apart sets the result aside too, but keeps it for the user to
-  // ask for.
+  // ...but it must still be the molecule drawn. GFN2 moves nuclei, not bonds
+  // (bond-integrity.ts). A drawn bond that only stretched is shown, dashed, as
+  // the partial bond it is. One that came apart, or a bond that formed, sets
+  // the free result aside — it may be the chemistry (an open carbocation, an
+  // isomerization) or a bad start (two H₂ molecules out of a clash, once) —
+  // and shows the molecule drawn instead: relaxed with its bonds held, or the
+  // start when there is no held structure. The free result stays a click away.
   const verdict = assessBonding(finished.molecule, refined.bondOrders);
-  if (verdict.formed) {
-    return unrefined(`GFN2-xTB's result no longer had the bonds drawn — ${verdict.formed} — so it was set aside`);
-  }
-  const shown: LocalGeometry = {
+  const free: LocalGeometry = {
     ...finished,
-    molecule: markStretchedBonds(finished.molecule, verdict.stretched),
+    molecule: markBondingChanges(finished.molecule, verdict),
     engine: 'gfn2',
     gfn2: refined,
     partialBonds: verdict.partial,
   };
-  if (verdict.broken) {
-    return {
-      ...unrefined(`GFN2-xTB's result no longer had the bonds drawn — ${verdict.broken} — so it was set aside`),
-      setAside: shown,
-      brokenBond: verdict.broken,
+  const change = verdict.formed ?? verdict.broken;
+  if (!change) return free;
+
+  const reason = `GFN2-xTB's result no longer had the bonds drawn — ${change} — so it was set aside`;
+  let instead = unrefined(reason);
+  if (refined.held && finite(refined.held.molecule)) {
+    const held = honourWedges(sketch, refined.held.molecule);
+    // the bonds that came apart in the free result are the ones held at the
+    // wall: drawn dashed here too
+    instead = {
+      ...held,
+      molecule: markBondingChanges(held.molecule, { stretched: verdict.stretched, formedPairs: [] }),
+      engine: 'held',
+      gfn2: refined,
+      held: refined.held,
     };
   }
-  return shown;
+  return { ...instead, setAside: free, bondingChange: change };
 }

@@ -36,6 +36,14 @@ import { getCovalentRadius } from '../chem/radii';
 
 const STRETCHED = 1.3;
 const NEW_BOND_TOLERANCE = 0.4; // Å
+
+/** The distance (Å) under which two atoms the sketch does not bond count as
+ *  bonded: their covalent radii plus the bond-perception tolerance. The one
+ *  rule for a new bond — read by the guard, the held structure's wall, and
+ *  the embedder's ring turning (place3d.ts). */
+export function newBondLimit(element1: string, element2: string): number {
+  return getCovalentRadius(element1) + getCovalentRadius(element2) + NEW_BOND_TOLERANCE;
+}
 /**
  * The Wiberg order below which a stretched drawn bond has come apart. Measured
  * 2026-10-23 on GFN2's minima, each checked against the Fortran xtb oracle:
@@ -56,6 +64,9 @@ export interface BondingVerdict {
   broken: string | null;
   /** A sentence naming the first undrawn bond that formed, or null. */
   formed: string | null;
+  /** Every undrawn pair that formed a bond, atom indices — drawn dashed as
+   *  contacts, never added to the bonds. */
+  formedPairs: [number, number][];
 }
 
 /**
@@ -71,7 +82,7 @@ export function assessBonding(molecule: Molecule, bondOrders: number[] | null): 
     Math.hypot(atoms[i].x - atoms[j].x, atoms[i].y - atoms[j].y, atoms[i].z - atoms[j].z);
   const radii = (i: number, j: number) => getCovalentRadius(atoms[i].element) + getCovalentRadius(atoms[j].element);
 
-  const verdict: BondingVerdict = { stretched: [], partial: [], broken: null, formed: null };
+  const verdict: BondingVerdict = { stretched: [], partial: [], broken: null, formed: null, formedPairs: [] };
 
   bonds.forEach((b, index) => {
     const r = distance(b.atom1Index, b.atom2Index);
@@ -94,29 +105,98 @@ export function assessBonding(molecule: Molecule, bondOrders: number[] | null): 
     neighbours[b.atom1Index].add(b.atom2Index);
     neighbours[b.atom2Index].add(b.atom1Index);
   }
-  for (let i = 0; i < atoms.length && !verdict.formed; i++) {
+  for (let i = 0; i < atoms.length; i++) {
     for (let j = i + 1; j < atoms.length; j++) {
       if (neighbours[i].has(j)) continue;
       if ([...neighbours[i]].some((k) => neighbours[j].has(k))) continue;
       const r = distance(i, j);
-      if (r < radii(i, j) + NEW_BOND_TOLERANCE) {
-        verdict.formed = `${label(i)} and ${label(j)}, not bonded in the sketch, are ${r.toFixed(2)} Å apart — a new bond`;
-        break;
+      if (r < newBondLimit(atoms[i].element, atoms[j].element)) {
+        verdict.formedPairs.push([i, j]);
+        verdict.formed ??= `${label(i)} and ${label(j)}, not bonded in the sketch, are ${r.toFixed(2)} Å apart — a new bond`;
       }
     }
   }
   return verdict;
 }
 
-/** `molecule` with exactly the bonds at `indices` marked stretched — a mark
- *  left by an earlier structure is cleared. */
-export function markStretchedBonds(molecule: Molecule, indices: number[]): Molecule {
-  const stretched = new Set(indices);
+/** Is this still the molecule drawn, strictly — every drawn bond within a
+ *  full bond's length and no new one? (A partial bond does not pass.) */
+export function isMoleculeDrawn(molecule: Molecule): boolean {
+  const verdict = assessBonding(molecule, null);
+  return verdict.stretched.length === 0 && !verdict.formed;
+}
+
+/** How far inside the guard's limits the held structure's wall sits, and its
+ *  stiffness (see heldRestraint). */
+const HELD = 0.98;
+const HELD_STIFFNESS = 1.0; // Eh/bohr²
+const BOHR = 0.529177210903; // Å
+
+/**
+ * The held structure's restraint (decided with the user 2026-10-24): when
+ * GFN2's free result is set aside, the drawn molecule is relaxed again with
+ * its bonding held at the guard's own limits, so the picture shown is the
+ * molecule as drawn, relaxed, rather than the embedder's start. Zero while
+ * every drawn bond is within HELD × its full-bond limit and every pair the
+ * guard watches for a new bond is outside HELD⁻¹ × its limit; past that, a
+ * stiff harmonic wall. HELD keeps the wall a little inside the guard, so a
+ * held structure passes it: a bond pushing on the wall overshoots by about
+ * its force over 2k — 0.01 Å for 0.03 Eh/bohr, against a 0.05 Å margin.
+ * Energy in Eh and gradient in Eh/bohr, per atom, from coordinates in Å.
+ */
+export function heldRestraint(molecule: Molecule): { energy: number; gradient: number[][] } {
+  const { atoms, bonds } = molecule;
+  const gradient = atoms.map(() => [0, 0, 0]);
+  let energy = 0;
+  const radii = (i: number, j: number) => getCovalentRadius(atoms[i].element) + getCovalentRadius(atoms[j].element);
+  // a wall at `limit` Å on the distance i–j: 'below' holds a drawn bond
+  // under it, 'above' holds a pair that must not bond beyond it
+  const wall = (i: number, j: number, limit: number, side: 'below' | 'above') => {
+    const d = [atoms[i].x - atoms[j].x, atoms[i].y - atoms[j].y, atoms[i].z - atoms[j].z];
+    const r = Math.hypot(d[0], d[1], d[2]);
+    const over = side === 'below' ? r - limit : limit - r; // Å past the wall
+    if (over <= 0 || r === 0) return;
+    const overBohr = over / BOHR;
+    energy += HELD_STIFFNESS * overBohr * overBohr;
+    // dE/dr in Eh/bohr, along the unit vector i←j
+    const dEdr = (side === 'below' ? 1 : -1) * 2 * HELD_STIFFNESS * overBohr;
+    for (let c = 0; c < 3; c++) {
+      gradient[i][c] += (dEdr * d[c]) / r;
+      gradient[j][c] -= (dEdr * d[c]) / r;
+    }
+  };
+
+  const neighbours: Set<number>[] = atoms.map(() => new Set());
+  for (const b of bonds) {
+    neighbours[b.atom1Index].add(b.atom2Index);
+    neighbours[b.atom2Index].add(b.atom1Index);
+    wall(b.atom1Index, b.atom2Index, HELD * STRETCHED * radii(b.atom1Index, b.atom2Index), 'below');
+  }
+  for (let i = 0; i < atoms.length; i++) {
+    for (let j = i + 1; j < atoms.length; j++) {
+      if (neighbours[i].has(j)) continue;
+      if ([...neighbours[i]].some((k) => neighbours[j].has(k))) continue;
+      wall(i, j, newBondLimit(atoms[i].element, atoms[j].element) / HELD, 'above');
+    }
+  }
+  return { energy, gradient };
+}
+
+/** `molecule` marked with a verdict's changes — its stretched bonds, and its
+ *  formed pairs as contacts — and nothing else: a mark left by an earlier
+ *  structure is cleared. */
+export function markBondingChanges(
+  molecule: Molecule,
+  changes: Pick<BondingVerdict, 'stretched' | 'formedPairs'>,
+): Molecule {
+  const stretched = new Set(changes.stretched);
+  const { formedContacts: _, ...rest } = molecule;
   return {
-    ...molecule,
+    ...rest,
     bonds: molecule.bonds.map((b, i) => {
-      const { stretched: _, ...bond } = b;
+      const { stretched: _s, ...bond } = b;
       return stretched.has(i) ? { ...bond, stretched: true } : bond;
     }),
+    ...(changes.formedPairs.length > 0 ? { formedContacts: changes.formedPairs } : {}),
   };
 }

@@ -535,7 +535,10 @@ function redrawScene(ctx: SceneContext) {
   renderAtoms(ctx.moleculeGroup, atoms, ctx.display, ctx.renderer);
   // In space-filling mode, hide bonds
   if (ctx.display.representation !== 'space-filling') {
-    renderBonds(ctx.moleculeGroup, atoms, bonds, ctx.display, ctx.renderer);
+    // a contact GFN2 formed is drawn as a dashed line, never made a bond
+    const contacts = (ctx.currentMolecule.formedContacts ?? []).map(([a, b]) =>
+      ({ atom1Index: a, atom2Index: b, order: 1, stretched: true as const }));
+    renderBonds(ctx.moleculeGroup, atoms, [...bonds, ...contacts], ctx.display, ctx.renderer);
   }
   renderHybridOrbitals(ctx.orbitalGroup, ctx.currentMolecule, ctx.display.orbitalPreset, scheme, ctx.atomOrbitals);
 

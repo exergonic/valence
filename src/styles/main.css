@@ -987,8 +987,10 @@ button, input, select, textarea { font-family: inherit; }
 }
 #mol-link:hover { text-decoration: underline; }
 
-/* A GFN2 result set aside (a drawn bond came apart), shown on request */
-#mol-set-aside {
+/* A GFN2 result set aside (its bonding changed), shown on request; and
+   "Keep optimising" for a run that stopped short */
+#mol-set-aside,
+#mol-continue {
   font: inherit;
   font-size: 11px;
   padding: 2px 9px;
@@ -998,8 +1000,10 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--accent-text);
   cursor: pointer;
 }
-#mol-set-aside:hover { border-color: var(--accent); }
-#mol-set-aside.hidden { display: none; }
+#mol-set-aside:hover,
+#mol-continue:hover { border-color: var(--accent); }
+#mol-set-aside.hidden,
+#mol-continue.hidden { display: none; }
 
 /* ── The inspector: the active model view's controls ──
    Docked on the right, the mirror of the sketcher on the left. Its sections

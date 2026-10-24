@@ -17,7 +17,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { parseMolBlock, type Molecule } from '../src/mol-parser';
-import { assessBonding, markStretchedBonds } from '../src/geometry/bond-integrity';
+import { assessBonding, heldRestraint, isMoleculeDrawn, markBondingChanges } from '../src/geometry/bond-integrity';
 import { computeLocalGeometry } from '../src/geometry/local-geometry';
 import type { Gfn2Result } from '../src/geometry/gfn2-refine';
 import { localGeometry } from './helpers/local-geometry';
@@ -25,6 +25,8 @@ import type { LocalGeometry } from '../src/geometry/local-geometry';
 import { EXAMPLES } from '../src/ui/examples';
 import { HEXAN_2_AMINE_BROKEN } from './references/broken-results';
 import { DIPHENYLETHYLENE_BROMONIUM, PHENYLBUTENE_BROMONIUM } from './references/bromonium-ions';
+import { DIPHENYLETHYLENE_BROMONIUM as DIPHENYLETHYLENE_BROMONIUM_SKETCH } from './references/sketches';
+import { NAOH } from './references/oracle-minima';
 
 const ACCEPTED = ['Diborane', 'Phosphorus pentachloride', 'Sulfur hexafluoride', 'Tetrachloronickelate', 'Benzene'];
 const runs = new Map<string, LocalGeometry | null>();
@@ -58,6 +60,7 @@ const run = (molecule: Molecule, bondOrders: number[] | null): Gfn2Result => ({
   saddleEscapes: 0,
   multiplicity: 1,
   vibrations: null,
+  held: null,
 });
 
 describe('assessBonding', () => {
@@ -79,7 +82,7 @@ describe('assessBonding', () => {
     const local = runs.get(name)!;
     expect(local.engine).toBe('gfn2'); // optimised, and accepted by the guard in the pipeline
     expect(local.gfn2!.bondOrders).toHaveLength(local.molecule.bonds.length);
-    expect(assessBonding(local.molecule, local.gfn2!.bondOrders)).toEqual({ stretched: [], partial: [], broken: null, formed: null });
+    expect(assessBonding(local.molecule, local.gfn2!.bondOrders)).toEqual({ stretched: [], partial: [], broken: null, formed: null, formedPairs: [] });
   });
 });
 
@@ -122,23 +125,28 @@ describe('a drawn bond that stretched', () => {
   }, 120_000);
 
   it('a mark from an earlier structure is cleared', () => {
-    const marked = markStretchedBonds(PHENYLBUTENE_BROMONIUM, [0, 3]);
+    const marked = markBondingChanges(PHENYLBUTENE_BROMONIUM, { stretched: [0, 3], formedPairs: [[0, 4]] });
     expect(marked.bonds.filter((b) => b.stretched)).toHaveLength(2);
-    const remarked = markStretchedBonds(marked, [3]);
+    expect(marked.formedContacts).toEqual([[0, 4]]);
+    const remarked = markBondingChanges(marked, { stretched: [3], formedPairs: [] });
     expect(remarked.bonds.map((b, i) => (b.stretched ? i : -1)).filter((i) => i >= 0)).toEqual([3]);
     expect('stretched' in remarked.bonds[0]).toBe(false);
+    expect('formedContacts' in remarked).toBe(false);
   });
 });
 
 describe('the local pipeline with a result whose bonding changed', () => {
-  it('sets the result aside and shows the start, saying why', async () => {
-    // A refiner that hands back the broken structure, as GFN2 once did: the
-    // pipeline must not call it optimised.
+  it('sets a result with a formed bond aside, the start shown, the result kept', async () => {
+    // A refiner that hands back the broken structure, as GFN2 once did, with
+    // no held structure: the pipeline must not call it optimised, and shows
+    // the start — but the result is a click away, its new contacts dashed.
     const broken = parseMolBlock(HEXAN_2_AMINE_BROKEN);
     const local = await computeLocalGeometry(broken, undefined, async () => run(broken, null));
     expect(local?.engine).toBe('unrefined');
     expect(local?.unrefinedReason).toMatch(/no longer had the bonds drawn/);
-    expect(local?.setAside).toBeUndefined(); // a bond formed: not offered
+    expect(local?.bondingChange).toMatch(/a new bond/);
+    expect(local?.setAside?.engine).toBe('gfn2');
+    expect(local!.setAside!.molecule.formedContacts!.length).toBeGreaterThan(0);
   });
 
   it('shows a partial bond, marked stretched, and says so', async () => {
@@ -153,9 +161,48 @@ describe('the local pipeline with a result whose bonding changed', () => {
   it('sets a come-apart result aside, but keeps it for the asking', async () => {
     const orders = await wibergOrders(DIPHENYLETHYLENE_BROMONIUM);
     const local = await computeLocalGeometry(DIPHENYLETHYLENE_BROMONIUM, undefined, async () => run(DIPHENYLETHYLENE_BROMONIUM, orders));
-    expect(local?.engine).toBe('unrefined');
-    expect(local!.brokenBond).toMatch(/C2–Br4 bond came apart/);
+    expect(local?.engine).toBe('unrefined'); // no held structure from this refiner
+    expect(local!.bondingChange).toMatch(/C2–Br4 bond came apart/);
     expect(local!.setAside?.engine).toBe('gfn2');
     expect(local!.setAside!.molecule.bonds[bondIndex(DIPHENYLETHYLENE_BROMONIUM, 2, 4)].stretched).toBe(true);
   }, 60_000);
+});
+
+describe('the held structure', () => {
+  // The wall at the guard's limits: nothing inside them, a stiff harmonic
+  // push past them, and its gradient the derivative of its energy.
+  it('costs nothing while the drawn bonding holds', () => {
+    expect(heldRestraint(NAOH).energy).toBe(0);
+  });
+
+  it('pushes a stretched drawn bond back, its gradient the derivative of its energy', () => {
+    const { energy, gradient } = heldRestraint(DIPHENYLETHYLENE_BROMONIUM); // C2···Br4 at 2.75 Å
+    expect(energy).toBeGreaterThan(0);
+    const BOHR = 0.529177210903;
+    const h = 1e-5; // Å
+    for (const [atom, c] of [[1, 0], [3, 1], [3, 2], [0, 0]] as const) {
+      const moved = (sign: number) => ({ ...DIPHENYLETHYLENE_BROMONIUM,
+        atoms: DIPHENYLETHYLENE_BROMONIUM.atoms.map((a, i) => (i !== atom ? a
+          : { ...a, x: a.x + (c === 0 ? sign * h : 0), y: a.y + (c === 1 ? sign * h : 0), z: a.z + (c === 2 ? sign * h : 0) })) });
+      const numerical = (heldRestraint(moved(1)).energy - heldRestraint(moved(-1)).energy) / (2 * h / BOHR);
+      expect(gradient[atom][c]).toBeCloseTo(numerical, 6);
+    }
+  });
+
+  it("holds the diphenylethylene bromonium bridged, GFN2's open ion kept behind the button", async () => {
+    const local = await localGeometry(parseMolBlock(DIPHENYLETHYLENE_BROMONIUM_SKETCH));
+    expect(local?.engine).toBe('held');
+    expect(local!.held!.restrained).toBe(true);
+    expect(isMoleculeDrawn(local!.molecule)).toBe(true);
+    // the bridge held at the wall, drawn dashed; the free ion open behind it
+    const cBr = bondIndex(local!.molecule, 3, 2);
+    const atoms = local!.molecule.atoms;
+    const r = Math.hypot(atoms[2].x - atoms[1].x, atoms[2].y - atoms[1].y, atoms[2].z - atoms[1].z);
+    expect(r).toBeGreaterThan(2.4);
+    expect(r).toBeLessThan(2.55);
+    expect(local!.molecule.bonds[cBr].stretched).toBe(true);
+    expect(local!.bondingChange).toMatch(/C3–Br2 bond came apart/);
+    expect(local!.setAside?.engine).toBe('gfn2');
+    expect(local!.held!.energyHartree).toBeGreaterThan(local!.setAside!.gfn2!.energyHartree);
+  }, 120_000);
 });

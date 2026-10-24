@@ -45,4 +45,11 @@ export interface Molecule {
    * closed shell the molecule does not have.
    */
   multiplicity?: number;
+  /**
+   * Pairs not bonded in the sketch that the structure shown has brought to
+   * bonding distance (bond-integrity.ts) — a GFN2 result shown on request
+   * after it formed a bond. Drawn dashed, never bonds: the chemistry reads
+   * `bonds`, which stay the sketch's.
+   */
+  formedContacts?: [number, number][];
 }

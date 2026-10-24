@@ -18,9 +18,9 @@
  */
 import type { Molecule } from '../mol-parser';
 import { breakSymmetry } from './embed';
-import type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets } from './gfn2-refine.worker';
+import type { Gfn2Progress, Gfn2Result, Gfn2Held, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets } from './gfn2-refine.worker';
 
-export type { Gfn2Progress, Gfn2Result, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets };
+export type { Gfn2Progress, Gfn2Result, Gfn2Held, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets };
 export { SADDLE_FREQUENCY_THRESHOLD } from '../chem/gfn2-xtb/normal-modes';
 
 /**
