@@ -98,23 +98,6 @@ const MAX_CALLS = { lbfgs: 2500, fallback: 1500 };
  *  removed hand-rolled loop enforced. */
 const FALLBACK_STEP_ANGSTROM = 0.1;
 /**
- * OCC's analytic GFN2 gradient is not the exact derivative of its energy, and
- * the error grows with how polar the molecule is. Measured 2026-10-05 against
- * central differences of the engine's own energy (h = 1e-3 bohr, SCF converged
- * to ~1e-11 Eh, so the reference is good to ~1e-8): P₄ 1e-7, water 9e-6,
- * SF₆ and CHFCl₂ 6e-5, ethene 9e-5, methanol 2.2e-4, the cyclopropenyl anion
- * 4.6e-4 (the cause, D4 not self-consistent, is in `relax` below) — and 1e-3
- * where its optimisation stalls, ten times the 1e-4
- * convergence gate. An optimiser steered by that gradient cannot satisfy its
- * line search near the minimum and grinds (the anion: 3 400 evaluations at a
- * flat energy). The engine's NUMERICAL gradient is exact to the step, at 6N
- * energies apiece, so it is the third rung: started from wherever the analytic
- * rungs stopped, gated on size, with its own budget.
- */
-const NUMERICAL_GRADIENT_STEP_BOHR = 1e-3;
-const MAX_NUMERICAL_GRADIENT_ATOMS = 24;
-const MAX_NUMERICAL_CALLS = 400;
-/**
  * The whole run's time budget (ms): every rung, every saddle escape. This is a
  * teaching tool, and a good-enough structure in seconds beats a perfect one in
  * minutes — measured on the app's examples, the organics and the hypervalent
@@ -127,9 +110,18 @@ const TIME_BUDGET_MS = 30_000;
 /** Berny's steps before it hands over to the ladder — it converges the app's
  *  molecules in 6–35, so a run past this is not going to. */
 const BERNY_MAX_STEPS = 100;
-/** The exact gradient a Berny-converged point must meet, Eh/bohr: Berny's own
- *  default gate (Gaussian's max-force 4.5e-4), held to the true gradient. */
-const BERNY_GRADIENT_MAX = 4.5e-4;
+/**
+ * The largest Cartesian gradient component a Berny-converged point may have,
+ * Eh/bohr: Gaussian's loose max force (opt=loose). Berny's own 4.5e-4 gate is
+ * on its internal coordinates, and a soft torsion leaves a larger Cartesian
+ * component at a sound stop. Measured 2026-10-23 where Berny stops: every
+ * good stop ≤ 7.3e-4 (imidazole; 1,1-diphenylethane 6.4e-4) and the
+ * phenylbutene bromonium 1.4e-3 (0.26 kcal/mol up); the false stops O₂
+ * 3.3e-3, the diphenylethylene bromonium 8.5e-3, N₂ 9.2e-3.
+ */
+const BERNY_GRADIENT_MAX = 2.5e-3;
+/** Restarts from a false stop before the ladder takes over. */
+const MAX_BERNY_RESTARTS = 3;
 /** Above this atom count the Hessian verdict is skipped: the cost is 6N
  *  gradient evaluations (measured on the vendored engine, 2026-10-02: 45 ms at
  *  N=3, 182 ms at N=8, 653 ms at N=13, 3.1 s at N=21), and the verdict is a
@@ -266,19 +258,19 @@ const bohrPoints = (M: any, flatAngstrom: ArrayLike<number>) =>
 const occMolecule = (M: any, atoms: Array<{ element: string }>, flatAngstrom: number[]) =>
   new M.Molecule(M.IVec.fromArray(atoms.map((a) => elementToZ(a.element))), toMat3N(M, flatAngstrom));
 
-/** The calculator's energy and gradient at a geometry (Å). The gradient is
- *  read out (Eh/bohr, [atom][x y z]) and the engine's copies released — an
- *  optimisation makes thousands of these calls. */
-function evaluate(M: any, calc: any, flatAngstrom: number[], numerical: boolean): { energy: number; gradient: number[][] } {
+/** The calculator's energy and analytic gradient at a geometry (Å). The
+ *  gradient is read out (Eh/bohr, [atom][x y z]) and the engine's copies
+ *  released — an optimisation makes thousands of these calls. */
+function evaluate(M: any, calc: any, flatAngstrom: number[]): { energy: number; gradient: number[][] } {
   const positions = bohrPoints(M, flatAngstrom);
   try {
     calc.updateStructure(positions);
   } finally {
     positions.delete?.();
   }
-  // the second argument is the finite-difference step, read only when the
-  // gradient is numerical
-  const result = calc.energyAndGradient(numerical, NUMERICAL_GRADIENT_STEP_BOHR);
+  // (numerical, finite-difference step): the step is read only for a
+  // numerical gradient
+  const result = calc.energyAndGradient(false, 0);
   const count = flatAngstrom.length / 3;
   const gradient = Array.from({ length: count }, (_, a) => [0, 1, 2].map((c) => result.gradient.get(c, a) as number));
   result.gradient.delete?.();
@@ -382,7 +374,6 @@ export async function optimizeWithGfn2(
   const makeOracle = (
     calc: ReturnType<typeof buildCalculator>,
     budgets: { engineFailures: number; spuriousDrops: number; calls: number },
-    numerical = false,
   ) => {
     let hasValidEvaluation = false;
     let bestEnergy = Infinity;
@@ -396,7 +387,7 @@ export async function optimizeWithGfn2(
       evaluations += 1;
       if (evaluations % PROGRESS_EVERY === 0) report();
       try {
-        const result = evaluate(M, calc, work.atoms.flatMap((a) => [a.x, a.y, a.z]), numerical);
+        const result = evaluate(M, calc, work.atoms.flatMap((a) => [a.x, a.y, a.z]));
         if (!Number.isFinite(result.energy) || calc.lastResult()?.converged === false) {
           throw new Error('GFN2: the SCC did not converge at a trial geometry');
         }
@@ -449,10 +440,11 @@ export async function optimizeWithGfn2(
    *
    *   1. L-BFGS on the analytic gradient, from the start;
    *   2. steepest descent at a bounded step, from the start — the library's
-   *      answer to a pathological start;
-   *   3. L-BFGS on the NUMERICAL gradient, from the lowest point the first two
-   *      reached — for a surface where the analytic gradient is too inexact to
-   *      converge on (see NUMERICAL_GRADIENT_STEP_BOHR).
+   *      answer to a pathological start.
+   *
+   * (A third rung ran L-BFGS on the numerical gradient, for OCC 0.9.4's
+   * inexact analytic one; with the gradient exact it had nothing to add —
+   * see `relax`.)
    *
    * Then one evaluation at the accepted point, so the engine's cache (the
    * charges, the Hessian) describes the geometry returned — the library's
@@ -484,12 +476,6 @@ export async function optimizeWithGfn2(
         engineFailures: MAX_ENGINE_FAILURES.fallback, spuriousDrops: MAX_SPURIOUS_DROPS, calls: MAX_CALLS.fallback,
       }), { ...options, initial_step_size: FALLBACK_STEP_ANGSTROM }));
     }
-    if (!found.best?.converged && count <= MAX_NUMERICAL_GRADIENT_ATOMS) {
-      const from = found.best ? at(found.best) : start;
-      rung((c) => optimize_lbfgs(toMMFFMol(from), makeOracle(c, {
-        engineFailures: MAX_ENGINE_FAILURES.lbfgs, spuriousDrops: MAX_SPURIOUS_DROPS, calls: MAX_NUMERICAL_CALLS,
-      }, true), options));
-    }
     const result = found.best;
     if (!result || result.molecule.atoms.length !== count) {
       release(calc);
@@ -498,28 +484,31 @@ export async function optimizeWithGfn2(
     const geometry = at(result);
     let energy = result.energy.total;
     let evaluates = true;
+    let gradientMax = Infinity;
     try {
-      energy = evaluate(M, calc, geometry.atoms.flatMap((a) => [a.x, a.y, a.z]), false).energy;
+      const final = evaluate(M, calc, geometry.atoms.flatMap((a) => [a.x, a.y, a.z]));
+      energy = final.energy;
+      gradientMax = Math.max(...final.gradient.flat().map(Math.abs));
     } catch {
       // The accepted point itself did not evaluate: the geometry and the
       // optimiser's energy stand, but nothing read from the cache would.
       evaluates = false;
     }
-    return { geometry, energy, iterations, converged: result.converged, calc, evaluates };
+    return { geometry, energy, iterations, converged: result.converged, calc, evaluates, gradientMax };
   };
   type Relaxed = NonNullable<ReturnType<typeof ladder>>;
 
   /**
    * OCC's Berny optimiser from `start`: internal coordinates, a model Hessian
    * and a trust radius, driven step by step with the engine's energy and
-   * gradient (analytic, or `numerical`). On the app's own starts it reaches
+   * analytic gradient. On the app's own starts it reaches
    * the ladder's minima to 1e-6 Eh in 6–12 steps — benzene 0.1 s against the
    * ladder's 3.5 s, PCl₅ 0.2 s against 6.8 s (NOTES.md). Converged is Berny's
    * own test, Gaussian's default gate (max 4.5e-4, rms 1.5e-4). Null when the
    * engine fails on a step; the calculator is left at the last point
    * evaluated, which on convergence is the point returned.
    */
-  const berny = (start: Molecule, numerical: boolean): Relaxed | null => {
+  const berny = (start: Molecule): Relaxed | null => {
     const startAngstrom = start.atoms.flatMap((a) => [a.x, a.y, a.z]);
     const calc = buildCalculator();
     const shape = occMolecule(M, start.atoms, startAngstrom);
@@ -528,13 +517,15 @@ export async function optimizeWithGfn2(
     let energy = Number.NaN;
     let steps = 0;
     let converged = false;
+    let gradientMax = Infinity;
     try {
       for (; steps < BERNY_MAX_STEPS && performance.now() < deadline; steps++) {
-        const result = evaluate(M, calc, positions, numerical);
+        const result = evaluate(M, calc, positions);
         if (!Number.isFinite(result.energy) || calc.lastResult()?.converged === false) {
           throw new Error('GFN2: the SCC did not converge at a Berny step');
         }
-        evaluations += numerical ? 1 + 6 * count : 1;
+        evaluations += 1;
+        gradientMax = Math.max(...result.gradient.flat().map(Math.abs));
         energy = result.energy;
         lowestEnergy = lowestEnergy === null ? energy : Math.min(lowestEnergy, energy);
         report();
@@ -568,51 +559,41 @@ export async function optimizeWithGfn2(
         ...atom, x: positions[3 * i], y: positions[3 * i + 1], z: positions[3 * i + 2],
       })),
     };
-    return { geometry, energy, iterations: steps, converged, calc, evaluates: true };
-  };
-
-  /** The exact (numerical) gradient's largest component at a relaxed point,
-   *  Eh/bohr — and the cache put back at that point afterwards, since the
-   *  charges and the Hessian are read from it. */
-  const exactGradientMax = (relaxed: Relaxed): number => {
-    const flatAngstrom = relaxed.geometry.atoms.flatMap((a) => [a.x, a.y, a.z]);
-    const exact = evaluate(M, relaxed.calc, flatAngstrom, true);
-    evaluations += 1 + 6 * count;
-    evaluate(M, relaxed.calc, flatAngstrom, false);
-    return Math.max(...exact.gradient.flat().map(Math.abs));
+    return { geometry, energy, iterations: steps, converged, calc, evaluates: true, gradientMax };
   };
 
   /**
-   * One optimisation from `start`. Berny first, on the analytic gradient —
-   * fast, and right for most molecules. But OCC's analytic GFN2 gradient is
-   * wrong for polar species in v0.9.4: its D4 dispersion energy is evaluated
-   * at the SCC charges, but D4's charge potential ∂E_disp/∂q never enters the
-   * Hamiltonian, so the energy is not variational and the gradient misses a
-   * charge-response term — largest where charge separates (the maintainer's
-   * diagnosis on peterspackman/occ#58; OCC's README had blamed missing
-   * AO-multipole integral derivatives, which were already in). Fixed upstream
-   * in 5644eaf, due in 0.9.6 — revisit this check when we rebuild on it. Measured against
-   * the Fortran xTB oracle: methanol 2.2e-4, the cyclopropenyl anion 4.7e-4
-   * Eh/bohr, while xTB's own analytic gradient matches OCC's finite
-   * differences to 1e-6. Berny believes it: on the anion it reported convergence 4.7 kcal/mol above
-   * the minimum. So a converged point is checked with the exact gradient, and
-   * when they disagree Berny goes on from there on the exact gradient. Below
-   * 24 atoms — above, the check costs more than it is worth and the analytic
-   * answer stands. When Berny cannot finish, the Cartesian ladder runs from
-   * the start, as it did before Berny.
+   * One optimisation from `start`: Berny, held to the Cartesian gradient, and
+   * when it cannot finish, the Cartesian ladder from the start, as it ran
+   * before Berny.
+   *
+   * Berny's own convergence test is on its internal coordinates, built from
+   * the geometry it started at, and a structure whose bonding shifts as it
+   * relaxes can pass that test with the Cartesian gradient still large: the
+   * 1,1-diphenylethylene bromonium "converged" with its C–Br at 2.63 Å and a
+   * gradient of 8.5e-3 Eh/bohr, 8 kcal/mol above the open ion at 2.75 Å
+   * (2026-10-23; xtb agrees on the gradient there). So a converged point must
+   * also meet Berny's own force gate on the true gradient, and when it does
+   * not, Berny starts again from it — new coordinates for the geometry as it
+   * now is. The last step's gradient is that check, so it costs nothing.
+   *
+   * It used to run on the NUMERICAL gradient, and only below 24 atoms: OCC
+   * 0.9.4's analytic gradient missed D4's charge response (peterspackman/
+   * occ#58; the cyclopropenyl anion 4.6e-4 Eh/bohr). The vendored build
+   * (5644eaf) made D4 self-consistent, and analytic and numerical now agree
+   * to 3e-7 Eh/bohr on the molecules that were worst.
    */
   const relax = (start: Molecule): Relaxed | null => {
-    const fast = berny(start, false);
-    if (fast?.converged) {
-      if (count > MAX_NUMERICAL_GRADIENT_ATOMS || exactGradientMax(fast) <= BERNY_GRADIENT_MAX) return fast;
-      const exact = berny(fast.geometry, true);
-      if (exact?.converged) {
-        release(fast.calc);
-        return { ...exact, iterations: fast.iterations + exact.iterations };
-      }
-      if (exact) release(exact.calc);
+    let relaxed = berny(start);
+    for (let restart = 0; relaxed?.converged && relaxed.gradientMax > BERNY_GRADIENT_MAX
+      && restart < MAX_BERNY_RESTARTS; restart++) {
+      const again = berny(relaxed.geometry);
+      if (!again) break;
+      release(relaxed.calc);
+      relaxed = { ...again, iterations: relaxed.iterations + again.iterations };
     }
-    if (fast) release(fast.calc);
+    if (relaxed?.converged && relaxed.gradientMax <= BERNY_GRADIENT_MAX) return relaxed;
+    if (relaxed) release(relaxed.calc);
     return ladder(start);
   };
 

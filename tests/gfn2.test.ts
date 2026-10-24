@@ -477,63 +477,34 @@ M  END
   }, 180_000);
 });
 
-describe('Berny and the inexact analytic gradient', () => {
-  // OCC's analytic GFN2 gradient is wrong for polar species in v0.9.4 — its D4
-  // dispersion is not self-consistent, so the gradient misses a charge-response
-  // term (peterspackman/occ#58; fixed upstream, due in 0.9.6). The Fortran xTB oracle's gradient matches OCC's finite
-  // differences to 1e-6 and its analytic gradient to only 4.7e-4 here. Berny on that gradient
-  // alone reports the cyclopropenyl anion converged at −7.899336 Eh, 4.7
-  // kcal/mol above the minimum; the exact-gradient check has to catch it.
-  // The start is the user's planar wb97x-D3 geometry (a saddle), as in
-  // hessian-verdict.test.ts.
-  it('does not stop where the analytic gradient says — the cyclopropenyl anion', async () => {
-    const coordinates = [
-      [-0.38805807296094, -0.55379677203097, -0.00000516874794], [1.96428381555042, -0.33618719672166, 0.00000798989796],
-      [-0.4817129625322, 0.79178857900362, -0.00000671254584], [0.90831673450787, -0.18163055167206, -0.00000886276546],
-      [-1.01558024601627, -1.45147946730454, 0.00000575624305], [-0.98794926854887, 1.73130540872561, 0.00000699791823],
-    ];
-    const elements = ['C', 'H', 'C', 'C', 'H', 'H'];
-    const anion: Molecule = {
-      atoms: elements.map((element, i) => ({ ...atom(element, coordinates[i][0], coordinates[i][1], coordinates[i][2]), charge: i === 0 ? -1 : 0 })),
-      bonds: [
-        bond(0, 2), { ...bond(2, 3), order: 2 }, bond(3, 0), bond(3, 1), bond(0, 4), bond(2, 5),
-      ],
-    };
-    const result = await refine(anion);
-    expect(result).not.toBeNull();
-    expect(result!.converged).toBe(true);
-    // the true minimum is −7.906790 Eh; Berny on the analytic gradient alone stops at −7.899336
-    expect(result!.energyHartree).toBeLessThan(-7.9065);
-    expect(result!.lowestFrequency!).toBeGreaterThan(SADDLE_FREQUENCY_THRESHOLD);
-    // ...and it is the exact-gradient check that gets it there, not the saddle
-    // escape. Here the false stop happens to be the planar saddle, so with the
-    // check removed the escape rescues the run (measured: one escape, same
-    // minimum) — but the escape only runs below 16 atoms and only when the
-    // false stop is a saddle. The check is the safeguard that always applies.
-    expect(result!.saddleEscapes).toBe(0);
-  }, 180_000);
-});
-
 describe('the analytic gradient is the exact derivative', () => {
-  // The vendored build (OCC 5644eaf) makes D4 self-consistent, which puts its
-  // charge response into the gradient (peterspackman/occ#58). On v0.9.4 the
-  // largest |analytic − numerical| component was 4.6e-4 Eh/bohr on the
-  // cyclopropenyl anion and ~2e-4 on the bromonium ions; now ≤ 3e-7.
+  // OCC 0.9.4's analytic GFN2 gradient was wrong for polar species: D4's charge
+  // potential never entered the Hamiltonian, so the gradient missed a
+  // charge-response term (peterspackman/occ#58) — 4.6e-4 Eh/bohr on the
+  // cyclopropenyl anion — and Berny reported the anion converged at −7.899336
+  // Eh, 4.7 kcal/mol above the minimum. The vendored build (5644eaf) makes D4
+  // self-consistent and the app trusts Berny's answer outright, so this pins
+  // what that trust rests on. The start is the user's planar wb97x-D3 geometry
+  // (a saddle), as in hessian-verdict.test.ts.
+  const coordinates = [
+    [-0.38805807296094, -0.55379677203097, -0.00000516874794], [1.96428381555042, -0.33618719672166, 0.00000798989796],
+    [-0.4817129625322, 0.79178857900362, -0.00000671254584], [0.90831673450787, -0.18163055167206, -0.00000886276546],
+    [-1.01558024601627, -1.45147946730454, 0.00000575624305], [-0.98794926854887, 1.73130540872561, 0.00000699791823],
+  ];
+  const elements = ['C', 'H', 'C', 'C', 'H', 'H'];
+  const anion: Molecule = {
+    atoms: elements.map((element, i) => ({ ...atom(element, coordinates[i][0], coordinates[i][1], coordinates[i][2]), charge: i === 0 ? -1 : 0 })),
+    bonds: [
+      bond(0, 2), { ...bond(2, 3), order: 2 }, bond(3, 0), bond(3, 1), bond(0, 4), bond(2, 5),
+    ],
+  };
+
   it('matches the numerical gradient on the polar molecules 0.9.4 got wrong', async () => {
     const { PHENYLBUTENE_BROMONIUM, DIPHENYLETHYLENE_BROMONIUM } = await import('./references/bromonium-ions');
-    const coordinates = [
-      [-0.38805807296094, -0.55379677203097, -0.00000516874794], [1.96428381555042, -0.33618719672166, 0.00000798989796],
-      [-0.4817129625322, 0.79178857900362, -0.00000671254584], [0.90831673450787, -0.18163055167206, -0.00000886276546],
-      [-1.01558024601627, -1.45147946730454, 0.00000575624305], [-0.98794926854887, 1.73130540872561, 0.00000699791823],
-    ];
-    const anion: Molecule = {
-      atoms: ['C', 'H', 'C', 'C', 'H', 'H'].map((element, i) =>
-        ({ ...atom(element, coordinates[i][0], coordinates[i][1], coordinates[i][2]), charge: i === 0 ? -1 : 0 })),
-      bonds: [],
-    };
     const createOccModule = (await import('../vendor/occ-wasm/occjs.js')).default as any;
     const M = await createOccModule({ locateFile: vendorFile });
     const BOHR = 0.529177210903;
+    // measured on 0.9.4: 4.6e-4, 2.0e-4, 1.7e-4 Eh/bohr; on 5644eaf ≤ 3e-7
     for (const molecule of [anion, PHENYLBUTENE_BROMONIUM, DIPHENYLETHYLENE_BROMONIUM]) {
       const n = molecule.atoms.length;
       const positions = M.Mat3N.create(n);
@@ -550,6 +521,32 @@ describe('the analytic gradient is the exact derivative', () => {
       expect(worst).toBeLessThan(5e-6);
       calc.delete();
     }
+  }, 180_000);
+
+  // Berny's convergence test is on its own internal coordinates. On the
+  // 1,1-diphenylethylene bromonium it passed with the Cartesian gradient at
+  // 8.5e-3 Eh/bohr, the C–Br at 2.63 Å, 8 kcal/mol above the open ion that the
+  // Fortran xtb oracle finds (2.75 Å, −39.701396 Eh). The Cartesian gate
+  // restarts it from there.
+  it('does not take Berny\'s word on the diphenylethylene bromonium', async () => {
+    const { DIPHENYLETHYLENE_BROMONIUM } = await import('./references/sketches');
+    const { breakSymmetry, embed3D } = await import('../src/geometry/embed');
+    const result = await refine(breakSymmetry(embed3D(parseMolBlock(DIPHENYLETHYLENE_BROMONIUM)).separated));
+    expect(result?.converged).toBe(true);
+    expect(result!.energyHartree).toBeLessThan(-39.7013);
+    const [c, br] = [result!.molecule.atoms[2], result!.molecule.atoms[1]];
+    expect(Math.hypot(c.x - br.x, c.y - br.y, c.z - br.z)).toBeGreaterThan(2.7);
+  }, 120_000);
+
+  it('so Berny alone reaches the cyclopropenyl anion\'s minimum', async () => {
+    const result = await refine(anion);
+    expect(result).not.toBeNull();
+    expect(result!.converged).toBe(true);
+    // the true minimum is −7.906790 Eh; on 0.9.4's gradient Berny stopped at −7.899336
+    expect(result!.energyHartree).toBeLessThan(-7.9065);
+    expect(result!.lowestFrequency!).toBeGreaterThan(SADDLE_FREQUENCY_THRESHOLD);
+    // the gradient, not the saddle escape, gets it there
+    expect(result!.saddleEscapes).toBe(0);
   }, 180_000);
 });
 
