@@ -239,9 +239,15 @@ Each module's header comment says what it does and why; this list says where.
 - Orbital lobes are surfaces of revolution → `THREE.LatheGeometry`.
 - Unit-test chemistry logic as pure functions, independent of Three.js.
 - Static deploy only (GitHub Pages / SDF.org) — no server-side code.
-- The render pipeline is state-driven: change a toggle → rebuild → redraw
-  (`src/render/rebuild.ts`); a single facade in `src/render/` with separate
-  modules for atoms, bonds and orbitals (MolView's pattern).
+- The render pipeline is state-driven: change a toggle → rebuild → one
+  frame, drawn on demand (`src/render/rebuild.ts`); a single facade in
+  `src/render/` with separate modules for atoms, bonds and orbitals (MolView's
+  pattern).
+- **Frames are drawn on demand**, never every refresh (NOTES.md,
+  2026-10-25): a rebuild, the trackball, a resize and any input event on the
+  page each ask for one, and only auto-rotate and a playing vibration keep the
+  loop running. Anything else that changes the scene must call
+  `ctx.requestRender()`, or the picture goes stale.
 - Atom meshes of the lit styles (Soft, Glossy, Showcase) live on layer 1 with
   their own light rig — any new raycaster must `layers.enable(ATOM_LAYER)` or
   atoms stop being pickable.

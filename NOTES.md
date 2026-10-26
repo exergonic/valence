@@ -5366,3 +5366,22 @@ orbitals — He's lone pair and empty valence, Li's open-shell α orbitals
 lone pairs. Refine declines one, and the worker refuses it in words; its
 errors are now described, never stringified objects. A lone atom is also
 framed with its orbital lobes: on the atom alone, Li's 2s overflowed the view.
+
+## Frames on demand (2026-10-25)
+
+An empty fresh tab idled at 10–20% CPU. The render loop redrew the scene on
+every animation frame whether anything had changed or not: in the dev server,
+with no molecule, the WebGL context was cleared and presented ~48 times a
+second (zero draw calls), at ~0.1 ms of JavaScript a frame — the cost was the
+browser's GPU and compositor presenting a new frame each refresh, not our
+code. JSME's own 250 ms GWT timer is the only other idle activity, and
+negligible. Now a frame is drawn when asked for (`ctx.requestRender`): at the
+end of every rebuild, on the trackball's 'change' (its damping coast
+included), on a resize, and — the catch-all — on any pointer, wheel, key,
+click, input or change event anywhere on the page. Only auto-rotate and a
+playing vibration keep the loop running. Measured after: 0 frames a second
+idle, before and after a molecule; vibration and auto-rotate render at the
+browser's frame rate and stop when switched off; ESP, MO surfaces and the
+ESP-fitted charges, all arriving from the worker, are drawn when they land.
+Anything that changes the scene outside a rebuild or an input event must call
+`ctx.requestRender()`, or the picture goes stale.
