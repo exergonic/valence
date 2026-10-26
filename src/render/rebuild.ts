@@ -505,6 +505,9 @@ export function rebuildDisplay(ctx: SceneContext) {
   redrawScene(ctx);
   // last: the groups are new, so a playing vibration takes up the new meshes
   syncVibration(ctx, gfn2PropertiesOnScreen(ctx));
+  // every rebuild ends here — the async ones (a GFN2 result, a surface from
+  // the worker) included — so this is where the new picture is asked for
+  ctx.requestRender();
 }
 
 function redrawScene(ctx: SceneContext) {

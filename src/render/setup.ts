@@ -299,6 +299,10 @@ export interface SceneContext {
    *  open shell — so switching back is instant. */
   localizedLists: LocalizedList[];
   rerender: () => void;
+  /** Draw the scene on the next animation frame. Frames are drawn on demand
+   *  (see initScene): whatever changes the scene outside a rebuild or an
+   *  input event must ask for one. */
+  requestRender: () => void;
   /** Called when the GFN2 single point lands — its orbitals are the ladder's
    *  GFN2 rows and the Localized view's list, which waited for it. */
   onGfn2Orbitals: () => void;
@@ -306,7 +310,8 @@ export interface SceneContext {
    *  that structure is GFN2's own minimum (a fetched conformer is not one, so
    *  its "frequencies" would be meaningless). Paired with its molecule. */
   vibrations: { molecule: Molecule; modes: NormalMode[] } | null;
-  /** Called on every animation frame (the vibration drives it), or null. */
+  /** Called on every animation frame (the vibration drives it), or null.
+   *  While it is set, frames are drawn continuously. */
   frame: { onFrame: ((now: number) => void) | null };
   /** Called at the end of buildScene, i.e. when a new molecule is in the
    *  scene — panels that read per-molecule data (the MO ladder) redraw here
@@ -392,8 +397,20 @@ export function initScene(container: HTMLElement): SceneContext {
   let autoRotate = false;
   const frame: SceneContext['frame'] = { onFrame: null };
 
-  function animate() {
+  // Frames are drawn on demand, not at the display's refresh rate: a still
+  // picture redrawn sixty times a second kept the GPU process busy with
+  // nothing on screen. A frame is asked for when something may have changed
+  // — a rebuild, the trackball moving (its own damping included), a resize —
+  // and the loop keeps going only while something moves by itself.
+  let frameQueued = false;
+  function requestRender() {
+    if (frameQueued) return;
+    frameQueued = true;
     requestAnimationFrame(animate);
+  }
+
+  function animate() {
+    frameQueued = false;
     frame.onFrame?.(performance.now());
     if (autoRotate) {
       moleculeGroup.rotation.y += 0.005;
@@ -405,6 +422,7 @@ export function initScene(container: HTMLElement): SceneContext {
       espGroup.rotation.y += 0.005;
       moGroup.rotation.y += 0.005;
     }
+    // fires 'change' while the camera is still moving, which asks for the next frame
     controls.update();
     // Forward-push the atom labels against the (moved) camera. The dipole
     // group is all meshes (its δ+ tail cross is geometry, not a sprite), so it
@@ -412,20 +430,34 @@ export function initScene(container: HTMLElement): SceneContext {
     updateLabels(labelGroup, camera);
     renderer.render(scene, camera);
     axisLegend.update(camera, moleculeGroup, moleculeGroup.children.length > 0);
+    if (autoRotate || frame.onFrame) requestRender();
   }
-  animate();
+  controls.addEventListener('change', requestRender);
+  requestRender();
+
+  // The catch-all: any input anywhere on the page may change the scene — a
+  // control, a hover highlight, a drag on the canvas — so it earns a frame.
+  // Rebuilds ask for their own (rebuild.ts); this covers what changes the
+  // scene directly from an event handler.
+  const INPUT_EVENTS = ['pointerdown', 'pointermove', 'pointerup', 'wheel', 'keydown', 'keyup', 'click', 'input', 'change'];
+  for (const type of INPUT_EVENTS) document.addEventListener(type, requestRender, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', requestRender);
 
   const handleResize = () => {
     const w = container.clientWidth;
     const h = container.clientHeight;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
+    // resizing clears the canvas, so the picture must be drawn again
     renderer.setSize(w, h);
+    requestRender();
   };
   window.addEventListener('resize', handleResize);
 
   const teardown = () => {
     window.removeEventListener('resize', handleResize);
+    for (const type of INPUT_EVENTS) document.removeEventListener(type, requestRender, { capture: true });
+    document.removeEventListener('visibilitychange', requestRender);
   };
 
   return {
@@ -475,12 +507,13 @@ export function initScene(container: HTMLElement): SceneContext {
     localized: null,
     localizedLists: [],
     rerender: () => {},
+    requestRender,
     vibrations: null,
     frame,
     onSceneBuilt: () => {},
     onGfn2Orbitals: () => {},
     teardown,
     get autoRotate() { return autoRotate; },
-    setAutoRotate: (on: boolean) => { autoRotate = on; },
+    setAutoRotate: (on: boolean) => { autoRotate = on; requestRender(); },
   };
 }
