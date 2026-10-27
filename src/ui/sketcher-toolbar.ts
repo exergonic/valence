@@ -249,6 +249,55 @@ function unpairCharges(applet: Window['jsmeApplet'], pairings: ChargePairing[]):
   applet.readMolecule(jme.join(' '));
 }
 
+/**
+ * A group in the place of the atom clicked, where that atom ends a single
+ * bond. An element button replaces the atom clicked, and a group does the
+ * same there: ethane with NO₂ on one methyl is nitromethane, toluene's methyl
+ * gives nitrobenzene. JSME's substituent action bonds the group to the atom
+ * instead (functional-groups.ts), so after it the atom is taken out, the group
+ * moved to where the atom stood and bonded to its neighbour. Anywhere else —
+ * a ring or chain atom, a lone atom — the group stays bonded to the atom, a
+ * substituent in place of one of its hydrogens. Takes the JME strings before
+ * and after JSME's action; returns the drawing's JME tokens, or null where
+ * nothing is to be replaced.
+ */
+export function groupInPlaceOfAtom(before: string[], after: string[]): string[] | null {
+  const count = Number(before[0]);
+  const countAfter = Number(after[0]);
+  if (countAfter <= count) return null;
+  const bondsOf = (jme: string[]) => {
+    const bonds: Array<[number, number, string]> = [];
+    for (let k = 2 + 3 * Number(jme[0]); k + 2 < jme.length; k += 3) bonds.push([Number(jme[k]) - 1, Number(jme[k + 1]) - 1, jme[k + 2]]);
+    return bonds;
+  };
+  const bondsAfter = bondsOf(after);
+  // the bond JSME drew from the atom clicked to the group's first atom
+  const link = bondsAfter.find(([a, b]) => (a < count) !== (b < count));
+  if (!link) return null;
+  const [clicked, first] = link[0] < count ? [link[0], link[1]] : [link[1], link[0]];
+  const own = bondsOf(before).filter(([a, b]) => a === clicked || b === clicked);
+  if (own.length !== 1 || own[0][2] !== '1') return null;
+  const neighbour = own[0][0] === clicked ? own[0][1] : own[0][0];
+
+  const xy = (i: number) => [Number(after[jmeLabel(i) + 1]), Number(after[jmeLabel(i) + 2])];
+  const [dx, dy] = [xy(clicked)[0] - xy(first)[0], xy(clicked)[1] - xy(first)[1]];
+  const atoms: string[] = [];
+  for (let i = 0; i < countAfter; i++) {
+    if (i === clicked) continue;
+    const [x, y] = xy(i);
+    const shift = i >= count ? 1 : 0;
+    atoms.push(after[jmeLabel(i)], (x + shift * dx).toFixed(2), (y + shift * dy).toFixed(2));
+  }
+  const place = (i: number) => (i > clicked ? i - 1 : i);
+  const bonds: string[] = [];
+  for (const bond of bondsAfter) {
+    if (bond === link) continue;
+    const [a, b] = bond[0] === clicked || bond[1] === clicked ? [neighbour, first] : [bond[0], bond[1]];
+    bonds.push(String(place(a) + 1), String(place(b) + 1), bond[2]);
+  }
+  return [String(countAfter - 1), String(bonds.length / 3), ...atoms, ...bonds];
+}
+
 /** An atom's label in a JME string as JSME's own atom, not the X atom: "C",
  *  "C-", "N+". */
 function ownAtomLabel(element: string, charge: number): string {
@@ -829,15 +878,17 @@ export function setupSketcherToolbar(): void {
   // taking it back (readBack). Then the charge tool where JSME refuses
   // (x-atom-labels.ts): when the drawing is unchanged and its status line says
   // the charge was not possible, the atom clicked gets the next charge as an
-  // X atom.
-  let press: { atom: { index: number; element: string; charge: number } | null; drawing: Drawing; before: string; tool?: string } | null = null;
+  // X atom. And a group put on an atom that ends a single bond takes its
+  // place (groupInPlaceOfAtom).
+  let press: { atom: { index: number; element: string; charge: number } | null; drawing: Drawing; before: string; tool?: string; group?: FunctionalGroup } | null = null;
   stage.addEventListener('mousedown', (event) => {
     press = null;
     const applet = window.jsmeApplet;
     if (event.button !== 0 || !applet) return;
     const before: string = applet.jmeFile();
-    const tool = buttons().find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.tool;
-    press = { atom: hoveredAtom(stage, before.trim().split(/\s+/)), drawing: drawingNow(applet), before, tool };
+    const selected = buttons().find((b) => b.getAttribute('aria-pressed') === 'true');
+    const group = selected?.dataset.group ? groupByCode(Number(selected.dataset.group)) : undefined;
+    press = { atom: hoveredAtom(stage, before.trim().split(/\s+/)), drawing: drawingNow(applet), before, tool: selected?.dataset.tool, group };
   }, true);
   stage.addEventListener('mouseup', () => {
     const click = press;
@@ -850,6 +901,17 @@ export function setupSketcherToolbar(): void {
         unpairCharges(applet, pairings);
         readBack = { before: click.drawing, after: applet.molFile() };
         reselect();
+        return;
+      }
+      if (click.group && !click.group.onTheAtom) {
+        const jme = jmeTokens(applet);
+        for (const [index, label] of xAtomLabels(applet.molFile(true))) jme[jmeLabel(index)] = `[${label}]`;
+        const replaced = groupInPlaceOfAtom(click.before.trim().split(/\s+/), jme);
+        if (replaced) {
+          applet.readMolecule(replaced.join(' '));
+          readBack = { before: click.drawing, after: applet.molFile() };
+          reselect();
+        }
         return;
       }
       const atom = click.atom;

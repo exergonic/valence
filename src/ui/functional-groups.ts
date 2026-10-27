@@ -1,6 +1,8 @@
 /**
  * The functional groups behind the sketcher's "Groups…" button: a group is
- * attached by clicking (or dropping onto) an atom of the sketch.
+ * attached by clicking (or dropping onto) an atom of the sketch. Like an
+ * element, it takes the place of an atom that ends a single bond (the
+ * toolbar's groupInPlaceOfAtom); anywhere else it is bonded to the atom.
  *
  * Each is one of JSME's own substituent actions — `setAction(code)`, then a
  * click on an atom bonds the group to it. The codes were read off JSME's
@@ -19,6 +21,9 @@ export interface FunctionalGroup {
   label: string;
   /** Its name, for the tooltip. */
   name: string;
+  /** Always bonded to the atom clicked, never put in its place (the
+   *  toolbar's groupInPlaceOfAtom): an oxo is a C=O on that atom. */
+  onTheAtom?: true;
 }
 
 /** By family, in the order a course meets them. */
@@ -27,7 +32,7 @@ export const GROUP_FAMILIES: Array<{ family: string; groups: FunctionalGroup[] }
     family: 'Oxygen and nitrogen',
     groups: [
       { code: 259, label: 'OH', name: 'hydroxyl' },
-      { code: 250, label: '=O', name: 'oxo: a C=O on the atom clicked' },
+      { code: 250, label: '=O', name: 'oxo: a C=O on the atom clicked', onTheAtom: true },
       { code: 258, label: 'NH₂', name: 'amino' },
       { code: 243, label: 'NMe₂', name: 'dimethylamino' },
     ],
