@@ -5446,3 +5446,20 @@ Checked in the app: the Birch radical anion of nitrobenzene drawn as ipso
 C⁻–N⁺(=O)O⁻ with a para C• builds as C₆H₅NO₂⁻, a GFN2 doublet, a minimum,
 C₂v; in the Delocalized view (α) the HOMO is the singly occupied b₁ π*,
 heaviest on N, the oxygens and the para carbon.
+
+## A group takes the place of an end atom (2026-10-26, ISSUES.md)
+
+An element button replaces the atom clicked; a group from "Groups…" bonded
+itself to it, so the workflow that gives chloromethane (draw a bond, pick Cl,
+click its far end) gave nitroethane with NO₂. JSME's substituent actions
+always bond to the atom, so the toolbar rewrites after the release: where the
+atom clicked ends a single bond, it is taken out, the group moved so its first
+atom stands where the atom was, and bonded to the neighbour
+(`groupInPlaceOfAtom`, `tests/group-in-place.test.ts`, JSME's nitro on ethane
+captured). Anywhere else — a ring or chain atom, a lone atom, the end of a
+double bond — the group stays bonded to the atom, a substituent in place of a
+hydrogen: NO₂ on a ring carbon is still nitrobenzene. "=O" is always on the
+atom (its name says so; in a methyl's place it would turn ethane into
+formaldehyde, not acetaldehyde). Checked in the app: ethane → nitromethane,
+benzene → nitrobenzene, Undo back; the smoke test's COOH on methanol's O is
+now acetic acid, and CN dropped on dimethylamine's N stays N-bonded.
