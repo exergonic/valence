@@ -269,6 +269,21 @@ Each module's header comment says what it does and why; this list says where.
 - Export keeps one source of truth per field: the SDF carries formal charges
   on `M  CHG` lines and leaves the atom-block charge columns 0.
 
+## Commits
+Decided with the user 2026-10-26.
+- **Commit each logical unit when it is done**, unasked. A unit says one
+  thing, could be reverted on its own, and leaves `bun run test` and the
+  typecheck passing; what counts as one is the agent's judgment, case by
+  case. A fix and its test are one unit; its write-up in NOTES.md and
+  AGENTS.md may be the `docs:` commit after it. Never commit a half-done
+  change for the sake of committing.
+- **Commit, never push**: a push, a pull request or a tag is the user's to
+  ask for.
+- The user's own uncommitted edits (ISSUES.md, often) go in only where they
+  belong to the unit, and the message says so.
+- Messages follow the history: `fix(scope):`, `feat(scope):`, `docs:`, and a
+  body that says why.
+
 ## Environment
 - **Bun** at `C:\Users\mccan\scoop\shims\bun.exe` (Scoop); `bunx` runs package
   binaries. **Node.js** at `C:\Users\mccan\scoop\apps\nodejs\current\node.exe`.
