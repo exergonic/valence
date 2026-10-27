@@ -5385,3 +5385,26 @@ browser's frame rate and stop when switched off; ESP, MO surfaces and the
 ESP-fitted charges, all arriving from the worker, are drawn when they land.
 Anything that changes the scene outside a rebuild or an input event must call
 `ctx.requestRender()`, or the picture goes stale.
+
+## JSME pairs opposite charges; a radical as an X atom (2026-10-26, ISSUES.md "JSME related")
+
+Drawing the Birch radical anion of nitrobenzene: a charge click on the ipso
+carbon, single-bonded to nitro's N⁺, did not make C⁻. JSME's charge tool
+paired the new charge with its neighbour's — C=N, both neutral, N five-bonded
+(measured on jsme-editor 2024.04.29; a C⁻ clicked toward C⁺ beside O⁻ pairs
+the same way). JSME holds C⁻ next to N⁺ when it is written in: a JME read keeps
+both charges and the single bond, on screen and in the MOL block. So the
+charge tool now reads the pairing off the JME strings before and after the
+click — one bond one order higher, its partner's charge gone, nothing else
+changed (`pairedCharge`, `tests/paired-charge.test.ts`) — and reads the
+drawing back with the clicked atom given the opposite of its partner's
+charge, Undo taking it back. JSME draws no label on a neutral carbon, so the
+hover cannot name the atom clicked; the bond's neutral carbon is it. JSME's
+`smiles()` still merges such a pair (C–C⁻–N⁺ comes out "CC=N"); only the
+lookup reads it, and the guard's bond orders reject what it finds.
+
+JSME has no radical tool and writes no `M  RAD`. Its X atom takes any label:
+`[CH]` (SMILES's radical carbon), `[C·]`, `[C•]`, `[C·-]` and `[N·+]` were all
+kept, drawn as written, and come back in the V2000 and V3000 blocks as the
+label ("C•") and in `smiles()` bracketed. `C•` reads better than `C·` at
+sketch size. Not yet read by the build.

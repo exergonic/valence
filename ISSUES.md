@@ -21,6 +21,7 @@ Bug
  - [x] Bare Lithium yielded: "Unoptimised structure — GFN2-xTB could not treat this structure ([object Object])"
 		- [x] let's detect monoatomic metals and simply not try to optimize them (any single atom: no lookup, no optimiser; the single point gives every view its charge, spin and orbitals)
 		- [x] and why is "[object Object]" printed? Let's hide that. (the engine's C++ exception, stringified; errors are now described in words)
+ - [x] page idles at ~10-20% CPU usage on idle. three.js redrawing identical frames 60fps? 
 
 Other?
  - [x] NaOH: several issues. Am I forgetting an issue with ionics? 
@@ -37,3 +38,9 @@ Other?
 - [ ] Move the OCC pin from 5644eaf to the v0.9.6 tag once it is released.
 - [ ] `occ` is 0.9.6? `Bump version to 0.9.6` on a commit message.
 - [x] A way past the 30 s budget: "Keep optimising" in the header when a run stops short (2026-10-24).
+- [ ] JSME related:
+	*  [ ] way to draw radicals?
+	*  [ ] (+) next to (-) gets automatic double bond. Makes a sort of sense, but can we stop from happening?
+* [ ] way to import XYZ or SDF/MOL into Valence. What if user has a structure they want to give the "Valence treatment"?
+	* the way "Groups" adds the group to the atom that is clicked on is inconsistent with how the other atoms 
+	  are put on. Other atoms 'replace' what's clicked. "Groups" adds another bond and then adds the group. 
