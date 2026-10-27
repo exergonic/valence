@@ -16,7 +16,7 @@ export interface ViewState {
    *  absent from views saved before they were kept — such a view of an ion
    *  reloads neutral. */
   molecule: {
-    atoms: { element: string; x: number; y: number; z: number; charge?: number }[];
+    atoms: { element: string; x: number; y: number; z: number; charge?: number; radical?: true }[];
     bonds: { atom1Index: number; atom2Index: number; order: number; stereo?: Bond['stereo'] }[];
     multiplicity?: number;
   };
@@ -46,9 +46,10 @@ function serializeView(ctx: SceneContext, annotations: Annotation[]): ViewState 
   return {
     version: 1,
     // the charges and the spin decide the electron count every calculation
-    // runs on, so a view without them would reload as another species
+    // runs on, so a view without them would reload as another species; a
+    // radical's flag keeps a later refine from filling its missing hydrogen
     molecule: {
-      atoms: ctx.currentMolecule.atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z, charge: a.charge })),
+      atoms: ctx.currentMolecule.atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z, charge: a.charge, radical: a.radical })),
       bonds: ctx.currentMolecule.bonds.map((b) => ({ atom1Index: b.atom1Index, atom2Index: b.atom2Index, order: b.order, stereo: b.stereo })),
       multiplicity: ctx.currentMolecule.multiplicity,
     },
@@ -84,7 +85,7 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
 
   const { atoms, bonds, multiplicity } = state.molecule;
   ctx.currentMolecule = {
-    atoms: atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z, ...(a.charge ? { charge: a.charge } : {}) })),
+    atoms: atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z, ...(a.charge ? { charge: a.charge } : {}), ...(a.radical ? { radical: true as const } : {}) })),
     bonds: bonds.map((b) => ({ atom1Index: b.atom1Index, atom2Index: b.atom2Index, order: b.order, ...(b.stereo === 1 || b.stereo === 6 ? { stereo: b.stereo } : {}) })),
     ...(multiplicity && multiplicity > 1 ? { multiplicity } : {}),
   };

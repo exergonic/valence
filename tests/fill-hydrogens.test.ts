@@ -135,6 +135,29 @@ describe('fillMissingHydrogens', () => {
     expect(hCount(result, 0)).toBe(1);
   });
 
+  it('a radical centre takes one hydrogen fewer (the isopropyl radical\'s CH•)', () => {
+    // the sketcher's "C•": two single bonds, one hydrogen — not the two of
+    // propane's CH₂, which would close the shell the user drew open
+    const mol = {
+      atoms: [
+        { element: 'C', radical: true as const, x: 0, y: 0, z: 0 },
+        { element: 'C', x: 1.5, y: 0, z: 0 },
+        { element: 'C', x: -1.5, y: 0, z: 0 },
+      ],
+      bonds: [
+        { atom1Index: 0, atom2Index: 1, order: 1 },
+        { atom1Index: 0, atom2Index: 2, order: 1 },
+      ],
+    };
+    const result = fillMissingHydrogens(mol);
+    expect(hCount(result, 0)).toBe(1);
+    expect(hCount(result, 1)).toBe(3);
+    // a radical anion's carbon: the charge and the dot both count (CH₂•⁻ is
+    // isoelectronic with NH₂•, so two hydrogens on a bare C•⁻)
+    const radicalAnion = fillMissingHydrogens({ atoms: [{ element: 'C', charge: -1, radical: true as const, x: 0, y: 0, z: 0 }], bonds: [] });
+    expect(hCount(radicalAnion, 0)).toBe(2);
+  });
+
   it('adds no hydrogens to ammonium nitrogen', () => {
     const mol = {
       atoms: [

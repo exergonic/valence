@@ -6,7 +6,7 @@ import type { Molecule } from '../mol-parser';
 import { writeNote, type InfoNote } from './info-note';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
-import { chargedXAtoms, parseChargedLabel } from './charged-x-atoms';
+import { parseXAtomLabel, xAtomLabels } from './x-atom-labels';
 import { isMetal, lowestMultiplicity, spinName } from '../chem/elements';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { computeLocalGeometry, type LocalGeometry } from '../geometry/local-geometry';
@@ -195,15 +195,16 @@ function gfn2RunNotes(run: Gfn2Result): string[] {
   return notes;
 }
 
-/** The charges the sketch holds on X atoms (charged-x-atoms.ts): the V2000
- *  block names such an atom by its label ("I-", or "Q"), the V3000 block
- *  keeps the label whole. */
-function withXAtomCharges(molecule: Molecule, v3000: string): Molecule {
-  const labels = chargedXAtoms(v3000);
+/** The charges and radicals the sketch holds on X atoms (x-atom-labels.ts):
+ *  the V2000 block names such an atom by its label ("I-", "C•", or "Q"), the
+ *  V3000 block keeps the label whole. */
+function withXAtomLabels(molecule: Molecule, v3000: string): Molecule {
+  const labels = xAtomLabels(v3000);
   if (labels.size === 0) return molecule;
   const atoms = molecule.atoms.map((atom, i) => {
-    const charged = parseChargedLabel(labels.get(i) ?? '');
-    return charged ? { ...atom, element: charged.element, charge: charged.charge } : atom;
+    const label = parseXAtomLabel(labels.get(i) ?? '');
+    if (!label) return atom;
+    return { ...atom, element: label.element, charge: label.charge, ...(label.radical ? { radical: true as const } : {}) };
   });
   return { ...molecule, atoms };
 }
@@ -425,7 +426,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       const smiles = kekulizeSmiles(applet.smiles());
       const molBlock = applet.molFile();
       const t1 = performance.now();
-      let molecule = withXAtomCharges(parseMolBlock(molBlock), applet.molFile(true));
+      let molecule = withXAtomLabels(parseMolBlock(molBlock), applet.molFile(true));
       const t2 = performance.now();
       if (molecule.atoms.length === 0) return;
 
@@ -437,7 +438,11 @@ export function mountJsmePanel(ctx: SceneContext) {
       // a single atom (nothing the filler adds hydrogens to) is a point: there is
       // nothing for PubChem or CIR to build
       const atom = fillMissingHydrogens(molecule).atoms.length === 1;
-      const result = forceLocal || metal || atom ? null : await fetch3D(smiles, molecule);
+      // A drawn radical goes straight to GFN2 too: JSME's SMILES writes it
+      // "[C•]", which neither service reads, and PubChem has 3D for few
+      // radicals.
+      const radical = molecule.atoms.some((a) => a.radical);
+      const result = forceLocal || metal || atom || radical ? null : await fetch3D(smiles, molecule);
       const t3 = performance.now();
       if (result) {
         // fetch3D validates the returned structure against the sketch and

@@ -443,6 +443,13 @@ export function moleculeToSDF(
     lines.push('M  CHG' + chunk.length.toString().padStart(3)
       + chunk.map((c) => c.idx.toString().padStart(4) + c.charge.toString().padStart(4)).join(''));
   }
+  // A drawn radical rides on M  RAD lines the same way: 2, a doublet — one
+  // unpaired electron on that atom, which parseMolBlock reads back.
+  const radicals = mol.atoms.flatMap((a, i) => (a.radical ? [i + 1] : []));
+  for (let i = 0; i < radicals.length; i += 8) {
+    const chunk = radicals.slice(i, i + 8);
+    lines.push('M  RAD' + chunk.length.toString().padStart(3) + chunk.map((idx) => idx.toString().padStart(4) + '2'.padStart(4)).join(''));
+  }
   lines.push('M  END');
   for (const field of fields) {
     lines.push(`> <${field.name}>`);

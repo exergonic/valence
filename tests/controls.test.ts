@@ -49,6 +49,14 @@ describe('SDF export — formal charges (2026-09-23)', () => {
     expect(lines[1]).toContain('   9  -1');
   });
 
+  it('a drawn radical rides on an M  RAD line and reads back as one', () => {
+    const radical = formate();
+    radical.atoms[2] = { element: 'O', radical: true, x: -0.625, y: 1.083, z: 0 }; // formyloxyl, HCO₂•
+    const sdf = moleculeToSDF(radical);
+    expect(sdf).toContain('M  RAD  1   3   2');
+    expect(parseMolBlock(sdf).atoms.map((a) => a.radical)).toEqual([undefined, undefined, true, undefined]);
+  });
+
   it('round-trips through parseMolBlock — charges and classification identical', () => {
     const original = formate();
     const reimported = parseMolBlock(moleculeToSDF(original));

@@ -420,6 +420,46 @@ async function sketcherRefusedCharges(b: Browser) {
   check('JSME keeps nitro charge-separated, N⁺–O⁻', nitro === 'O=[N+]([O-])c1ccccc1' && Number(charges) === 2, `${nitro}, ${charges} charge line(s)`);
 }
 
+/** A radical (asked for 2026-10-26): JSME has none; ours puts the dot on the
+ *  atom clicked, as the X atom "O•". And an edit keeps a drawn ylide's
+ *  charges: JSME pairs a C⁻ beside an N⁺ into C=N on every edit, the radical
+ *  tool's included, and the toolbar undoes it. The ylide goes in as a JME
+ *  string — JSME's SMILES reader pairs it on the way in. */
+async function sketcherRadicalKeepsYlide(b: Browser) {
+  await b.open(url);
+  const centre = (selector: string) => b.run(`const r = document.querySelector('${selector}').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+  const jme = (): Promise<string> => b.run(`return window.jsmeApplet.jmeFile();`);
+  const corner = await b.run(`
+    const r = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150).getBoundingClientRect();
+    return { x: r.x + 20, y: r.y + r.height - 20 };`);
+  await b.moveTo(corner.x, corner.y);
+  await b.click(corner.x, corner.y);
+  // CH₂⁻–N⁺(CH₃)₂–CH₂OH: the ylide, and a hydroxyl to put the dot on
+  await b.run(`window.jsmeApplet.readMolecule('6 5 C- 0 0 N+ 1.2 0.7 C 2.4 0 C 1.2 2.1 C 2.4 1.4 O 3.6 -0.7 1 2 1 2 3 1 2 4 1 2 5 1 3 6 1'); window.jsmeApplet.repaint();`);
+  await sleep(400);
+  const tool = await centre('#sketch-tools [data-tool="radical"]');
+  await b.moveTo(tool.x, tool.y);
+  await b.click(tool.x, tool.y);
+  await sleep(300);
+  const start = await jme();
+  let now = start;
+  for (let tries = 0; tries < 3 && now === start; tries++) {
+    const atom = await b.run(`
+      const svg = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150);
+      const r = [...svg.querySelectorAll('text')].find((t) => /^(HO|OH)$/.test(t.textContent)).getBoundingClientRect();
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+    await b.moveTo(atom.x - 20, atom.y - 20);
+    await b.moveTo(atom.x, atom.y);
+    await sleep(300);
+    await b.click(atom.x, atom.y);
+    await sleep(400);
+    now = await jme();
+  }
+  const labels = now.trim().split(/\s+/).slice(2, 20).filter((_, i) => i % 3 === 0);
+  check('the radical tool puts the dot on the atom clicked — O•', labels[5] === 'O•', labels.join(' '));
+  check('the edit keeps the drawn ylide, C⁻–N⁺, single-bonded', labels[0] === 'C-' && labels[1] === 'N+' && / 1 2 1 /.test(` ${now.trim().split(/\s+/).slice(20).join(' ')} `), now);
+}
+
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */
 async function orbitalListStaysPut(b: Browser) {
   await b.open(url);
@@ -512,7 +552,7 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, orbitalListStaysPut, lewisStructureDonation]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, sketcherRadicalKeepsYlide, orbitalListStaysPut, lewisStructureDonation]) {
     try {
       await part(b);
     } catch (error) {

@@ -10,6 +10,13 @@ export interface Atom {
    * most atoms, and every atom from sources that don't encode charge.
    */
   charge?: number;
+  /**
+   * A radical centre: one unpaired electron, drawn as a dot (the sketcher's
+   * X atom "C•", or a V2000 `M  RAD` doublet). It takes one hydrogen fewer
+   * than its usual valence (fill-hydrogens.ts); the spin follows from the
+   * electron count, as for any structure. Absent for every other atom.
+   */
+  radical?: true;
 }
 
 export interface Bond {

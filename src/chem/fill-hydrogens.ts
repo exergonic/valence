@@ -47,7 +47,8 @@ const CHARGED_VALENCE: Record<string, Record<number, number>> = {
 
 /**
  * The hydrogens each atom is missing: its usual bond count (shifted by its
- * formal charge) less the bond orders it already has; zero for a metal or a
+ * formal charge, one fewer for a radical centre) less the bond orders it
+ * already has; zero for a metal or a
  * noble gas. Read by the filler below and by the fetch guard, which checks
  * that a remote structure has the hydrogens the local pipeline would give.
  */
@@ -68,7 +69,10 @@ export function implicitHydrogenCounts(molecule: Molecule): number[] {
     const target = charge !== 0
       ? (CHARGED_VALENCE[atom.element]?.[charge] ?? valence)
       : valence;
-    return Math.max(0, target - bondOrderSum[i]);
+    // a radical centre keeps one of those bonding electrons unpaired: the
+    // drawn CH• of a cyclohexadienyl radical gets one hydrogen, not two
+    const radical = atom.radical ? 1 : 0;
+    return Math.max(0, target - radical - bondOrderSum[i]);
   });
 }
 

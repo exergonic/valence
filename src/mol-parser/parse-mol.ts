@@ -66,6 +66,19 @@ function parseV2000(molBlock: string): Molecule {
   // carbocation, so the local geometry path can see it.
   const propStart = bondStart + bondCount;
   for (let i = propStart; i < lines.length; i++) {
+    if (/^M\s+END/.test(lines[i])) break;
+    // Radicals from M RAD lines, the same index/value pairs: 2 is a doublet,
+    // one unpaired electron — what Valence's own export writes for a drawn
+    // radical. Singlet and triplet carbenes (1, 3) are not drawn here.
+    const rad = /^M\s+RAD\s+(\d+)\s*(.*)$/.exec(lines[i]);
+    if (rad) {
+      const nums = rad[2].trim().split(/\s+/).map(Number);
+      for (let k = 0; k + 1 < nums.length; k += 2) {
+        const idx = nums[k] - 1;
+        if (idx >= 0 && idx < atoms.length && nums[k + 1] === 2) atoms[idx].radical = true;
+      }
+      continue;
+    }
     const m = /^M\s+CHG\s+(\d+)\s*(.*)$/.exec(lines[i]);
     if (!m) continue;
     const nums = m[2].trim().split(/\s+/).map(Number);

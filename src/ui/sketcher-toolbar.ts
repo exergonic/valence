@@ -18,8 +18,9 @@
  *
  * Any element past the nine buttons is JSME's X atom: "More…" opens our
  * periodic table, and the pick goes into JSME's X box and gets a button.
- * The X atom also carries the charges JSME refuses (charged-x-atoms.ts): the
- * charge tool falls back to it.
+ * The X atom also carries the charges JSME refuses (x-atom-labels.ts): the
+ * charge tool falls back to it. And it carries a radical, which JSME has no
+ * tool for: our radical tool puts the dot on an atom as an X atom, "C•".
  *
  * An element or a drawing tool can also be dragged onto the sketch; the drop
  * does what a click with it does there (setupDragFromToolbar).
@@ -29,8 +30,9 @@
  */
 import { setupPeriodicTable } from './periodic-table';
 import { groupByCode, setupGroupPalette, type FunctionalGroup } from './functional-groups';
-import { takesImplicitHydrogens } from '../chem/fill-hydrogens';
-import { chargedXAtoms, jmeAtomLabel } from './charged-x-atoms';
+import { implicitHydrogenCounts, takesImplicitHydrogens } from '../chem/fill-hydrogens';
+import { parseMolBlock } from '../mol-parser';
+import { jmeAtomLabel, parseXAtomLabel, xAtomLabels } from './x-atom-labels';
 
 /** setAction() codes for our tools. */
 const TOOL_ACTIONS: Record<string, number> = {
@@ -41,6 +43,11 @@ const TOOL_ACTIONS: Record<string, number> = {
   // whatever the tool.
   move: 113,
   charge: 108, // cycles the charge of the atom clicked
+  // JSME has no radical: the toolbar's own (toggleRadical), its press kept
+  // from JSME. Underneath, the action an element uses (PLACE_CARBON), under
+  // which JSME outlines the atom under the pointer and takes its keys; under
+  // "Move atom" it did neither.
+  radical: 253,
   stereo: 201, // on an atom: a new wedge; on that bond: wedge → hash → either
   single: 202,
   double: 203,
@@ -86,7 +93,7 @@ interface Drawing {
 }
 
 function drawingNow(applet: Window['jsmeApplet']): Drawing {
-  return { molFile: applet.molFile(), xAtoms: chargedXAtoms(applet.molFile(true)) };
+  return { molFile: applet.molFile(), xAtoms: xAtomLabels(applet.molFile(true)) };
 }
 
 function readDrawing(applet: Window['jsmeApplet'], drawing: Drawing): void {
@@ -109,16 +116,17 @@ function restoreXAtoms(applet: Window['jsmeApplet'], xAtoms: Map<number, string>
 
 /**
  * Give one atom a charge JSME refused it, by reading the drawing back as a
- * JME string with that atom's label set (charged-x-atoms.ts). Not the X key
+ * JME string with that atom's label set (x-atom-labels.ts). Not the X key
  * on the atom: that keeps the charge JSME had inferred and adds the label's
- * to it — I₃'s I⁺ became "[I-+]". The other charged X atoms go in bracketed,
- * so they stay. Returns the drawing before, to undo to.
+ * to it — I₃'s I⁺ became "[I-+]". A radical keeps its dot. The other X atoms
+ * go in bracketed, so they stay. Returns the drawing before, to undo to.
  */
 function setRefusedCharge(applet: Window['jsmeApplet'], atom: { index: number; element: string }, charge: number): Drawing {
   const before = drawingNow(applet);
   const jme = jmeTokens(applet);
   for (const [index, label] of before.xAtoms) jme[jmeLabel(index)] = `[${label}]`;
-  jme[jmeLabel(atom.index)] = jmeAtomLabel(atom.element, charge);
+  const radical = parseXAtomLabel(before.xAtoms.get(atom.index) ?? '')?.radical ?? false;
+  jme[jmeLabel(atom.index)] = jmeAtomLabel(atom.element, charge, radical);
   applet.readMolecule(jme.join(' '));
   return before;
 }
@@ -131,52 +139,175 @@ function labelCharge(label: string): number {
   return match[1] === '-' ? -size : size;
 }
 
-/**
- * Did JSME's charge tool just pair the new charge with an opposite one beside
- * it? A click meant to make C⁻ next to N⁺ draws C=N instead, both neutral —
- * nitro's N is then five-bonded. Read off the JME strings before and after
- * the click: one bond one order higher, the charge of one of its atoms gone,
- * nothing else changed. The other atom is the one clicked (`clicked`, or with
- * none, the bond's neutral carbon — JSME draws no label to find it by), and
- * it was meant to get the opposite charge. Null for anything else.
- */
-export function pairedCharge(before: string[], after: string[], clicked: number | null): { index: number; charge: number } | null {
-  if (before[0] !== after[0] || before[1] !== after[1]) return null;
-  const atomCount = Number(before[0]);
-  const bondStart = 2 + 3 * atomCount;
-  let raised: [number, number] | null = null;
-  for (let k = bondStart; k < before.length; k += 3) {
-    if (before[k] !== after[k] || before[k + 1] !== after[k + 1]) return null;
-    if (before[k + 2] === after[k + 2]) continue;
-    if (raised || Number(after[k + 2]) !== Number(before[k + 2]) + 1 || Number(before[k + 2]) < 1) return null;
-    raised = [Number(before[k]) - 1, Number(before[k + 1]) - 1];
+/** A JME string's bonds: "a-b" (0-based, the lower first) → bond order. */
+function bondOrders(jme: string[]): Map<string, number> {
+  const atomCount = Number(jme[0]);
+  const orders = new Map<string, number>();
+  for (let k = 2 + 3 * atomCount; k + 2 < jme.length; k += 3) {
+    const a = Number(jme[k]) - 1;
+    const b = Number(jme[k + 1]) - 1;
+    orders.set(a < b ? `${a}-${b}` : `${b}-${a}`, Number(jme[k + 2]));
   }
-  if (!raised) return null;
-  const [a, b] = raised;
-  for (let i = 0; i < atomCount; i++) {
-    if (i !== a && i !== b && before[jmeLabel(i)] !== after[jmeLabel(i)]) return null;
-  }
-  const atom = clicked ?? (before[jmeLabel(a)] === 'C' ? a : before[jmeLabel(b)] === 'C' ? b : null);
-  if (atom !== a && atom !== b) return null;
-  const partner = atom === a ? b : a;
-  const partnerCharge = labelCharge(before[jmeLabel(partner)]);
-  if (partnerCharge === 0 || labelCharge(after[jmeLabel(partner)]) !== 0) return null;
-  return { index: atom, charge: -partnerCharge };
+  return orders;
 }
 
 /**
- * Undo JSME's pairing (pairedCharge): read the drawing from before the click
- * back, the clicked atom given its charge as JSME's own charged atom ("C-",
- * which a JME read keeps beside an N⁺). The charged X atoms go in bracketed,
- * so they stay.
+ * Where each atom of the drawing before an edit is after it: the same place
+ * when atoms were only added (JSME puts a new atom last); one place lower past
+ * a deleted atom, which is the one whose removal leaves the other bonds where
+ * they were. Null for anything else.
  */
-function unpairCharge(applet: Window['jsmeApplet'], before: string[], xAtoms: Map<number, string>, atom: { index: number; charge: number }): void {
-  const jme = [...before];
+function atomPlaces(before: string[], after: string[]): number[] | null {
+  const count = Number(before[0]);
+  const countAfter = Number(after[0]);
+  if (countAfter >= count) return Array.from({ length: count }, (_, i) => i);
+  if (countAfter !== count - 1) return null;
+  const bondsAfter = new Set(bondOrders(after).keys());
+  for (let deleted = 0; deleted < count; deleted++) {
+    const place = (i: number) => (i < deleted ? i : i === deleted ? -1 : i - 1);
+    const kept = [...bondOrders(before).keys()]
+      .map((key) => key.split('-').map((i) => place(Number(i))))
+      .filter(([a, b]) => a >= 0 && b >= 0)
+      .map(([a, b]) => (a < b ? `${a}-${b}` : `${b}-${a}`));
+    if (kept.length === bondsAfter.size && kept.every((key) => bondsAfter.has(key))) {
+      return Array.from({ length: count }, (_, i) => place(i));
+    }
+  }
+  return null;
+}
+
+/** A pairing JSME made, and what undoes it: the bond (atoms in the drawing
+ *  after the edit, 0-based), its order before, and its atoms' charges. */
+export interface ChargePairing {
+  atoms: [number, number];
+  order: number;
+  charges: [number, number];
+}
+
+/**
+ * The opposite charges JSME paired in an edit. On every edit, not only a
+ * charge click, JSME turns two neighbouring opposite charges into a bond: a C⁻
+ * beside an N⁺ becomes C=N, both neutral — nitro's N then five-bonded, and an
+ * ammonium ylide's too (NOTES.md, 2026-10-26). The chemist drew the
+ * zwitterion on purpose (a resonance form, an ylide, a nitronate), so the
+ * toolbar undoes each pairing. Read off the JME strings before and after the
+ * edit: a bond one order higher whose two atoms are now neutral, at least one
+ * of them charged before. Two opposite charges get their charges back; where
+ * the charge tool made the pair, the atom clicked (`clicked`, or the bond's
+ * neutral atom — a plain carbon has no label to find it by) gets the opposite
+ * of its partner's.
+ */
+export function chargePairings(before: string[], after: string[], clicked: number | null): ChargePairing[] {
+  const places = atomPlaces(before, after);
+  if (!places) return [];
+  const ordersAfter = bondOrders(after);
+  const pairings: ChargePairing[] = [];
+  for (const [key, order] of bondOrders(before)) {
+    const [a, b] = key.split('-').map(Number);
+    const [a2, b2] = [places[a], places[b]];
+    if (a2 < 0 || b2 < 0 || order < 1) continue;
+    if (ordersAfter.get(a2 < b2 ? `${a2}-${b2}` : `${b2}-${a2}`) !== order + 1) continue;
+    const [qa, qb] = [labelCharge(before[jmeLabel(a)]), labelCharge(before[jmeLabel(b)])];
+    if (labelCharge(after[jmeLabel(a2)]) !== 0 || labelCharge(after[jmeLabel(b2)]) !== 0) continue;
+    if (qa === 0 && qb === 0) continue;
+    let charges: [number, number];
+    if (qa === -qb) charges = [qa, qb];
+    else if (qa === 0) charges = [-qb, qb];
+    else if (qb === 0) charges = [qa, -qa];
+    // the same sign on both: the clicked one was cycled past zero to pair
+    else if (clicked === a) charges = [-qb, qb];
+    else if (clicked === b) charges = [qa, -qa];
+    else continue;
+    pairings.push({ atoms: [a2, b2], order, charges });
+  }
+  return pairings;
+}
+
+/**
+ * Undo JSME's pairings (chargePairings): read the drawing back with each bond
+ * at its order before and its atoms charged — JSME's own charged atom ("C-",
+ * which a JME read keeps beside an N⁺), or the X atom where the atom is one.
+ * The X atoms go in bracketed, so they stay.
+ */
+function unpairCharges(applet: Window['jsmeApplet'], pairings: ChargePairing[]): void {
+  const jme = jmeTokens(applet);
+  const xAtoms = xAtomLabels(applet.molFile(true));
   for (const [index, label] of xAtoms) jme[jmeLabel(index)] = `[${label}]`;
-  const element = /^[A-Z][a-z]?/.exec(jme[jmeLabel(atom.index)])?.[0] ?? 'C';
-  const size = Math.abs(atom.charge);
-  jme[jmeLabel(atom.index)] = `${element}${atom.charge < 0 ? '-' : '+'}${size > 1 ? size : ''}`;
+  const bondStart = 2 + 3 * Number(jme[0]);
+  for (const { atoms: [a, b], order, charges } of pairings) {
+    for (let k = bondStart; k + 2 < jme.length; k += 3) {
+      const [i, j] = [Number(jme[k]) - 1, Number(jme[k + 1]) - 1];
+      if ((i === a && j === b) || (i === b && j === a)) jme[k + 2] = String(order);
+    }
+    [a, b].forEach((atom, n) => {
+      const label = xAtoms.get(atom) ?? jme[jmeLabel(atom)];
+      const xAtom = parseXAtomLabel(label);
+      const element = xAtom?.element ?? /^[A-Z][a-z]?/.exec(label)?.[0] ?? 'C';
+      jme[jmeLabel(atom)] = xAtom ? jmeAtomLabel(element, charges[n], xAtom.radical) : ownAtomLabel(element, charges[n]);
+    });
+  }
   applet.readMolecule(jme.join(' '));
+}
+
+/** An atom's label in a JME string as JSME's own atom, not the X atom: "C",
+ *  "C-", "N+". */
+function ownAtomLabel(element: string, charge: number): string {
+  if (charge === 0) return element;
+  const size = Math.abs(charge);
+  return `${element}${charge < 0 ? '-' : '+'}${size > 1 ? size : ''}`;
+}
+
+/** What the X box holds while the radical tool finds its atom: an element a
+ *  lesson does not draw, so the atom that becomes it is the one under the
+ *  pointer. One JSME knows: "[Og]", past its table, changed nothing. */
+const RADICAL_PLACEHOLDER = '[Rn]';
+
+/**
+ * Put a radical's dot on the atom under the pointer, or take it off. JSME
+ * draws no label on a plain carbon, so the hover cannot name the atom; its X
+ * key can — it turns the atom under the pointer into whatever the X box
+ * holds. So the box holds a placeholder for the moment of the key press, and
+ * the atom that became it is the one; the drawing is then read back from
+ * before, that atom relabelled. A radical centre is one hydrogen short of its
+ * usual valence, so only an atom the filler would give a hydrogen takes the
+ * dot. Returns the drawing before, to undo to, or null when nothing changed.
+ */
+function toggleRadical(applet: Window['jsmeApplet'], stage: HTMLElement, box: HTMLInputElement): Drawing | null {
+  const before = drawingNow(applet);
+  const jme = jmeTokens(applet);
+  const kept = box.value;
+  box.value = RADICAL_PLACEHOLDER;
+  pressKey(stage, X_ATOM_KEY);
+  box.value = kept;
+  const after = jmeTokens(applet);
+  // the atom that became the placeholder — not any atom that changed: the
+  // edit also sets JSME pairing a C⁻ beside an N⁺ again (pairedCharge)
+  const placeholder = RADICAL_PLACEHOLDER.replace(/[[\]]/g, '');
+  const atomCount = Number(jme[0]);
+  let index = -1;
+  for (let i = 0; i < atomCount; i++) if (after[jmeLabel(i)] === placeholder && jme[jmeLabel(i)] !== placeholder) index = i;
+  if (index < 0) return null; // a bond, or JSME missed the press
+
+  for (const [i, label] of before.xAtoms) jme[jmeLabel(i)] = `[${label}]`;
+  const label = before.xAtoms.get(index) ?? jme[jmeLabel(index)];
+  const xAtom = parseXAtomLabel(label);
+  const element = xAtom?.element ?? /^[A-Z][a-z]?/.exec(label)?.[0] ?? 'C';
+  const charge = xAtom?.charge ?? labelCharge(label);
+  const radical = !xAtom?.radical;
+  const molecule = parseMolBlock(before.molFile);
+  molecule.atoms[index] = { ...molecule.atoms[index], element, charge };
+  const hasHydrogenToGive = takesImplicitHydrogens(element) && implicitHydrogenCounts(molecule)[index] > 0;
+  if (radical && !hasHydrogenToGive) {
+    applet.readMolecule(jme.join(' ')); // the placeholder out again
+    return null;
+  }
+  // off again: back to JSME's own atom where JSME holds the charge, the X
+  // atom where it does not (a charge JSME refused stays refused)
+  jme[jmeLabel(index)] = radical ? jmeAtomLabel(element, charge, true)
+    : element in ELEMENT_KEYS ? ownAtomLabel(element, charge)
+      : jmeAtomLabel(element, charge);
+  applet.readMolecule(jme.join(' '));
+  return before;
 }
 
 /** A MOL block from its counts line on: the header carries a timestamp, so two
@@ -691,6 +822,46 @@ export function setupSketcherToolbar(): void {
     if (selected) choose(selected);
   }
 
+  // Any press on the sketch can end in an edit, and in any edit JSME may pair
+  // two opposite charges into a bond (chargePairings). So the drawing is kept
+  // at the press — registered first, ahead of the element and radical tools,
+  // which edit on the press — and after the release a pairing is undone, Undo
+  // taking it back (readBack). Then the charge tool where JSME refuses
+  // (x-atom-labels.ts): when the drawing is unchanged and its status line says
+  // the charge was not possible, the atom clicked gets the next charge as an
+  // X atom.
+  let press: { atom: { index: number; element: string; charge: number } | null; drawing: Drawing; before: string; tool?: string } | null = null;
+  stage.addEventListener('mousedown', (event) => {
+    press = null;
+    const applet = window.jsmeApplet;
+    if (event.button !== 0 || !applet) return;
+    const before: string = applet.jmeFile();
+    const tool = buttons().find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.tool;
+    press = { atom: hoveredAtom(stage, before.trim().split(/\s+/)), drawing: drawingNow(applet), before, tool };
+  }, true);
+  stage.addEventListener('mouseup', () => {
+    const click = press;
+    press = null;
+    if (!click) return;
+    setTimeout(() => {
+      const applet = window.jsmeApplet;
+      const pairings = chargePairings(click.before.trim().split(/\s+/), jmeTokens(applet), click.atom?.index ?? null);
+      if (pairings.length > 0) {
+        unpairCharges(applet, pairings);
+        readBack = { before: click.drawing, after: applet.molFile() };
+        reselect();
+        return;
+      }
+      const atom = click.atom;
+      if (click.tool !== 'charge' || !atom) return;
+      const refused = chargeRefused(stage) || NO_CHARGE_RULE.has(atom.element);
+      if (!refused || applet.jmeFile() !== click.before) return;
+      const drawn = setRefusedCharge(applet, atom, nextCharge(atom.charge, click.drawing.xAtoms.has(atom.index)));
+      readBack = { before: drawn, after: applet.molFile() };
+      reselect();
+    }, 0);
+  }, true); // capture, ahead of the tools that keep the release from JSME
+
   // An element chosen: a click on an atom becomes the element's key, and the
   // click itself is kept from JSME (its action, placing a carbon, would add a
   // methyl to that atom). Capture phase, so this runs before JSME's handlers.
@@ -707,6 +878,22 @@ export function setupSketcherToolbar(): void {
       // JSME places a carbon only on an empty sketch (beside a structure its
       // action adds nothing); the release below makes it the element
       placing = !window.jsmeApplet?.smiles?.();
+    }
+  }, true);
+  // The radical tool: every press is kept from JSME, and one on an atom puts
+  // the dot on or takes it off (toggleRadical); Undo can take it back
+  stage.addEventListener('mousedown', (event) => {
+    const tool = buttons().find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.tool;
+    const applet = window.jsmeApplet;
+    if (tool !== 'radical' || event.button !== 0 || !applet) return;
+    event.stopPropagation();
+    event.preventDefault();
+    swallowRelease = true;
+    if (!xAtomBox || !pointerIsOnStructure(stage)) return;
+    const before = toggleRadical(applet, stage, xAtomBox);
+    if (before) {
+      readBack = { before, after: applet.molFile() };
+      reselect();
     }
   }, true);
   stage.addEventListener('mouseup', (event) => {
@@ -742,45 +929,6 @@ export function setupSketcherToolbar(): void {
     setTimeout(() => convert(5), 0);
   });
 
-  // The charge tool where JSME refuses (charged-x-atoms.ts): JSME takes the
-  // click first; when the drawing is unchanged and its status line says the
-  // charge was not possible, the atom clicked gets the next charge as an X
-  // atom, and Undo can take it back (readBack). Where JSME instead paired the
-  // charge with an opposite one beside it (pairedCharge), the drawing goes
-  // back with the charge on the atom clicked: the zwitterion was drawn on
-  // purpose.
-  let chargeClick: { atom: { index: number; element: string; charge: number } | null; drawing: Drawing; before: string } | null = null;
-  stage.addEventListener('mousedown', (event) => {
-    chargeClick = null;
-    const applet = window.jsmeApplet;
-    const tool = buttons().find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.tool;
-    if (event.button !== 0 || tool !== 'charge' || !applet) return;
-    const before: string = applet.jmeFile();
-    chargeClick = { atom: hoveredAtom(stage, before.trim().split(/\s+/)), drawing: drawingNow(applet), before };
-  }, true);
-  stage.addEventListener('mouseup', () => {
-    const click = chargeClick;
-    chargeClick = null;
-    if (!click) return;
-    setTimeout(() => {
-      const applet = window.jsmeApplet;
-      const before = click.before.trim().split(/\s+/);
-      const paired = pairedCharge(before, applet.jmeFile().trim().split(/\s+/), click.atom?.index ?? null);
-      if (paired && !click.drawing.xAtoms.has(paired.index)) {
-        unpairCharge(applet, before, click.drawing.xAtoms, paired);
-        readBack = { before: click.drawing, after: applet.molFile() };
-        reselect();
-        return;
-      }
-      const atom = click.atom;
-      if (!atom) return;
-      const refused = chargeRefused(stage) || NO_CHARGE_RULE.has(atom.element);
-      if (!refused || applet.jmeFile() !== click.before) return;
-      const drawn = setRefusedCharge(applet, atom, nextCharge(atom.charge, click.drawing.xAtoms.has(atom.index)));
-      readBack = { before: drawn, after: applet.molFile() };
-      reselect();
-    }, 0);
-  });
 
   // JSME builds its menus asynchronously after the applet exists; clip them as
   // soon as they are there, and start on the single bond. Then fetch the X
