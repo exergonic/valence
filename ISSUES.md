@@ -39,8 +39,8 @@ Other?
 - [ ] `occ` is 0.9.6? `Bump version to 0.9.6` on a commit message.
 - [x] A way past the 30 s budget: "Keep optimising" in the header when a run stops short (2026-10-24).
 - [ ] JSME related:
-	*  [ ] way to draw radicals?
-	*  [ ] (+) next to (-) gets automatic double bond. Makes a sort of sense, but can we stop from happening?
+	*  [x] way to draw radicals? (the radical tool, beside the charge tool: "C•", one hydrogen fewer — 2026-10-26)
+	*  [x] (+) next to (-) gets automatic double bond. Makes a sort of sense, but can we stop from happening? (JSME pairs them on every edit; the toolbar puts each pairing back as drawn — 2026-10-26)
 * [ ] way to import XYZ or SDF/MOL into Valence. What if user has a structure they want to give the "Valence treatment"?
 	* the way "Groups" adds the group to the atom that is clicked on is inconsistent with how the other atoms 
 	  are put on. Other atoms 'replace' what's clicked. "Groups" adds another bond and then adds the group. 

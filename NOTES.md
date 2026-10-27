@@ -5408,3 +5408,41 @@ JSME has no radical tool and writes no `M  RAD`. Its X atom takes any label:
 kept, drawn as written, and come back in the V2000 and V3000 blocks as the
 label ("C•") and in `smiles()` bracketed. `C•` reads better than `C·` at
 sketch size. Not yet read by the build.
+
+## The radical tool; JSME pairs charges on every edit (2026-10-26, later)
+
+**The pairing is not the charge tool's alone.** With C⁻–N⁺ drawn (written in
+by a JME read), adding a methyl at the far end of the ring turned it into
+C=N again; so did a carbon added to an ammonium ylide's methyl (CH₂⁻–N⁺Me₃ →
+CH₂=NMe₃, N five-bonded), erasing a methyl beside one, and the radical tool's
+X-key press. `nopolarnitro` and `nocanonize` change nothing; there is no
+option for it. JSME's SMILES reader pairs on the way in too
+(`[CH2-][N+](C)(C)CO` reads as C=N). So the check now runs after every
+release on the sketch: the drawing is kept at the press (ahead of the element
+and radical tools, which edit on the press), and any bond one order higher
+whose two atoms are now neutral, at least one charged before, is put back
+with its charges (`chargePairings`, `tests/paired-charge.test.ts`, the JSME
+strings captured). Atoms are followed past an addition (JSME puts a new atom
+last) and a single deletion (the atom whose removal leaves the other bonds
+where they were). Not handled: a drawn C⁻–N⁺ that the user then deliberately
+makes a double bond — it would be put back as drawn.
+
+**The radical tool** ("the dot", beside the charge tool): an atom becomes the
+X atom "C•" (with a charge, "C•-"). JSME draws no label on a plain carbon, so
+the hover cannot name the atom clicked; JSME's X key can — it turns the atom
+under the pointer into the X box's label — so the box holds a placeholder,
+"[Rn]", for the press, and the atom that became it is the one ("[Og]",
+past JSME's element table, changed nothing). Under "Move atom" JSME drew no
+hover box and took no keys; the tool runs under the element action. An atom
+takes the dot only if the filler would give it a hydrogen; a second click
+takes it off. The charge tool on a dotted atom keeps the dot (C• → C•⁻), and
+Clean keeps it. The build reads the label, a radical centre takes one
+hydrogen fewer, a sketch with one skips the lookups (its SMILES "[C•]" reads
+nowhere), and the spin follows from the electron count. The SDF writes it on
+`M  RAD` (2, a doublet), which the parser reads back; a saved view keeps it,
+so a later refine does not fill the missing hydrogen.
+
+Checked in the app: the Birch radical anion of nitrobenzene drawn as ipso
+C⁻–N⁺(=O)O⁻ with a para C• builds as C₆H₅NO₂⁻, a GFN2 doublet, a minimum,
+C₂v; in the Delocalized view (α) the HOMO is the singly occupied b₁ π*,
+heaviest on N, the oxygens and the para carbon.

@@ -58,7 +58,9 @@ This code is written for **chemists who code**, not software engineers.
    formal charge match the sketch, and the ion is one MMFF94's type space can
    represent (a carbanion is not; its conformer is an artifact). **A sketch
    containing a metal skips steps 3–4**: PubChem has no 3D for most metal
-   compounds, and CIR builds them by rule, roughly (NOTES.md: H₃Si–Ni).
+   compounds, and CIR builds them by rule, roughly (NOTES.md: H₃Si–Ni). **So
+   does a sketch with a drawn radical**: JSME writes it "[C•]", which neither
+   service reads, and PubChem has 3D for few radicals (2026-10-26).
 4. NIH CACTUS (CIR), with the same guard.
 5. The local pipeline: implicit H's → the graph-walk embedder (`place3d.ts`)
    → **GFN2-xTB, the one local geometry engine**: OCC's, vendored as wasm, in
@@ -206,7 +208,7 @@ Each module's header comment says what it does and why; this list says where.
 - `src/ui/` — the sketcher (left), the scene, and the inspector (right, only
   the active view's controls); everything global in the settings drawer.
   `model-views.ts`, `controls.ts`, `jsme-panel.ts`, `sketcher-toolbar.ts`,
-  `charged-x-atoms.ts`, `periodic-table.ts`, `functional-groups.ts`,
+  `x-atom-labels.ts`, `periodic-table.ts`, `functional-groups.ts`,
   `mo-diagram.ts`, `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
   (`sdf-data.ts`, `mo-data.ts`), `theme.ts` (the three looks)
 - `src/utils/` — generic math, no chemistry: `vec3.ts`, `eigen.ts`,
@@ -226,11 +228,17 @@ Each module's header comment says what it does and why; this list says where.
   clipped out of view and never pressed while drawing — a simulated press
   left JSME deaf. The one exception: at startup its hidden **X** button is
   pressed once, out of sight, to borrow the "Nonstandard atom" text box.
-- Charges JSME refuses go on its X atom (`charged-x-atoms.ts`).
+- Charges JSME refuses go on its X atom (`x-atom-labels.ts`), and so does a
+  radical, which JSME has no tool for: the radical tool writes the atom
+  "C•".
+- **A drawn zwitterion stays as drawn** (2026-10-26): JSME pairs two
+  neighbouring opposite charges into a bond on every edit (C⁻ beside N⁺
+  becomes C=N, N five-bonded), and the toolbar undoes each pairing.
 - **A JSME upgrade must re-check** what was mapped against jsme-editor
   2024.04.29: the action codes and keys, the X box, the drag-drop press,
-  Clean, the charge fallback, and `index.html`'s rewrite of JSME's negative
-  `<rect>` widths. NOTES.md has the method; `bun run smoke` covers them.
+  Clean, the charge fallback, the charge pairing, the radical tool, and
+  `index.html`'s rewrite of JSME's negative `<rect>` widths. NOTES.md has the
+  method; `bun run smoke` covers them.
 
 ## Conventions
 - No cheminformatics libraries — MOL parsing is hand-rolled from JSME's output.
@@ -261,13 +269,16 @@ Each module's header comment says what it does and why; this list says where.
 - Never ship a silently wrong structure: a fetch that fails validation falls
   through to the local pipeline, never to a wrong "PubChem 3D" render.
 - **Implicit hydrogens go on nonmetals and semimetals only** (H, B, C, N, O,
-  F, Si, P, S, Cl, Ge, As, Se, Br, Sb, Te, I), to their usual valence. A metal
-  or a noble gas carries only the hydrogens drawn: the user is responsible for
-  charges, hydrogens and the rest of the 2D structure, and we give back what
-  they give us. "More…" enters a metal or noble gas into JSME bracketed
+  F, Si, P, S, Cl, Ge, As, Se, Br, Sb, Te, I), to their usual valence; a
+  drawn radical centre takes one fewer, its unpaired electron in that bond's
+  place (2026-10-26), and only an atom with a hydrogen to give takes the dot.
+  A metal or a noble gas carries only the hydrogens drawn: the user is
+  responsible for charges, hydrogens and the rest of the 2D structure, and we
+  give back what they give us. "More…" enters a metal or noble gas into JSME bracketed
   (`[Ni]`) so JSME's SMILES agrees.
 - Export keeps one source of truth per field: the SDF carries formal charges
-  on `M  CHG` lines and leaves the atom-block charge columns 0.
+  on `M  CHG` lines and a drawn radical on `M  RAD` (a doublet), and leaves
+  the atom-block charge columns 0.
 
 ## Commits
 Decided with the user 2026-10-26.
