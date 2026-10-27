@@ -123,6 +123,62 @@ function setRefusedCharge(applet: Window['jsmeApplet'], atom: { index: number; e
   return before;
 }
 
+/** A JME atom label's charge: "N+" 1, "O-" −1, "C-2" −2, "C" 0. */
+function labelCharge(label: string): number {
+  const match = /([+-])(\d*)\]?$/.exec(label);
+  if (!match) return 0;
+  const size = match[2] ? Number(match[2]) : 1;
+  return match[1] === '-' ? -size : size;
+}
+
+/**
+ * Did JSME's charge tool just pair the new charge with an opposite one beside
+ * it? A click meant to make C⁻ next to N⁺ draws C=N instead, both neutral —
+ * nitro's N is then five-bonded. Read off the JME strings before and after
+ * the click: one bond one order higher, the charge of one of its atoms gone,
+ * nothing else changed. The other atom is the one clicked (`clicked`, or with
+ * none, the bond's neutral carbon — JSME draws no label to find it by), and
+ * it was meant to get the opposite charge. Null for anything else.
+ */
+export function pairedCharge(before: string[], after: string[], clicked: number | null): { index: number; charge: number } | null {
+  if (before[0] !== after[0] || before[1] !== after[1]) return null;
+  const atomCount = Number(before[0]);
+  const bondStart = 2 + 3 * atomCount;
+  let raised: [number, number] | null = null;
+  for (let k = bondStart; k < before.length; k += 3) {
+    if (before[k] !== after[k] || before[k + 1] !== after[k + 1]) return null;
+    if (before[k + 2] === after[k + 2]) continue;
+    if (raised || Number(after[k + 2]) !== Number(before[k + 2]) + 1 || Number(before[k + 2]) < 1) return null;
+    raised = [Number(before[k]) - 1, Number(before[k + 1]) - 1];
+  }
+  if (!raised) return null;
+  const [a, b] = raised;
+  for (let i = 0; i < atomCount; i++) {
+    if (i !== a && i !== b && before[jmeLabel(i)] !== after[jmeLabel(i)]) return null;
+  }
+  const atom = clicked ?? (before[jmeLabel(a)] === 'C' ? a : before[jmeLabel(b)] === 'C' ? b : null);
+  if (atom !== a && atom !== b) return null;
+  const partner = atom === a ? b : a;
+  const partnerCharge = labelCharge(before[jmeLabel(partner)]);
+  if (partnerCharge === 0 || labelCharge(after[jmeLabel(partner)]) !== 0) return null;
+  return { index: atom, charge: -partnerCharge };
+}
+
+/**
+ * Undo JSME's pairing (pairedCharge): read the drawing from before the click
+ * back, the clicked atom given its charge as JSME's own charged atom ("C-",
+ * which a JME read keeps beside an N⁺). The charged X atoms go in bracketed,
+ * so they stay.
+ */
+function unpairCharge(applet: Window['jsmeApplet'], before: string[], xAtoms: Map<number, string>, atom: { index: number; charge: number }): void {
+  const jme = [...before];
+  for (const [index, label] of xAtoms) jme[jmeLabel(index)] = `[${label}]`;
+  const element = /^[A-Z][a-z]?/.exec(jme[jmeLabel(atom.index)])?.[0] ?? 'C';
+  const size = Math.abs(atom.charge);
+  jme[jmeLabel(atom.index)] = `${element}${atom.charge < 0 ? '-' : '+'}${size > 1 ? size : ''}`;
+  applet.readMolecule(jme.join(' '));
+}
+
 /** A MOL block from its counts line on: the header carries a timestamp, so two
  *  reads of one drawing differ there and nowhere else. */
 function drawingOf(molFile: string): string {
@@ -689,16 +745,18 @@ export function setupSketcherToolbar(): void {
   // The charge tool where JSME refuses (charged-x-atoms.ts): JSME takes the
   // click first; when the drawing is unchanged and its status line says the
   // charge was not possible, the atom clicked gets the next charge as an X
-  // atom, and Undo can take it back (readBack).
-  let chargeClick: { atom: { index: number; element: string; charge: number }; onXAtom: boolean; before: string } | null = null;
+  // atom, and Undo can take it back (readBack). Where JSME instead paired the
+  // charge with an opposite one beside it (pairedCharge), the drawing goes
+  // back with the charge on the atom clicked: the zwitterion was drawn on
+  // purpose.
+  let chargeClick: { atom: { index: number; element: string; charge: number } | null; drawing: Drawing; before: string } | null = null;
   stage.addEventListener('mousedown', (event) => {
     chargeClick = null;
     const applet = window.jsmeApplet;
     const tool = buttons().find((b) => b.getAttribute('aria-pressed') === 'true')?.dataset.tool;
     if (event.button !== 0 || tool !== 'charge' || !applet) return;
     const before: string = applet.jmeFile();
-    const atom = hoveredAtom(stage, before.trim().split(/\s+/));
-    if (atom) chargeClick = { atom, onXAtom: chargedXAtoms(applet.molFile(true)).has(atom.index), before };
+    chargeClick = { atom: hoveredAtom(stage, before.trim().split(/\s+/)), drawing: drawingNow(applet), before };
   }, true);
   stage.addEventListener('mouseup', () => {
     const click = chargeClick;
@@ -706,10 +764,20 @@ export function setupSketcherToolbar(): void {
     if (!click) return;
     setTimeout(() => {
       const applet = window.jsmeApplet;
-      const refused = chargeRefused(stage) || NO_CHARGE_RULE.has(click.atom.element);
+      const before = click.before.trim().split(/\s+/);
+      const paired = pairedCharge(before, applet.jmeFile().trim().split(/\s+/), click.atom?.index ?? null);
+      if (paired && !click.drawing.xAtoms.has(paired.index)) {
+        unpairCharge(applet, before, click.drawing.xAtoms, paired);
+        readBack = { before: click.drawing, after: applet.molFile() };
+        reselect();
+        return;
+      }
+      const atom = click.atom;
+      if (!atom) return;
+      const refused = chargeRefused(stage) || NO_CHARGE_RULE.has(atom.element);
       if (!refused || applet.jmeFile() !== click.before) return;
-      const before = setRefusedCharge(applet, click.atom, nextCharge(click.atom.charge, click.onXAtom));
-      readBack = { before, after: applet.molFile() };
+      const drawn = setRefusedCharge(applet, atom, nextCharge(atom.charge, click.drawing.xAtoms.has(atom.index)));
+      readBack = { before: drawn, after: applet.molFile() };
       reselect();
     }, 0);
   });
