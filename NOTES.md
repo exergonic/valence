@@ -5557,3 +5557,21 @@ labels with MMFF94 atom types through a hand-kept table, and by now each new
 example only added a row or a documented deviation (ten for the last batch,
 none a bug), while the lone-pair tests check what the view draws. Its history
 above (diborane's B···B, the ferrocene corpus) stays as written.
+
+## An example is drawn in the sketcher (2026-10-29, later)
+
+The user asked for the example in JSME too; the sketcher stayed blank, or
+kept the last drawing beside a different molecule. JSME's "Paste…" was their
+first thought, but the toolbar's Clean already had the road: a MOL block read
+with every coordinate zeroed, which JSME lays out in 2D itself, keeping the
+atoms in order, drawn hydrogens and charges (`drawInSketcher`,
+`sketcher-toolbar.ts`). Read that way, 25 of the 28 examples came back
+exactly; the rest were charges. JSME read Ni²⁺ and its Cl⁻ and C⁻ ligands
+neutral, the charges it refuses, and imposed B⁻ and H⁺ on diborane's
+four-bonded B and two-bonded bridging H. Each such atom now goes in as an X
+atom with the block's charge — a neutral one bracketed, "[B]", or JSME's own
+atom takes the charge again — and all 28 read back as the molecule on screen
+(the build's own reading: V2000 plus the X labels). The hydrogens stay drawn,
+as the example has them: what Build reads is then what the scene shows.
+JSME's layout of the X atoms is plainer than its own (Ni(CN)₄²⁻'s cyanides at
+uneven angles) but no worse than a user's drawing of the same charges.
