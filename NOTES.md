@@ -5473,9 +5473,12 @@ from the app's structure: −12.807340 Eh, the app's −12.807339; every atom
 within 2e-4 Å; no imaginary modes. From a linear C–N=C=O start it stops at
 a stationary point 1.26 kcal/mol higher with two imaginary modes. PubChem's
 MMFF94 conformer has the carbon right (N=C=O 179.8°) and the nitrogen tight
-(C–N=C 114°); gas-phase work puts C–N=C near 140°, a soft bend. The user,
-2026-10-29: it is what it is — PubChem's comes first, and is the better
-picture of the isocyanate.
+(C–N=C 114°); gas-phase work puts C–N=C near 140°, a soft bend. ωB97X-D3/
+def2-TZVP (ORCA, a minimum; `tests/references/dft/methyl-isocyanate.xyz`)
+gives C–N=C 140.4° and N=C=O 174.1°: the real carbon is a few degrees from
+linear, GFN2 overdoes it and PubChem straightens it. The user, 2026-10-29: it
+is what it is — PubChem's comes first, and is the better picture of the
+isocyanate.
 
 What was wrong was the lone pair. `getLonePairDirections` put an AX₂E pair
 opposite the sum of the bond vectors as the renderer gave them, unnormalized,
@@ -5483,6 +5486,42 @@ so the longer N–CH₃ (1.41 Å, against N=C's 1.19 Å) dragged it: 123° from
 N–CH₃, 89° from N=C, where it belongs 106° from each. Any bent sp² centre
 with unequal bonds (N-methylmethanimine's too) leaned the same way; the tests
 fed unit vectors only. The function now normalizes on entry
-(`tests/orient-lone-pairs.test.ts`, the N's bonds at the oracle's minimum).
-Checked in the app on the PubChem conformer: the pair points out of the open
-side of the C–N=C angle.
+(`tests/orient-lone-pairs.test.ts`). Checked in the app on the PubChem
+conformer: the pair points out of the open side of the C–N=C angle.
+
+## The lone-pair tests, on DFT minima (2026-10-29, later)
+
+The user asked what the early lone-pair tests were worth. Little: ideal,
+unit-length, symmetric bond directions, where symmetry fixes the answer for
+any sensible rule (ammonia, water, "pyridine-like"); expected numbers derived
+from the code's own formulas; and one test pinning a lone pair lying on top
+of a bond, for three collinear bonds no molecule has. The aziridine test was
+the exception — its asymmetry tells rules apart, and its 62°/110° were
+PubChem's MMFF94 angles, rebuilt as unit vectors.
+
+The rewrite runs real molecules through the renderer's own path
+(`lonePairDirectionsByAtom`, which the renderer now calls instead of doing
+the work inline): 26 ωB97X-D3/def2-TZVP minima, one for each lone-pair
+arrangement and every Example that draws one. The user asked for ORCA, not
+PubChem — PubChem's conformers are not always good structures. The runs and
+how their starts were generated are in `~/orca_calcs/lone-pairs/README.md`;
+`tests/references/dft/README.md` lists them. With the unnormalized sum put
+back, ten of the new tests fail, pyridine's among them: even its two C–N
+bonds differ enough.
+
+What the real structures found:
+- **Drawing order moved hypervalent lone pairs.** XeF₂'s ring of three turned
+  60° with the order of its two bonds; XeF₄'s pair took its normal from the
+  first two bonds, and on a square 0.3° from flat a trans pair drawn first
+  tipped it 4°. Fixed in `orient-lone-pairs.ts`.
+- **Methyl isocyanate's O lone pairs stand across the molecular plane**, not
+  in it as formaldehyde's do: the sp carbon's two π bonds are perpendicular,
+  the N=C π stands across the C–N=C plane, so the C=O π lies in it. The app
+  was right; the test's first expectation was wrong, and it is now a test.
+- **GFN2-xTB has a spurious D₃h minimum for ClF₃**, 15.4 kcal/mol above its
+  T-shape (F–Cl–F 167.4°; xtb 6.7.1, `--ohess vtight` from both). Open
+  Babel's planar start fell into it. Valence never meets it: the embedder
+  starts AX₃E₂ T-shaped.
+- **ORCA's redundant internals oscillated on XeF₄'s square plane** for 17
+  cycles (trans F–Xe–F 175.7° ⇄ 177.2°); Cartesian coordinates (`!COpt`)
+  converged in 3.
