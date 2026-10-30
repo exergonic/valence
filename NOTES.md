@@ -5575,3 +5575,20 @@ atom takes the charge again — and all 28 read back as the molecule on screen
 as the example has them: what Build reads is then what the scene shows.
 JSME's layout of the X atoms is plainer than its own (Ni(CN)₄²⁻'s cyanides at
 uneven angles) but no worse than a user's drawing of the same charges.
+
+## The hydrogen halides, and GFN2's dipole down the group (2026-10-29, later)
+
+HF, HCl, HBr and HI joined the examples in a section of their own, after the
+four-domain one (each X is AXE₃), for AP and first-year students comparing
+down group 17. ωB97X-D3/def2-TZVP minima (`~/orca_calcs/hydrogen-halides`):
+H–X 0.919, 1.276, 1.417, 1.606 Å, within 0.004 Å of experiment as
+remembered; dipoles 1.94, 1.27, 0.96, 0.49 D, falling as experiment's do
+(about 1.83, 1.11, 0.83, 0.45 D).
+
+GFN2-xTB's full dipole does not fall: 2.52, 1.05, 2.51, 2.37 D at the DFT
+structures, the app and xtb 6.7.1 (`--sp`) agreeing to the digit. Its
+Mulliken charge on X falls as it should (−0.39, −0.33, −0.27, −0.19), so the
+overshoot for HBr and HI is in its atomic-dipole terms — the full dipole
+AGENTS.md already says overshoots water's. The header's dipole for these two
+would mislead a lesson on the trend; what to do about it is open (the user's
+call).
