@@ -293,10 +293,14 @@ async function sketcherMoveAndClean(b: Browser) {
   const moved = await b.run(shape);
   const smilesMoved: string = await b.run(`return window.jsmeApplet.smiles();`);
   check('the move tool drags one atom and keeps the molecule', moved !== before && smilesMoved === 'CC(=O)Nc1ccccc1', smilesMoved);
+  // a fresh page's zoom, which the direct read above put back to 1
+  const zoom: number = await b.run(`window.jsmeApplet.setMolecularAreaScale(2); return window.jsmeApplet.getMolecularAreaScale();`);
   await press('clean');
   const cleaned = await b.run(shape);
   const smilesCleaned: string = await b.run(`return window.jsmeApplet.smiles();`);
   check('Clean lays it out afresh, the same molecule', cleaned !== moved && smilesCleaned === 'CC(=O)Nc1ccccc1', smilesCleaned);
+  const zoomCleaned: number = await b.run(`return window.jsmeApplet.getMolecularAreaScale();`);
+  check('Clean keeps the zoom (JSME puts it back to 1 on a read)', zoomCleaned === zoom, `${zoom} → ${zoomCleaned}`);
   await press('undo');
   const undone = await b.run(shape);
   check('Undo after a Clean puts the dragged drawing back', undone === moved, undone === moved ? 'restored' : 'not restored');

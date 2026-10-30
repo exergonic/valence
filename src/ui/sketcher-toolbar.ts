@@ -61,6 +61,25 @@ const TOOL_ACTIONS: Record<string, number> = {
 };
 
 /**
+ * Read a drawing into JSME at the zoom the user had. JSME puts its zoom (its
+ * "molecular area scale": 2 on a fresh page, the mouse wheel changes it) back
+ * to 1 on every read, so a Clean, an example drawn, or any of the rewrites
+ * below would shrink the drawing on screen (asked for 2026-10-30).
+ */
+function readMolFile(applet: Window['jsmeApplet'], molFile: string): void {
+  const zoom = applet.getMolecularAreaScale();
+  applet.readMolFile(molFile);
+  applet.setMolecularAreaScale(zoom);
+}
+
+/** A JME string, as tokens, read at the user's zoom (readMolFile). */
+function readJme(applet: Window['jsmeApplet'], jme: string[]): void {
+  const zoom = applet.getMolecularAreaScale();
+  applet.readMolecule(jme.join(' '));
+  applet.setMolecularAreaScale(zoom);
+}
+
+/**
  * Lay the drawing out afresh: JSME's own MOL block read back with every
  * coordinate zeroed, which makes JSME compute 2D coordinates. JSME's "Compute
  * 2D coordinates" sits in a menu we cannot reach (its molecule menu, behind a
@@ -78,7 +97,7 @@ function cleanLayout(applet: Window['jsmeApplet']): { before: Drawing; after: st
   const before = drawingNow(applet);
   const zeroed = withCoordinatesZeroed(before.molFile);
   if (!zeroed) return null;
-  applet.readMolFile(zeroed);
+  readMolFile(applet, zeroed);
   restoreXAtoms(applet, before.xAtoms);
   return { before, after: applet.molFile() };
 }
@@ -107,7 +126,7 @@ function withCoordinatesZeroed(molFile: string): string | null {
 export function drawInSketcher(applet: Window['jsmeApplet'], molFile: string): void {
   const zeroed = withCoordinatesZeroed(molFile);
   if (!zeroed) return;
-  applet.readMolFile(zeroed);
+  readMolFile(applet, zeroed);
   const drawn = parseMolBlock(molFile).atoms;
   const read = parseMolBlock(applet.molFile()).atoms;
   const jme = jmeTokens(applet);
@@ -118,7 +137,7 @@ export function drawInSketcher(applet: Window['jsmeApplet'], molFile: string): v
     jme[jmeLabel(i)] = charge === 0 ? `[${atom.element}]` : jmeAtomLabel(atom.element, charge);
     relabelled = true;
   });
-  if (relabelled) applet.readMolecule(jme.join(' '));
+  if (relabelled) readJme(applet, jme);
 }
 
 /** A drawing as Clean keeps it to undo to: its MOL block, and the charged X
@@ -133,7 +152,7 @@ function drawingNow(applet: Window['jsmeApplet']): Drawing {
 }
 
 function readDrawing(applet: Window['jsmeApplet'], drawing: Drawing): void {
-  applet.readMolFile(drawing.molFile);
+  readMolFile(applet, drawing.molFile);
   restoreXAtoms(applet, drawing.xAtoms);
 }
 
@@ -147,7 +166,7 @@ function restoreXAtoms(applet: Window['jsmeApplet'], xAtoms: Map<number, string>
   if (xAtoms.size === 0) return;
   const jme = jmeTokens(applet);
   for (const [index, label] of xAtoms) jme[jmeLabel(index)] = `[${label}]`;
-  applet.readMolecule(jme.join(' '));
+  readJme(applet, jme);
 }
 
 /**
@@ -163,7 +182,7 @@ function setRefusedCharge(applet: Window['jsmeApplet'], atom: { index: number; e
   for (const [index, label] of before.xAtoms) jme[jmeLabel(index)] = `[${label}]`;
   const radical = parseXAtomLabel(before.xAtoms.get(atom.index) ?? '')?.radical ?? false;
   jme[jmeLabel(atom.index)] = jmeAtomLabel(atom.element, charge, radical);
-  applet.readMolecule(jme.join(' '));
+  readJme(applet, jme);
   return before;
 }
 
@@ -282,7 +301,7 @@ function unpairCharges(applet: Window['jsmeApplet'], pairings: ChargePairing[]):
       jme[jmeLabel(atom)] = xAtom ? jmeAtomLabel(element, charges[n], xAtom.radical) : ownAtomLabel(element, charges[n]);
     });
   }
-  applet.readMolecule(jme.join(' '));
+  readJme(applet, jme);
 }
 
 /**
@@ -383,7 +402,7 @@ function toggleRadical(applet: Window['jsmeApplet'], stage: HTMLElement, box: HT
   molecule.atoms[index] = { ...molecule.atoms[index], element, charge };
   const hasHydrogenToGive = takesImplicitHydrogens(element) && implicitHydrogenCounts(molecule)[index] > 0;
   if (radical && !hasHydrogenToGive) {
-    applet.readMolecule(jme.join(' ')); // the placeholder out again
+    readJme(applet, jme); // the placeholder out again
     return null;
   }
   // off again: back to JSME's own atom where JSME holds the charge, the X
@@ -391,7 +410,7 @@ function toggleRadical(applet: Window['jsmeApplet'], stage: HTMLElement, box: HT
   jme[jmeLabel(index)] = radical ? jmeAtomLabel(element, charge, true)
     : element in ELEMENT_KEYS ? ownAtomLabel(element, charge)
       : jmeAtomLabel(element, charge);
-  applet.readMolecule(jme.join(' '));
+  readJme(applet, jme);
   return before;
 }
 
@@ -944,7 +963,7 @@ export function setupSketcherToolbar(): void {
         for (const [index, label] of xAtomLabels(applet.molFile(true))) jme[jmeLabel(index)] = `[${label}]`;
         const replaced = groupInPlaceOfAtom(click.before.trim().split(/\s+/), jme);
         if (replaced) {
-          applet.readMolecule(replaced.join(' '));
+          readJme(applet, replaced);
           readBack = { before: click.drawing, after: applet.molFile() };
           reselect();
         }
