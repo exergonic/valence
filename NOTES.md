@@ -5592,3 +5592,13 @@ overshoot for HBr and HI is in its atomic-dipole terms — the full dipole
 AGENTS.md already says overshoots water's. The header's dipole for these two
 would mislead a lesson on the trend; what to do about it is open (the user's
 call).
+
+The user's call (2026-10-30): the lesson comes from the charges, and the four
+examples carry experiment's dipoles in a note (NIST CCCBDB: 1.827, 1.093,
+0.827, 0.448 D; its HCl is μe, which is why tables quoting μ0 give 1.109). But
+not every charge set falls: the ESP-fitted charges, the labels' default, are
+fitted to the same potential as the dipole and on X read −0.57, −0.20, −0.38,
+−0.32 for HF to HI. Mulliken (−0.39, −0.33, −0.27, −0.19), CM5 (−0.36, −0.27,
+−0.26, −0.21) and Hirshfeld (−0.29, −0.22, −0.21, −0.18) fall, so the note
+names Mulliken and CM5. The ESP map comes from the same density as the dipole,
+so it is no guide to this trend either.
