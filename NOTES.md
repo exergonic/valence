@@ -5529,3 +5529,31 @@ What the real structures found:
 - **ORCA's redundant internals oscillated on XeF₄'s square plane** for 17
   cycles (trans F–Xe–F 175.7° ⇄ 177.2°); Cartesian coordinates (`!COpt`)
   converged in 3.
+
+## The examples on DFT minima; the MMFF94 oracle retired (2026-10-29, later)
+
+Ten of the lone-pair minima became examples (ammonia, aziridine,
+formaldehyde, methyl isocyanate, ozone, SF₄, ClF₃, XeF₂, BrF₅, XeF₄), and the
+dropdown went into sections: four, five and six electron domains, each from no
+lone pairs to the most, then double and triple bonds, aromatic rings,
+three-centre bonds and metal centres. Hybridization alone could not sort
+them — most molecules mix sp³, sp² and sp — but the electron-domain count is
+what the model reads hybridization from. The number keys load the first
+nine shown.
+
+Then the user asked for every example not idealized on purpose to move to a
+DFT minimum: none of the hand-built or PubChem geometries was a teaching
+choice. Thirteen did; PCl₅, SF₆ and ZnCl₂ stay ideal, as their comments say.
+The minima already run (Open Babel's atom order) were matched to each
+example's bond graph — among the symmetry-equivalent matches, the one closest
+to the old structure — and rotated into its frame, so atom indices and
+orientation carry over; the rest were run from the example itself. Old and
+new are 0.000–0.16 Å RMSD apart, hand-built imidazole the furthest, and every
+test that reads an example passed unchanged. The details:
+`tests/references/dft/README.md`, `~/orca_calcs/examples/README.md`.
+
+The MMFF94 oracle test is retired, the user's call: it compared hybridization
+labels with MMFF94 atom types through a hand-kept table, and by now each new
+example only added a row or a documented deviation (ten for the last batch,
+none a bug), while the lone-pair tests check what the view draws. Its history
+above (diborane's B···B, the ferrocene corpus) stays as written.
