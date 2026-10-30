@@ -245,7 +245,11 @@ function trigonalBipyramidalLonePairs(
   // bond axis — which way round is arbitrary, as it is for the molecule
   if (missing === 3 && bonds.length === 2) {
     const axis = vecNormalize(vecSub(bonds[0], bonds[1]));
-    const first = vecNormalize(findPerpendicular(axis));
+    // The axis flips with the order the two bonds were drawn in, and the
+    // perpendicular with it: a fixed sign keeps the ring from turning 60°.
+    let first = vecNormalize(findPerpendicular(axis));
+    const largest = first.reduce((m, c) => (Math.abs(c) > Math.abs(m) ? c : m));
+    if (largest < 0) first = [-first[0], -first[1], -first[2]];
     return [
       first,
       vecNormalize(rotateRodrigues(first, axis, COS_120, SIN_120)),
@@ -271,16 +275,23 @@ function octahedralLonePairs(
     const lp = vecNormalize(sum);
     return lp[0] === 0 && lp[1] === 0 && lp[2] === 0 ? [] : [lp];
   }
-  // AX₄E₂: both lone pairs on the normal of the bonds' plane, from any two
-  // bonds that are not trans to each other
+  // AX₄E₂: both lone pairs on the normal of the bonds' plane. Every pair of
+  // bonds votes, weighted by its cross product, so a cis pair counts in full
+  // and a trans pair hardly at all. Taken from the first pair alone, the pairs
+  // moved with the order the bonds were drawn in: on XeF₄ 0.3° from flat, a
+  // first pair drawn trans tipped them 4° off the normal.
   if (missing === 2 && bonds.length === 4) {
+    const sum: [number, number, number] = [0, 0, 0];
     for (let i = 0; i < 4; i++) {
       for (let j = i + 1; j < 4; j++) {
-        const normal = vecNormalize(crossProduct(bonds[i], bonds[j]));
-        if (normal[0] !== 0 || normal[1] !== 0 || normal[2] !== 0) {
-          return [normal, [-normal[0], -normal[1], -normal[2]]];
-        }
+        const n = crossProduct(bonds[i], bonds[j]);
+        const sign = vecDot(n, sum) < 0 ? -1 : 1;
+        sum[0] += sign * n[0]; sum[1] += sign * n[1]; sum[2] += sign * n[2];
       }
+    }
+    const normal = vecNormalize(sum);
+    if (normal[0] !== 0 || normal[1] !== 0 || normal[2] !== 0) {
+      return [normal, [-normal[0], -normal[1], -normal[2]]];
     }
   }
   return [];
