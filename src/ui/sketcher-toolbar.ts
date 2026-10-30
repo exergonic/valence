@@ -61,22 +61,25 @@ const TOOL_ACTIONS: Record<string, number> = {
 };
 
 /**
- * Read a drawing into JSME at the zoom the user had. JSME puts its zoom (its
+ * Change JSME's drawing at the zoom the user had. JSME puts its zoom (its
  * "molecular area scale": 2 on a fresh page, the mouse wheel changes it) back
- * to 1 on every read, so a Clean, an example drawn, or any of the rewrites
- * below would shrink the drawing on screen (asked for 2026-10-30).
+ * to 1 on every read and on its own Undo and Redo, so a Clean, an example
+ * drawn, an Undo, or any of the rewrites below would shrink the drawing on
+ * screen (asked for 2026-10-30).
  */
-function readMolFile(applet: Window['jsmeApplet'], molFile: string): void {
+function keepingZoom(applet: Window['jsmeApplet'], change: () => void): void {
   const zoom = applet.getMolecularAreaScale();
-  applet.readMolFile(molFile);
+  change();
   applet.setMolecularAreaScale(zoom);
 }
 
-/** A JME string, as tokens, read at the user's zoom (readMolFile). */
+function readMolFile(applet: Window['jsmeApplet'], molFile: string): void {
+  keepingZoom(applet, () => applet.readMolFile(molFile));
+}
+
+/** A JME string, as tokens. */
 function readJme(applet: Window['jsmeApplet'], jme: string[]): void {
-  const zoom = applet.getMolecularAreaScale();
-  applet.readMolecule(jme.join(' '));
-  applet.setMolecularAreaScale(zoom);
+  keepingZoom(applet, () => applet.readMolecule(jme.join(' ')));
 }
 
 /**
@@ -906,7 +909,7 @@ export function setupSketcherToolbar(): void {
         readBack = null;
         reselect();
       } else if (tool === 'undo' || tool === 'redo') {
-        pressKey(stage, tool === 'undo' ? 'z' : 'y', true);
+        keepingZoom(applet, () => pressKey(stage, tool === 'undo' ? 'z' : 'y', true));
       } else if (tool === 'clean') {
         readBack = cleanLayout(applet) ?? readBack;
         reselect();
@@ -999,6 +1002,15 @@ export function setupSketcherToolbar(): void {
     }
     reselect();
   }
+
+  // JSME's Undo and Redo typed on the keyboard reach JSME directly: the zoom
+  // is put back before the next frame (keepingZoom does it for our buttons)
+  stage.addEventListener('keydown', (event) => {
+    const applet = window.jsmeApplet;
+    if (!applet || !event.isTrusted || !(event.ctrlKey || event.metaKey) || !/^[zy]$/i.test(event.key)) return;
+    const zoom = applet.getMolecularAreaScale();
+    requestAnimationFrame(() => applet.setMolecularAreaScale(zoom));
+  }, true);
 
   // An element chosen: a click on an atom becomes the element's key, and the
   // click itself is kept from JSME (its action, placing a carbon, would add a
