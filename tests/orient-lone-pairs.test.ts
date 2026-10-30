@@ -119,6 +119,23 @@ describe('getLonePairDirections — two σ bonds (unchanged VSEPR behavior)', ()
     expect(lps[0][1]).toBeCloseTo(0, 9);
     expect(lps[0][2]).toBeCloseTo(0, 9);
   });
+
+  it('methyl isocyanate N (AX₂E): the lone pair bisects the bond angle, whatever the bond lengths', () => {
+    // N's bond vectors at xtb 6.7.1's GFN2 minimum (--ohess vtight, no
+    // imaginary modes): N–CH₃ 1.41 Å, N=C 1.19 Å, C–N=C 148°. The
+    // renderer passes these raw; summing them unnormalized put the lone pair
+    // 123° from N–CH₃ and 89° from N=C.
+    const N: [number, number, number] = [0.457995, -0.135492, 0.073712];
+    const methylC: [number, number, number] = [1.713274, 0.510014, 0.012225];
+    const carbonylC: [number, number, number] = [-0.720514, -0.048729, -0.020399];
+    const toMethyl: [number, number, number] = [methylC[0] - N[0], methylC[1] - N[1], methylC[2] - N[2]];
+    const toCarbonyl: [number, number, number] = [carbonylC[0] - N[0], carbonylC[1] - N[1], carbonylC[2] - N[2]];
+
+    const lps = getLonePairDirections([toMethyl, toCarbonyl], 3);
+    expect(lps).toHaveLength(1);
+    expect(ang(lps[0], toMethyl)).toBeCloseTo(ang(lps[0], toCarbonyl), 9);
+    expect(ang(lps[0], toMethyl) + ang(lps[0], toCarbonyl) + ang(toMethyl, toCarbonyl)).toBeCloseTo(360, 6);
+  });
 });
 
 describe('getLonePairDirections — five and six domains', () => {

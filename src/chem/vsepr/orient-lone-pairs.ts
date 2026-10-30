@@ -3,14 +3,19 @@ import {
 } from '../../utils/vec3';
 
 // Direction(s) for the σ lone-pair lobes of an atom, given its σ-bond
-// directions and the total number of hybrid orbitals (σ bonds + lone
+// vectors and the total number of hybrid orbitals (σ bonds + lone
 // pairs).  The σ/π direction-placement logic, next to orient-pi.ts; pure
 // geometry, no Three.js, so it unit-tests like the hybridization rules.
 export function getLonePairDirections(
-  sigmaDirs: [number, number, number][],
+  bondVectors: [number, number, number][],
   total: number,
   sigmaPlaneNormal?: [number, number, number] | null,
 ): [number, number, number][] {
+  // Only the bonds' directions count, never their lengths: the renderer
+  // passes atom-to-neighbour vectors, and summed as they were, methyl
+  // isocyanate's long N–CH₃ (1.41 Å) dragged the N lone pair to 89° from the
+  // short N=C (1.19 Å) and 123° from N–CH₃, instead of 106° from each.
+  const sigmaDirs = bondVectors.map(vecNormalize);
   const missing = total - sigmaDirs.length;
   if (missing <= 0) return [];
 
