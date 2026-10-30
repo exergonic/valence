@@ -5463,3 +5463,25 @@ atom (its name says so; in a methyl's place it would turn ethane into
 formaldehyde, not acetaldehyde). Checked in the app: ethane → nitromethane,
 benzene → nitrobenzene, Undo back; the smoke test's COOH on methanol's O is
 now acetic acid, and CN dropped on dimethylamine's N stays N-bonded.
+
+## Methyl isocyanate: bent at N, and its lone pair (2026-10-29)
+
+Dogfooding CH₃–N=C=O, GFN2 gave a C–N=C angle of 148° and N=C=O 169°, and
+the question was whether the isocyanate should be linear. It should not: the
+N is AX₂E, sp² with a lone pair, and bent, like HNCO's (H–N=C near 124°);
+gas-phase work on CH₃NCO puts its C–N=C near 140°, a soft, large-amplitude
+bend. The oracle agrees with the app. xtb 6.7.1 (`--gfn 2 --ohess vtight`)
+from the app's structure: −12.807340 Eh, the app's −12.807339; every atom
+within 2e-4 Å; no imaginary modes. From a linear C–N=C=O start it stops at
+a stationary point 1.26 kcal/mol higher with two imaginary modes — the
+linear form is the saddle the bend falls off, which is why it is so soft.
+
+What was wrong was the lone pair. `getLonePairDirections` put an AX₂E pair
+opposite the sum of the bond vectors as the renderer gave them, unnormalized,
+so the longer N–CH₃ (1.41 Å, against N=C's 1.19 Å) dragged it: 123° from
+N–CH₃, 89° from N=C, where it belongs 106° from each. Any bent sp² centre
+with unequal bonds (N-methylmethanimine's too) leaned the same way; the tests
+fed unit vectors only. The function now normalizes on entry
+(`tests/orient-lone-pairs.test.ts`, the N's bonds at the oracle's minimum).
+Checked in the app on the PubChem conformer: the pair points out of the open
+side of the C–N=C angle.
