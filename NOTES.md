@@ -5631,3 +5631,34 @@ drawn, Undo over a read, a group, a refused charge, a radical, an
 unpairing) now goes through `readMolFile`/`readJme`, which set the scale
 back. Every example fits the sketcher at 2 (the widest, Ni(CN)₄²⁻ and PCl₅,
 checked by eye).
+
+## A group takes the place of any atom; JSME's undo history (2026-10-30, later)
+
+Supersedes the end-atom rule of the entry above. A group now takes the place
+of whatever atom is clicked, as an element does, and the sketch is the
+user's to correct: on a ring or chain atom the group's first atom takes the
+atom's bonds as drawn (COOH on a ring N, or CN on dimethylamine's N, is a
+five-bonded carbon, which JSME's SMILES writes C⁺), and an end atom's one
+bond becomes the group's own (=O's double). One rule, its quirks the same
+everywhere (the user's words, near enough).
+
+**JSME's undo history.** The rule that took a refused group out again showed
+it: cyclohexane, COOH clicked on a ring carbon (nothing drawn), a methyl
+added, Undo — and the COOH appeared, bonded to the ring. Measured on
+4-hydroxypiperidine: JSME writes each of its own edits into its undo history
+as the drawing it made, and no read ever enters it (readGenericMolecularInput,
+readMolecule and readMolFile, then Ctrl+Z, skipped past all three). So after
+a group its history held the group bonded, and the Undo after the next edit
+went there — for a group put in place too, not only one refused. Reading the
+drawing again after the release did not help. What does: after the release,
+JSME's own Undo takes its entry out, and the drawing in place is read again
+in the same task (nothing painted between). An Undo after the next edit then
+steps back to before the group (methyl and group together; the smoke test:
+acetic acid, a bond on its OH, Undo → methanol). JSME's entry is still there
+for its Redo, so Redo does nothing while a drawing the toolbar wrote is on
+screen. Every read the toolbar makes (Clean included) is missing from that
+history the same way; only the group left a wrong molecule in it.
+
+**JSME's Undo and Redo reset the zoom** to 1, as a read does: the toolbar's
+buttons go through `keepingZoom`, and Ctrl+Z / Ctrl+Y typed on the keyboard
+get the zoom put back before the next frame.
