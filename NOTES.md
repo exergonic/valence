@@ -5464,21 +5464,25 @@ formaldehyde, not acetaldehyde). Checked in the app: ethane → nitromethane,
 benzene → nitrobenzene, Undo back; the smoke test's COOH on methanol's O is
 now acetic acid, and CN dropped on dimethylamine's N stays N-bonded.
 
-## Methyl isocyanate: bent at N, and its lone pair (2026-10-29)
+## Methyl isocyanate: bent at N and at C, and its N lone pair (2026-10-29)
 
-Dogfooding CH₃–N=C=O, GFN2 bent the isocyanate carbon: N=C=O 169°, where
-an sp carbon should be linear (C–N=C 148°; the N, AX₂E, is rightly bent).
-It is GFN2's answer, not the app's. xtb 6.7.1 (`--gfn 2 --ohess vtight`)
-from the app's structure: −12.807340 Eh, the app's −12.807339; every atom
-within 2e-4 Å; no imaginary modes. From a linear C–N=C=O start it stops at
-a stationary point 1.26 kcal/mol higher with two imaginary modes. PubChem's
-MMFF94 conformer has the carbon right (N=C=O 179.8°) and the nitrogen tight
-(C–N=C 114°); gas-phase work puts C–N=C near 140°, a soft bend. ωB97X-D3/
-def2-TZVP (ORCA, a minimum; `tests/references/dft/methyl-isocyanate.xyz`)
-gives C–N=C 140.4° and N=C=O 174.1°: the real carbon is a few degrees from
-linear, GFN2 overdoes it and PubChem straightens it. The user, 2026-10-29: it
-is what it is — PubChem's comes first, and is the better picture of the
-isocyanate.
+The isocyanate carbon of CH₃–N=C=O is not linear. ωB97X-D3/def2-TZVP (ORCA,
+a minimum; `tests/references/dft/methyl-isocyanate.xyz`) gives N=C=O 174.1°,
+bent trans to the methyl (C–N=C=O 179.7°), with C–N=C 140.4°; gas-phase work
+puts C–N=C near 140°, a soft bend. Against that:
+
+| Source | C–N=C | N=C=O |
+|---|---|---|
+| ωB97X-D3/def2-TZVP | 140.4° | 174.1° |
+| GFN2-xTB (the app; xtb 6.7.1 agrees) | 148° | 169°, trans |
+| PubChem (MMFF94) | 114° | 179.8° |
+
+GFN2 bends the carbon the right way and a little too far; PubChem's
+straight carbon and tight nitrogen are the further from the minimum. The
+GFN2 structure is GFN2's own answer: xtb 6.7.1 (`--gfn 2 --ohess vtight`)
+from the app's structure gives −12.807340 Eh, the app's −12.807339, every
+atom within 2e-4 Å, no imaginary modes. From a linear C–N=C=O start it stops
+at a stationary point 1.26 kcal/mol higher with two imaginary modes.
 
 What was wrong was the lone pair. `getLonePairDirections` put an AX₂E pair
 opposite the sum of the bond vectors as the renderer gave them, unnormalized,
