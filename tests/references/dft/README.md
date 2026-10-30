@@ -62,3 +62,20 @@ BrF₅, the nickel complexes) is listed by its shape.
 | zinc-chloride.xyz | D∞h | 108 |
 | NiCl4.xyz | trigonally distorted tetrahedron, Cl–Ni–Cl 106.5° and 112.3° ×3 (triplet) | 46 |
 | NiCN4.xyz | D4h | 57 |
+
+### The examples' minima (2026-10-29)
+
+The Examples in the app's dropdown are these structures, except PCl₅, SF₆ and
+ZnCl₂, kept ideal on purpose (`src/ui/examples.ts` says why). Five more were
+run for them, each started from the example's old geometry so its atom order
+and bonds carry over; the runs are in `~/orca_calcs/examples/README.md`, same
+method, no imaginary mode. Ethene's example uses `ethene.xyz` above, which a
+re-run matched to 0.014 kcal/mol.
+
+| File | Point group | Lowest frequency (cm⁻¹) |
+|------|-------------|-------------------------|
+| methane.xyz | Td | 1339 |
+| ethyne.xyz | D∞h | 692 |
+| benzene.xyz | D6h | 415 |
+| butenyne.xyz | Cs | 228 |
+| diborane.xyz | D2h | 347 |
