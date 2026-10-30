@@ -5466,15 +5466,16 @@ now acetic acid, and CN dropped on dimethylamine's N stays N-bonded.
 
 ## Methyl isocyanate: bent at N, and its lone pair (2026-10-29)
 
-Dogfooding CH₃–N=C=O, GFN2 gave a C–N=C angle of 148° and N=C=O 169°, and
-the question was whether the isocyanate should be linear. It should not: the
-N is AX₂E, sp² with a lone pair, and bent, like HNCO's (H–N=C near 124°);
-gas-phase work on CH₃NCO puts its C–N=C near 140°, a soft, large-amplitude
-bend. The oracle agrees with the app. xtb 6.7.1 (`--gfn 2 --ohess vtight`)
+Dogfooding CH₃–N=C=O, GFN2 bent the isocyanate carbon: N=C=O 169°, where
+an sp carbon should be linear (C–N=C 148°; the N, AX₂E, is rightly bent).
+It is GFN2's answer, not the app's. xtb 6.7.1 (`--gfn 2 --ohess vtight`)
 from the app's structure: −12.807340 Eh, the app's −12.807339; every atom
 within 2e-4 Å; no imaginary modes. From a linear C–N=C=O start it stops at
-a stationary point 1.26 kcal/mol higher with two imaginary modes — the
-linear form is the saddle the bend falls off, which is why it is so soft.
+a stationary point 1.26 kcal/mol higher with two imaginary modes. PubChem's
+MMFF94 conformer has the carbon right (N=C=O 179.8°) and the nitrogen tight
+(C–N=C 114°); gas-phase work puts C–N=C near 140°, a soft bend. The user,
+2026-10-29: it is what it is — PubChem's comes first, and is the better
+picture of the isocyanate.
 
 What was wrong was the lone pair. `getLonePairDirections` put an AX₂E pair
 opposite the sum of the bond vectors as the renderer gave them, unnormalized,
