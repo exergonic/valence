@@ -1,7 +1,7 @@
 /**
- * A group from "Groups…" takes the place of an end atom, as an element does,
- * and is not drawn on a ring or chain atom (sketcher-toolbar.ts,
- * groupInPlaceOfAtom). The first JME strings are JSME's own (jsme-editor 2024.04.29, 2026-10-26): ethane, and
+ * A group from "Groups…" takes the place of the atom clicked, wherever it is,
+ * as an element does (sketcher-toolbar.ts, groupInPlaceOfAtom). The first JME
+ * strings are JSME's own (jsme-editor 2024.04.29, 2026-10-26): ethane, and
  * ethane after its nitro action on one methyl — NO₂ bonded to it, nitroethane.
  * The others are the shape of the strings, not captures.
  */
@@ -18,17 +18,19 @@ describe('groupInPlaceOfAtom', () => {
       .toBe('4 3 C 0.00 1.39 N+ 1.21 2.09 O 2.42 2.80 O- 1.22 0.69 1 2 1 2 3 2 2 4 1');
   });
 
-  it('a group on an atom inside a chain is not drawn: no end atom to replace', () => {
-    // propane's middle carbon, CN bonded to it
+  it('an atom inside a chain gives its place too, its bonds going to the group', () => {
+    // propane's middle carbon, CN bonded to it: the cyano C takes both methyls
     const propane = tokens('3 2 C 0 0 C 1.2 0.7 C 2.4 0 1 2 1 2 3 1');
     const withCyano = tokens('5 4 C 0 0 C 1.2 0.7 C 2.4 0 C 1.2 2.1 N 1.2 3.3 1 2 1 2 3 1 2 4 1 4 5 3');
-    expect(groupInPlaceOfAtom(propane, withCyano)).toBeNull();
+    expect(groupInPlaceOfAtom(propane, withCyano)?.join(' '))
+      .toBe('4 3 C 0.00 0.00 C 2.40 0.00 C 1.20 0.70 N 1.20 1.90 1 3 1 2 3 1 3 4 3');
   });
 
-  it('a ring atom has no place to give', () => {
-    // cyclopropane, OH bonded to a ring carbon
+  it('a ring atom gives its place, its ring bonds kept as drawn', () => {
+    // cyclopropane, =O bonded to a ring carbon: the O in the ring, singly bonded — oxirane
     const ring = tokens('3 3 C 0 0 C 1.2 0 C 0.6 1 1 2 1 2 3 1 3 1 1');
-    expect(groupInPlaceOfAtom(ring, tokens('4 4 C 0 0 C 1.2 0 C 0.6 1 O 0.6 2.4 1 2 1 2 3 1 3 1 1 3 4 1'))).toBeNull();
+    expect(groupInPlaceOfAtom(ring, tokens('4 4 C 0 0 C 1.2 0 C 0.6 1 O 0.6 2.4 1 2 1 2 3 1 3 1 1 3 4 2'))?.join(' '))
+      .toBe('3 3 C 0.00 0.00 C 1.20 0.00 O 0.60 1.00 1 2 1 2 3 1 1 3 1');
   });
 
   it("the end of a double bond gives its place, bonded by the group's own bond", () => {

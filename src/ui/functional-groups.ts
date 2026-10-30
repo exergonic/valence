@@ -1,8 +1,8 @@
 /**
  * The functional groups behind the sketcher's "Groups…" button: a group is
- * put on by clicking (or dropping onto) an end atom of the sketch, and like
- * an element it takes that atom's place (the toolbar's groupInPlaceOfAtom).
- * A ring or chain atom has no place to give: draw a bond from it first.
+ * put on by clicking (or dropping onto) an atom of the sketch, and like an
+ * element it takes that atom's place, wherever it is (the toolbar's
+ * groupInPlaceOfAtom). On a ring, draw a bond from it first.
  *
  * Each is one of JSME's own substituent actions — `setAction(code)`, then a
  * click on an atom bonds the group to it. The codes were read off JSME's
@@ -118,7 +118,7 @@ export function setupGroupPalette(trigger: HTMLButtonElement, onPick: (group: Fu
   }
   const note = document.createElement('p');
   note.className = 'pt-legend';
-  note.textContent = 'Drag a group onto an end atom of the sketch, or pick it and click the atom: the group takes its place. For a group on a ring, draw a bond from the ring first. A group used gets a button in the element row, to click or drag again.';
+  note.textContent = 'Drag a group onto an atom of the sketch, or pick it and click the atom: the group takes its place, as an element does. For a group on a ring, draw a bond from the ring first and put the group on its end. A group used gets a button in the element row, to click or drag again.';
   panel.appendChild(note);
   document.body.appendChild(panel);
 

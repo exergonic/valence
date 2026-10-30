@@ -307,10 +307,11 @@ async function sketcherMoveAndClean(b: Browser) {
 }
 
 /** The functional groups (asked for 2026-10-20): pick COOH from "Groups…",
- *  click methanol's O, and the group takes its place, as an element would —
- *  the O is an end atom (asked for 2026-10-26). Dropped on methylamine's N,
- *  likewise. On dimethylamine's N, inside the chain, a group is not drawn
- *  (asked for 2026-10-30). */
+ *  click methanol's O, and the group takes its place, as an element would
+ *  (asked for 2026-10-26); an Undo after the next edit does not bring back
+ *  JSME's own drawing, the group bonded. Dropped on methylamine's N,
+ *  likewise; and on dimethylamine's N, inside the chain, too (asked for
+ *  2026-10-30). */
 async function sketcherFunctionalGroup(b: Browser) {
   await b.open(url);
   await b.run(`window.jsmeApplet.readGenericMolecularInput('CO');`);
@@ -349,6 +350,27 @@ async function sketcherFunctionalGroup(b: Browser) {
   const pressed: string = await b.run(`return document.querySelector('#sketch-elements [aria-pressed="true"]')?.textContent ?? '';`);
   check('a functional group from "Groups…" takes the place of the end atom clicked', smiles === 'CC(=O)O' && pressed === 'COOH', `${smiles}, ${pressed} chosen`);
 
+  // A bond on the acid's OH, then Undo: back to before the group, not to
+  // JSME's own drawing of the press (COOH bonded to methanol's O), which it
+  // kept in its undo history (asked for 2026-10-30)
+  await press('#sketch-tools [data-tool="single"]');
+  let ester = smiles;
+  for (let tries = 0; tries < 3 && ester === smiles; tries++) {
+    const hydroxyl = await b.run(`
+      const svg = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150);
+      const t = [...svg.querySelectorAll('text')].find((t) => /^(OH|HO)$/.test(t.textContent));
+      const r = t.getBoundingClientRect();
+      return { x: r.x + r.width * (t.textContent.startsWith('O') ? 0.28 : 0.72), y: r.y + r.height / 2 };`);
+    await b.moveTo(hydroxyl.x, hydroxyl.y);
+    await sleep(300);
+    await b.click(hydroxyl.x, hydroxyl.y);
+    await sleep(300);
+    ester = await b.run(`return window.jsmeApplet.smiles();`);
+  }
+  await press('#sketch-tools [data-tool="undo"]');
+  const undone: string = await b.run(`return window.jsmeApplet.smiles();`);
+  check('Undo after the edit that follows a group steps back to before the group', ester === 'COC(C)=O' && undone === 'CO', `${ester} → ${undone}`);
+
   // Straight from the list (asked for 2026-10-20): drag CN out of "Groups…"
   // onto methylamine's N. The same stale-label retry as above; the N is the
   // first glyph of "NH2", the last of "H2N".
@@ -370,29 +392,25 @@ async function sketcherFunctionalGroup(b: Browser) {
   const row: string = await b.run(`return [...document.querySelectorAll('#sketch-elements [data-group]')].map((b) => b.textContent).join(' ');`);
   check('a group dragged onto an end atom takes its place', dragged === 'CC#N' && row.includes('CN'), `${dragged}; row: ${row}`);
 
-  // CN, still chosen, clicked on dimethylamine's N: no place to give, so
-  // JSME's group is taken out again — the molecule and the zoom as they were
+  // CN, still chosen, clicked on dimethylamine's N: the cyano C takes its
+  // place and both its bonds, five-bonded (JSME's SMILES makes it C+) — the
+  // sketch is the user's to fix
   await b.run(`window.jsmeApplet.readGenericMolecularInput('CNC'); window.jsmeApplet.repaint();`);
   await sleep(400);
   // a fresh page's zoom, which the direct read above put back to 1
   const zoom: number = await b.run(`window.jsmeApplet.setMolecularAreaScale(2); return window.jsmeApplet.getMolecularAreaScale();`);
-  await b.run(`window.groupDrawn = false; window.groupWatch = new MutationObserver(() => { if (window.jsmeApplet.smiles().includes('#')) window.groupDrawn = true; });
-    window.groupWatch.observe(document.getElementById('jsme-stage'), { subtree: true, childList: true }); return true;`);
   let middle = 'CNC';
-  let tried = false;
-  for (let tries = 0; tries < 3 && !tried; tries++) {
+  for (let tries = 0; tries < 3 && middle === 'CNC'; tries++) {
     const n = await b.run(nitrogen);
     await b.moveTo(n.x, n.y);
     await sleep(300);
     await b.click(n.x, n.y);
     await sleep(300);
-    tried = await b.run(`return window.groupDrawn;`);
     middle = await b.run(`return window.jsmeApplet.smiles();`);
   }
-  await b.run(`window.groupWatch.disconnect();`);
   const zoomAfter: number = await b.run(`return window.jsmeApplet.getMolecularAreaScale();`);
-  check('a group on an atom inside the chain is taken out again', tried && middle === 'CNC' && zoomAfter === zoom,
-    `${tried ? 'JSME drew it' : 'JSME never drew it'}; ${middle}; zoom ${zoom} → ${zoomAfter}`);
+  check('a group on an atom inside the chain takes its place too', middle === 'C[C+](C)#N' && zoomAfter === zoom,
+    `${middle}; zoom ${zoom} → ${zoomAfter}`);
 }
 
 /** Charges JSME refuses (asked for 2026-10-20): its charge tool will not
