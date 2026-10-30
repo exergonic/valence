@@ -530,6 +530,35 @@ const XEF4 = HEADER + `  5  4  0  0  0  0  0  0  0  0999 V2000
 M  END
 `;
 
+// The hydrogen halides, for the trend down group 17 (2026-10-29).
+const HF = HEADER + `  2  1  0  0  0  0  0  0  0  0999 V2000
+    0.9895    0.0442    0.0815 F   0  0  0  0  0  0  0  0  0  0  0  0
+    1.9085    0.0442    0.0815 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+`;
+
+const HCL = HEADER + `  2  1  0  0  0  0  0  0  0  0999 V2000
+    0.9910   -0.0859    0.0489 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    2.2673   -0.0859    0.0489 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+`;
+
+const HBR = HEADER + `  2  1  0  0  0  0  0  0  0  0999 V2000
+    1.0495   -0.0664    0.0404 Br  0  0  0  0  0  0  0  0  0  0  0  0
+    2.4664   -0.0664    0.0404 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+`;
+
+const HI = HEADER + `  2  1  0  0  0  0  0  0  0  0999 V2000
+    1.0243   -0.0532    0.0705 I   0  0  0  0  0  0  0  0  0  0  0  0
+    2.6305   -0.0532    0.0705 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+M  END
+`;
+
 // The sp carbon of an isocyanate is drawn linear, and a student who measures
 // 174° will think the structure wrong (2026-10-29: so did the user, until the
 // DFT minimum agreed with GFN2's bend).
@@ -547,8 +576,8 @@ const ISOCYANATE_BENT: InfoNote = {
  * electron-domain count is the model's own organising idea (hybridization is
  * read from it), and each domain section runs from no lone pairs to the
  * most — CH₄, NH₃, H₂O; PCl₅, SF₄, ClF₃, XeF₂; SF₆, BrF₅, XeF₄. Molecules
- * whose lesson is not one centre's domains (π bonds, rings, three-centre
- * bonds, metals) have sections of their own.
+ * whose lesson is not one centre's domains (a family down a group, π bonds,
+ * rings, three-centre bonds, metals) have sections of their own.
  */
 export const EXAMPLE_GROUPS: { label: string; examples: Example[] }[] = [
   {
@@ -558,6 +587,15 @@ export const EXAMPLE_GROUPS: { label: string; examples: Example[] }[] = [
       { name: 'Ammonia (NH₃)', mol: AMMONIA },
       { name: 'Water (H₂O)', mol: WATER },
       { name: 'Aziridine (C₂H₅N)', mol: AZIRIDINE },
+    ],
+  },
+  {
+    label: 'Hydrogen halides',
+    examples: [
+      { name: 'Hydrogen fluoride (HF)', mol: HF },
+      { name: 'Hydrogen chloride (HCl)', mol: HCL },
+      { name: 'Hydrogen bromide (HBr)', mol: HBR },
+      { name: 'Hydrogen iodide (HI)', mol: HI },
     ],
   },
   {

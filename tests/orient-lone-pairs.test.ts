@@ -75,6 +75,10 @@ const MOLECULES = {
   brominePentafluoride: lewis('bromine-pentafluoride', 'F1-Br2 Br2-F3 Br2-F4 Br2-F5 Br2-F6'),
   xenonTetrafluoride: lewis('xenon-tetrafluoride', 'F1-Xe2 Xe2-F3 Xe2-F4 Xe2-F5'),
   zincChloride: lewis('zinc-chloride', 'Cl1-Zn2 Zn2-Cl3'),
+  hydrogenFluoride: lewis('hydrogen-fluoride', 'F1-H2'),
+  hydrogenChloride: lewis('hydrogen-chloride', 'Cl1-H2'),
+  hydrogenBromide: lewis('hydrogen-bromide', 'Br1-H2'),
+  hydrogenIodide: lewis('hydrogen-iodide', 'I1-H2'),
   tetrachloronickelate: lewis('NiCl4', 'Ni1-Cl2 Ni1-Cl3 Ni1-Cl4 Ni1-Cl5',
     { Ni1: 2, Cl2: -1, Cl3: -1, Cl4: -1, Cl5: -1 }),
   tetracyanonickelate: lewis('NiCN4', 'Ni1-C2 Ni1-C4 Ni1-C6 Ni1-C8 C2#N3 C4#N5 C6#N7 C8#N9',
@@ -111,6 +115,10 @@ const LONE_PAIR_COUNTS: Record<keyof typeof MOLECULES, Record<string, number>> =
   brominePentafluoride: { F1: 3, Br2: 1, F3: 3, F4: 3, F5: 3, F6: 3 },
   xenonTetrafluoride: { F1: 3, Xe2: 2, F3: 3, F4: 3, F5: 3 },
   zincChloride: { Cl1: 3, Cl3: 3 },
+  hydrogenFluoride: { F1: 3 },
+  hydrogenChloride: { Cl1: 3 },
+  hydrogenBromide: { Br1: 3 },
+  hydrogenIodide: { I1: 3 },
   tetrachloronickelate: { Cl2: 3, Cl3: 3, Cl4: 3, Cl5: 3 },
   tetracyanonickelate: { N3: 1, N5: 1, N7: 1, N9: 1 },
 };
@@ -338,6 +346,8 @@ describe('the VSEPR shape around each lone pair', () => {
     ['phosphorus pentachloride', MOLECULES.phosphorusPentachloride, 'Cl1'],
     ['tetrachloronickelate', MOLECULES.tetrachloronickelate, 'Cl2'],
     ['zinc chloride', MOLECULES.zincChloride, 'Cl1'],
+    ['hydrogen fluoride', MOLECULES.hydrogenFluoride, 'F1'],
+    ['hydrogen iodide', MOLECULES.hydrogenIodide, 'I1'],
   ] as const)('AXE₃, %s: three equivalent pairs around the bond', (_, molecule, atom) => {
     const pairs = lonePairsOf(molecule)[atomIndex(atom)];
     const [bond] = bondsOf(molecule, atomIndex(atom));

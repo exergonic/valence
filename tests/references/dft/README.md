@@ -79,3 +79,16 @@ re-run matched to 0.014 kcal/mol.
 | benzene.xyz | D6h | 415 |
 | butenyne.xyz | Cs | 228 |
 | diborane.xyz | D2h | 347 |
+
+### The hydrogen halides (2026-10-29)
+
+For the "Hydrogen halides" examples and the lone-pair tests; the runs are in
+`~/orca_calcs/hydrogen-halides/README.md`, same method (I with ORCA's
+def2-ECP), each a minimum.
+
+| File | Point group | Harmonic frequency (cm⁻¹) |
+|------|-------------|---------------------------|
+| hydrogen-fluoride.xyz | C∞v | 4156 |
+| hydrogen-chloride.xyz | C∞v | 3012 |
+| hydrogen-bromide.xyz | C∞v | 2699 |
+| hydrogen-iodide.xyz | C∞v | 2378 |
