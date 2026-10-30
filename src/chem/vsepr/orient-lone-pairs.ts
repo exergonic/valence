@@ -1,6 +1,35 @@
+import type { Molecule } from '../../mol-parser';
+import { ionicContacts, sigmaNeighbors, type AtomOrbitals } from './assign-orbitals';
 import {
   vecSub, vecNormalize, vecDot, crossProduct, findPerpendicular, projectPerpendicular, rotateRodrigues, rotateToward,
 } from '../../utils/vec3';
+
+/**
+ * The σ lone pairs the VSEPR view draws on each atom, as unit directions from
+ * the atom: oriented by its σ bonds, or, for a bare anion, by the cations it
+ * touches. Hydrogen and the atoms the model does not describe get none. The
+ * renderer draws exactly these, and the tests check exactly these.
+ */
+export function lonePairDirectionsByAtom(
+  molecule: Molecule,
+  orbitals: AtomOrbitals[],
+): [number, number, number][][] {
+  // only contacts the electron-domain model describes — see assign-orbitals
+  const neighbors = sigmaNeighbors(molecule);
+  const cations = ionicContacts(molecule);
+  return molecule.atoms.map((atom, i) => {
+    const info = orbitals[i];
+    if (!info || !info.described || atom.element === 'H' || info.lonePairs === 0) return [];
+    const toward = (j: number): [number, number, number] => {
+      const other = molecule.atoms[j];
+      return [other.x - atom.x, other.y - atom.y, other.z - atom.z];
+    };
+    if (neighbors[i].length === 0 && cations[i].length > 0) {
+      return anionLonePairDirections(cations[i].map(toward), info.lonePairs);
+    }
+    return getLonePairDirections(neighbors[i].map(toward), neighbors[i].length + info.lonePairs, info.piDirection);
+  });
+}
 
 // Direction(s) for the σ lone-pair lobes of an atom, given its σ-bond
 // vectors and the total number of hybrid orbitals (σ bonds + lone

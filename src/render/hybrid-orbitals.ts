@@ -3,8 +3,8 @@ import type { Molecule } from '../mol-parser';
 import type { ColorScheme } from './setup';
 import { createLobeMesh, orientLobe, sigmaLobe, piLobe, lonePairLobe, sharedUnitSphere } from './lobes';
 import { getElementColor, getCovalentRadius, getVdwRadius, VISUAL_RADIUS_SCALE } from './chem-data';
-import { ionicContacts, sigmaNeighbors, type AtomOrbitals } from '../chem/vsepr/assign-orbitals';
-import { anionLonePairDirections, getLonePairDirections } from '../chem/vsepr/orient-lone-pairs';
+import { sigmaNeighbors, type AtomOrbitals } from '../chem/vsepr/assign-orbitals';
+import { lonePairDirectionsByAtom } from '../chem/vsepr/orient-lone-pairs';
 import { vecNormalize, crossProduct, findPerpendicular } from '../utils/vec3';
 
 export function renderHybridOrbitals(
@@ -18,7 +18,7 @@ export function renderHybridOrbitals(
   const n = molecule.atoms.length;
   // only contacts the electron-domain model describes — see assign-orbitals
   const adj = sigmaNeighbors(molecule);
-  const cations = ionicContacts(molecule);
+  const lonePairDirs = lonePairDirectionsByAtom(molecule, cached);
 
   for (let i = 0; i < n; i++) {
     const atom = molecule.atoms[i];
@@ -63,23 +63,11 @@ export function renderHybridOrbitals(
     }
 
     // Lone pairs in unfilled hybrid orbital directions
-    if (info.lonePairs > 0) {
-      const sigmaBonds = neighbors.length;
-      const totalHybrids = sigmaBonds + info.lonePairs;
-      const toward = (j: number): [number, number, number] => {
-        const c = molecule.atoms[j];
-        return [c.x - atom.x, c.y - atom.y, c.z - atom.z];
-      };
-      // a bare anion has no bond to orient its pairs by: they face its cations
-      const lpDirs = sigmaBonds === 0 && cations[i].length > 0
-        ? anionLonePairDirections(cations[i].map(toward), info.lonePairs)
-        : getLonePairDirections(neighborVectors, totalHybrids, info.piDirection);
-      for (const lpDir of lpDirs) {
-        const mesh = createLobeMesh(lonePairLobe(), colorScheme.lonePair, 0.5, preset, atomScale);
-        mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'lone_pair', label: info.hybridization };
-        orientLobe(mesh, atomPos, lpDir);
-        group.add(mesh);
-      }
+    for (const lpDir of lonePairDirs[i]) {
+      const mesh = createLobeMesh(lonePairLobe(), colorScheme.lonePair, 0.5, preset, atomScale);
+      mesh.userData = { atomIndex: i, element: atom.element, lobeType: 'lone_pair', label: info.hybridization };
+      orientLobe(mesh, atomPos, lpDir);
+      group.add(mesh);
     }
 
     // Pi orbitals based on hybridization

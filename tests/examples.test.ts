@@ -4,7 +4,7 @@ import type { Molecule } from '../src/mol-parser';
 import { EXAMPLES } from '../src/ui/examples';
 import { vecNormalize, vecDot, crossProduct, findPerpendicular } from '../src/utils/vec3';
 import { assignOrbitals, sigmaNeighbors } from '../src/chem/vsepr/assign-orbitals';
-import { getLonePairDirections } from '../src/chem/vsepr/orient-lone-pairs';
+import { lonePairDirectionsByAtom } from '../src/chem/vsepr/orient-lone-pairs';
 import { fillMissingHydrogens } from '../src/chem/fill-hydrogens';
 
 interface AtomExpectation {
@@ -585,7 +585,6 @@ describe('Lone-pair promotion geometry gate', () => {
   it('the carbanion lone pair sits on its own equal-angle axis, not on the π direction', () => {
     const mol = pyramidalAllylAnion();
     const cls = assignOrbitals(mol);
-    const atom = cls[2];
     const center = mol.atoms[2];
     const bondVecs = mol.bonds
       .filter((b) => b.atom1Index === 2 || b.atom2Index === 2)
@@ -593,7 +592,7 @@ describe('Lone-pair promotion geometry gate', () => {
         const n = mol.atoms[b.atom1Index === 2 ? b.atom2Index : b.atom1Index];
         return [n.x - center.x, n.y - center.y, n.z - center.z] as [number, number, number];
       });
-    const dirs = getLonePairDirections(bondVecs, bondVecs.length + atom.lonePairs, atom.piDirection);
+    const dirs = lonePairDirectionsByAtom(mol, cls)[2];
     expect(dirs).toHaveLength(1);
     const angleTo = (v: [number, number, number]) =>
       (Math.acos(Math.max(-1, Math.min(1, vecDot(vecNormalize(dirs[0]), vecNormalize(v))))) * 180) / Math.PI;
@@ -785,11 +784,9 @@ describe('Methyl anion — the charge-aware lone pair (2026-09-23)', () => {
     });
   };
 
-  // The direction the renderer draws for the single lone pair:
-  // getLonePairDirections(σ directions, σ bonds + lone pairs, π direction).
+  // The direction the renderer draws for the single lone pair.
   const lonePairDirection = (mol: Molecule): [number, number, number] => {
-    const atom = assignOrbitals(mol)[0];
-    const dirs = getLonePairDirections(bondVectors(mol), mol.bonds.length + atom.lonePairs, atom.piDirection);
+    const dirs = lonePairDirectionsByAtom(mol, assignOrbitals(mol))[0];
     expect(dirs).toHaveLength(1);
     return dirs[0];
   };
