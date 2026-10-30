@@ -104,6 +104,9 @@ async function examplesInEveryView(b: Browser) {
     const formula: string = await b.run(`return document.getElementById('mol-formula').textContent.trim();`);
     const problems: string[] = [];
     if (!formula) problems.push('no formula in the header');
+    // the example is drawn in the sketcher too (drawInSketcher)
+    const sketched: string = await b.run(`return window.jsmeApplet.smiles();`);
+    if (!sketched) problems.push('the sketcher stayed blank');
     for (const model of VIEWS) {
       await view(b, model);
       const coverage = await sceneCoverage(b);

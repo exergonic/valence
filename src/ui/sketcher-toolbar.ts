@@ -76,13 +76,49 @@ const TOOL_ACTIONS: Record<string, number> = {
 function cleanLayout(applet: Window['jsmeApplet']): { before: Drawing; after: string } | null {
   if (!applet.smiles()) return null;
   const before = drawingNow(applet);
-  const lines = before.molFile.split('\n');
-  const atomCount = parseInt(lines[3]?.slice(0, 3) ?? '', 10);
-  if (!Number.isFinite(atomCount)) return null;
-  const zeroed = lines.map((line, i) => (i >= 4 && i < 4 + atomCount ? `    0.0000    0.0000    0.0000${line.slice(30)}` : line));
-  applet.readMolFile(zeroed.join('\n'));
+  const zeroed = withCoordinatesZeroed(before.molFile);
+  if (!zeroed) return null;
+  applet.readMolFile(zeroed);
   restoreXAtoms(applet, before.xAtoms);
   return { before, after: applet.molFile() };
+}
+
+/** A V2000 MOL block with every atom at the origin, which JSME reads by
+ *  laying the molecule out in 2D itself; null if it has no counts line. */
+function withCoordinatesZeroed(molFile: string): string | null {
+  const lines = molFile.split('\n');
+  const atomCount = parseInt(lines[3]?.slice(0, 3) ?? '', 10);
+  if (!Number.isFinite(atomCount)) return null;
+  return lines
+    .map((line, i) => (i >= 4 && i < 4 + atomCount ? `    0.0000    0.0000    0.0000${line.slice(30)}` : line))
+    .join('\n');
+}
+
+/**
+ * Draw a structure in the sketcher, an example's: its MOL block carries 3D
+ * coordinates, so it goes in laid out afresh, as Clean lays a drawing out.
+ * An atom JSME gives a charge other than the block's then goes in as an X
+ * atom with the block's: the charges JSME refuses (Ni²⁺, its Cl⁻ and C⁻
+ * ligands read neutral) and the ones it imposes (diborane's four-bonded B
+ * read B⁻, its bridging H H⁺). A neutral one is bracketed too, "[B]", or
+ * JSME's own atom would take the charge again. So the drawing is the
+ * molecule on screen, and Build reads the same molecule back.
+ */
+export function drawInSketcher(applet: Window['jsmeApplet'], molFile: string): void {
+  const zeroed = withCoordinatesZeroed(molFile);
+  if (!zeroed) return;
+  applet.readMolFile(zeroed);
+  const drawn = parseMolBlock(molFile).atoms;
+  const read = parseMolBlock(applet.molFile()).atoms;
+  const jme = jmeTokens(applet);
+  let relabelled = false;
+  drawn.forEach((atom, i) => {
+    const charge = atom.charge ?? 0;
+    if (charge === (read[i]?.charge ?? 0)) return;
+    jme[jmeLabel(i)] = charge === 0 ? `[${atom.element}]` : jmeAtomLabel(atom.element, charge);
+    relabelled = true;
+  });
+  if (relabelled) applet.readMolecule(jme.join(' '));
 }
 
 /** A drawing as Clean keeps it to undo to: its MOL block, and the charged X

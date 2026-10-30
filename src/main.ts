@@ -23,7 +23,7 @@ import { EXAMPLE_GROUPS, EXAMPLES } from './ui/examples';
 import { isVseprElement } from './chem/vsepr/assign-orbitals';
 import { preloadGfn2 } from './geometry/gfn2-refine';
 import { setupTheme } from './ui/theme';
-import { setupSketcherToolbar } from './ui/sketcher-toolbar';
+import { drawInSketcher, setupSketcherToolbar } from './ui/sketcher-toolbar';
 
 function setupSplitter() {
   const splitter = document.getElementById('splitter')!;
@@ -94,6 +94,8 @@ function setupExamples(ctx: SceneContext) {
     if (!ex) return;
 
     resetGfn2Spin();
+    // the sketcher shows what the scene shows, rather than the last drawing
+    if (window.jsmeApplet) drawInSketcher(window.jsmeApplet, ex.mol);
     const parsed = parseMolBlock(ex.mol);
     const notes = loadMolecule(ctx, parsed, ex.multiplicity ?? 1);
     if (ctx.currentMolecule) {
