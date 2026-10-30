@@ -30,9 +30,14 @@ const TYPE_TO_HYBRID: Record<number, string> = {
   1: 'sp3',  // CR — alkyl C
   2: 'sp2',  // C=C — vinylic C
   3: 'sp2',  // C=O — carbonyl C
-  4: 'sp',   // CSP — acetylenic C
+  4: 'sp',   // CSP — acetylenic C (and an isocyanate's sp C)
+  8: 'sp3',  // NR — amine N (ammonia, aziridine)
+  9: 'sp2',  // N=C — imine N (an isocyanate's N)
   11: 'sp3', // F — covalent fluorine (1 σ + 3 lone pairs)
   12: 'sp3', // CL — covalent chlorine (1 σ + 3 lone pairs)
+  13: 'sp3', // BR — covalent bromine (1 σ + 3 lone pairs)
+  22: 'sp3', // CR3R — three-ring C (aziridine)
+  51: 'sp2', // O=+ — oxenium O (ozone's central O)
   25: 'sp3', // PO4 — tetracoordinate P (phosphates, phosphoranes; PCl₅'s penta-coordinate P is the deviation below)
   26: 'sp3', // P — tricoordinate phosphine
   6: 'sp3',  // OR — O single-bonded to C (ethers, alcohols)
@@ -75,6 +80,30 @@ const DEVIATIONS: Deviation[] = [
     element: 'S',
     reason:
       'hypervalent S: 6 σ bonds → sp³d² (the octahedron), but MMFF94 types the hexacoordinate S as 15 — the same type as 2-coordinate thiol/sulfide S — and the per-type table cannot separate them. The 15 row maps the 2-coordinate expectation; the graph-derived sp³d² is the chemistry.',
+  },
+  {
+    molecule: 'Sulfur tetrafluoride (SF₄)',
+    element: 'S',
+    reason:
+      'hypervalent S: 4 σ bonds + 1 lone pair → sp³d (the seesaw), but MMFF94 types it 15, the thiol/sulfide S, as it does SF₆\'s.',
+  },
+  {
+    molecule: 'Chlorine trifluoride (ClF₃)',
+    element: 'Cl',
+    reason:
+      'hypervalent Cl: 3 σ bonds + 2 lone pairs → sp³d (the T), but MMFF94 types it 12, the terminal covalent Cl.',
+  },
+  {
+    molecule: 'Bromine pentafluoride (BrF₅)',
+    element: 'Br',
+    reason:
+      'hypervalent Br: 5 σ bonds + 1 lone pair → sp³d² (the square pyramid), but MMFF94 types it 13, the terminal covalent Br.',
+  },
+  {
+    molecule: 'Ozone (O₃)',
+    element: 'O',
+    reason:
+      'promotion label: the terminal O⁻ gives a lone pair to the three-centre π (sp² with a p orbital), but MMFF94 types it 6 (OR, single-bonded O), as it does phenol\'s O.',
   },
 ];
 

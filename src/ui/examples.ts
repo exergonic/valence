@@ -391,23 +391,224 @@ const NICN4 = HEADER + `  9  8  0  0  0  0  0  0  0  0999 V2000
 M  CHG  5   1   2   2  -1   4  -1   6  -1   8  -1
 M  END`;
 
-export const EXAMPLES: Example[] = [
-  { name: 'Methane (CH₄)', mol: METHANE },
-  { name: 'Ethene (C₂H₄)', mol: ETHENE },
-  { name: 'Ethyne (C₂H₂)', mol: ETHYNE },
-  { name: 'Benzene (C₆H₆)', mol: BENZENE },
-  { name: 'Pyridine (C₅H₅N)', mol: PYRIDINE },
-  { name: 'Pyrrole (C₄H₅N)', mol: PYRROLE },
-  { name: 'Imidazole (C₃H₄N₂)', mol: IMIDAZOLE },
-  { name: 'Phenol (C₆H₅OH)', mol: PHENOL },
-  { name: 'Nitrogen (N₂)', mol: N2 },
-  { name: 'Oxygen (O₂)', mol: O2 },
-  { name: 'Water (H₂O)', mol: WATER },
-  { name: 'Phosphorus pentachloride (PCl₅)', mol: PCL5 },
-  { name: 'Sulfur hexafluoride (SF₆)', mol: SF6 },
-  { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
-  { name: 'Diborane (B₂H₆)', mol: DIBORANE },
-  { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2, note: ZNCL2_LINEAR },
-  { name: 'Tetrachloronickelate(II) ([NiCl₄]²⁻, triplet)', mol: NICL4, multiplicity: 3, note: JAHN_TELLER },
-  { name: 'Tetracyanonickelate(II) ([Ni(CN)₄]²⁻, singlet)', mol: NICN4 },
+// From the wB97X-D3/def2-TZVP minima in tests/references/dft (ORCA; each a
+// minimum, see its README): the coordinates as ORCA left them, the bonds and
+// charges the Lewis structure's. The lone-pair tests run on the same files.
+const AMMONIA = HEADER + `  4  3  0  0  0  0  0  0  0  0999 V2000
+    1.0144    0.0377   -0.0997 N   0  0  0  0  0  0  0  0  0  0  0  0
+    2.0247    0.0571   -0.0742 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6926    0.9919   -0.1888 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.6925   -0.3110    0.7928 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+`;
+
+const AZIRIDINE = HEADER + `  8  8  0  0  0  0  0  0  0  0999 V2000
+   -0.0274    0.8407   -0.0553 C   0  0  0  0  0  0  0  0  0  0  0  0
+    0.7660   -0.3961    0.0826 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.6865   -0.4602   -0.0335 N   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0645    1.3566   -1.0071 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.1166    1.4828    0.8141 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.2202   -0.5995    1.0462 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.3098   -0.7880   -0.7683 H   0  0  0  0  0  0  0  0  0  0  0  0
+   -1.1102   -0.6305    0.8695 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+  1  5  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  6  1  0  0  0  0
+  2  7  1  0  0  0  0
+  3  8  1  0  0  0  0
+M  END
+`;
+
+const FORMALDEHYDE = HEADER + `  4  3  0  0  0  0  0  0  0  0999 V2000
+    0.5815    0.0000    0.0007 C   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.6144   -0.0000   -0.0003 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1671    0.9393    0.0012 H   0  0  0  0  0  0  0  0  0  0  0  0
+    1.1671   -0.9393    0.0012 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  1  3  1  0  0  0  0
+  1  4  1  0  0  0  0
+M  END
+`;
+
+const METHYL_ISOCYANATE = HEADER + `  7  6  0  0  0  0  0  0  0  0999 V2000
+    1.0177   -0.0731    0.0906 C   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4220   -0.3641    0.1242 N   0  0  0  0  0  0  0  0  0  0  0  0
+    3.1668   -1.2843    0.2755 C   0  0  0  0  0  0  0  0  0  0  0  0
+    3.9854   -2.1065    0.4095 O   0  0  0  0  0  0  0  0  0  0  0  0
+    0.8808    0.9952   -0.0644 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.5402   -0.3512    1.0314 H   0  0  0  0  0  0  0  0  0  0  0  0
+    0.5297   -0.6063   -0.7267 H   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  1  5  1  0  0  0  0
+  1  6  1  0  0  0  0
+  1  7  1  0  0  0  0
+  2  3  2  0  0  0  0
+  3  4  2  0  0  0  0
+M  END
+`;
+
+const OZONE = HEADER + `  3  2  0  0  0  0  0  0  0  0999 V2000
+   -1.0592    0.2122    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+   -0.0000   -0.4243    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+    1.0592    0.2122    0.0000 O   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  2  0  0  0  0
+  2  3  1  0  0  0  0
+M  CHG  2   2   1   3  -1
+M  END
+`;
+
+const SF4 = HEADER + `  5  4  0  0  0  0  0  0  0  0999 V2000
+    1.1637   -0.2482    0.6385 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4472    0.0329   -0.3568 S   0  0  0  0  0  0  0  0  0  0  0  0
+    3.8535    0.2668   -1.1839 F   0  0  0  0  0  0  0  0  0  0  0  0
+    3.0146    0.9674    0.7444 F   0  0  0  0  0  0  0  0  0  0  0  0
+    3.0109   -1.3427    0.0873 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+M  END
+`;
+
+const CLF3 = HEADER + `  4  3  0  0  0  0  0  0  0  0999 V2000
+    0.9444   -0.1631    0.5543 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.2820    0.0404   -0.4581 Cl  0  0  0  0  0  0  0  0  0  0  0  0
+    3.7088    0.2165   -1.3456 F   0  0  0  0  0  0  0  0  0  0  0  0
+    3.1959   -0.2317    0.8182 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+M  END
+`;
+
+const XEF2 = HEADER + `  3  2  0  0  0  0  0  0  0  0999 V2000
+    0.9651    0.0644    0.0706 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.9407    0.0644    0.0706 Xe  0  0  0  0  0  0  0  0  0  0  0  0
+    4.9163    0.0644    0.0706 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+M  END
+`;
+
+const BRF5 = HEADER + `  6  5  0  0  0  0  0  0  0  0999 V2000
+    1.8853   -1.1272   -1.1521 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.3156    0.0492    0.0898 Br  0  0  0  0  0  0  0  0  0  0  0  0
+    3.0702    1.1453    1.2479 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4759   -1.2647    1.2559 F   0  0  0  0  0  0  0  0  0  0  0  0
+    2.4812    1.2837   -1.1594 F   0  0  0  0  0  0  0  0  0  0  0  0
+    3.9195   -0.3483   -0.3260 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+  2  6  1  0  0  0  0
+M  END
+`;
+
+const XEF4 = HEADER + `  5  4  0  0  0  0  0  0  0  0999 V2000
+    1.5590   -0.3006    1.3032 F   0  0  0  0  0  0  0  0  0  0  0  0
+    3.0300   -0.0194    0.0773 Xe  0  0  0  0  0  0  0  0  0  0  0  0
+    2.7708    1.8950    0.2062 F   0  0  0  0  0  0  0  0  0  0  0  0
+    3.2809   -1.9345   -0.0463 F   0  0  0  0  0  0  0  0  0  0  0  0
+    4.5034    0.2532   -1.1493 F   0  0  0  0  0  0  0  0  0  0  0  0
+  1  2  1  0  0  0  0
+  2  3  1  0  0  0  0
+  2  4  1  0  0  0  0
+  2  5  1  0  0  0  0
+M  END
+`;
+
+// The sp carbon of an isocyanate is drawn linear, and a student who measures
+// 174° will think the structure wrong (2026-10-29: so did the user, until the
+// DFT minimum agreed with GFN2's bend).
+const ISOCYANATE_BENT: InfoNote = {
+  text: 'Bent at both ends: the N\'s lone pair bends C–N=C to about 140°, and even the sp carbon '
+    + 'is not quite linear — N=C=O 174° at this ωB97X-D3 minimum, bent away from the methyl.',
+  link: {
+    label: 'CH₃NCO\'s quasi-linear C–N=C bend (arXiv:1509.09305)',
+    href: 'https://arxiv.org/abs/1509.09305',
+  },
+};
+
+/**
+ * The dropdown's sections, in the order a bonding course meets them: the
+ * electron-domain count is the model's own organising idea (hybridization is
+ * read from it), and each domain section runs from no lone pairs to the
+ * most — CH₄, NH₃, H₂O; PCl₅, SF₄, ClF₃, XeF₂; SF₆, BrF₅, XeF₄. Molecules
+ * whose lesson is not one centre's domains (π bonds, rings, three-centre
+ * bonds, metals) have sections of their own.
+ */
+export const EXAMPLE_GROUPS: { label: string; examples: Example[] }[] = [
+  {
+    label: 'Four electron domains',
+    examples: [
+      { name: 'Methane (CH₄)', mol: METHANE },
+      { name: 'Ammonia (NH₃)', mol: AMMONIA },
+      { name: 'Water (H₂O)', mol: WATER },
+      { name: 'Aziridine (C₂H₅N)', mol: AZIRIDINE },
+    ],
+  },
+  {
+    label: 'Double and triple bonds',
+    examples: [
+      { name: 'Ethene (C₂H₄)', mol: ETHENE },
+      { name: 'Ethyne (C₂H₂)', mol: ETHYNE },
+      { name: 'But-1-en-3-yne (H₂C=CH-C≡CH)', mol: BUTENYNE },
+      { name: 'Formaldehyde (H₂CO)', mol: FORMALDEHYDE },
+      { name: 'Methyl isocyanate (CH₃NCO)', mol: METHYL_ISOCYANATE, note: ISOCYANATE_BENT },
+      { name: 'Nitrogen (N₂)', mol: N2 },
+      { name: 'Oxygen (O₂)', mol: O2 },
+      { name: 'Ozone (O₃)', mol: OZONE },
+    ],
+  },
+  {
+    label: 'Aromatic rings',
+    examples: [
+      { name: 'Benzene (C₆H₆)', mol: BENZENE },
+      { name: 'Pyridine (C₅H₅N)', mol: PYRIDINE },
+      { name: 'Pyrrole (C₄H₅N)', mol: PYRROLE },
+      { name: 'Imidazole (C₃H₄N₂)', mol: IMIDAZOLE },
+      { name: 'Phenol (C₆H₅OH)', mol: PHENOL },
+    ],
+  },
+  {
+    label: 'Five electron domains',
+    examples: [
+      { name: 'Phosphorus pentachloride (PCl₅)', mol: PCL5 },
+      { name: 'Sulfur tetrafluoride (SF₄)', mol: SF4 },
+      { name: 'Chlorine trifluoride (ClF₃)', mol: CLF3 },
+      { name: 'Xenon difluoride (XeF₂)', mol: XEF2 },
+    ],
+  },
+  {
+    label: 'Six electron domains',
+    examples: [
+      { name: 'Sulfur hexafluoride (SF₆)', mol: SF6 },
+      { name: 'Bromine pentafluoride (BrF₅)', mol: BRF5 },
+      { name: 'Xenon tetrafluoride (XeF₄)', mol: XEF4 },
+    ],
+  },
+  {
+    label: 'Three-centre bonds',
+    examples: [
+      { name: 'Diborane (B₂H₆)', mol: DIBORANE },
+    ],
+  },
+  {
+    label: 'Metal centres',
+    examples: [
+      { name: 'Zinc chloride (ZnCl₂)', mol: ZNCL2, note: ZNCL2_LINEAR },
+      { name: 'Tetrachloronickelate(II) ([NiCl₄]²⁻, triplet)', mol: NICL4, multiplicity: 3, note: JAHN_TELLER },
+      { name: 'Tetracyanonickelate(II) ([Ni(CN)₄]²⁻, singlet)', mol: NICN4 },
+    ],
+  },
 ];
+
+/** Every example, in the dropdown's order — the number keys 1–9 load the first nine. */
+export const EXAMPLES: Example[] = EXAMPLE_GROUPS.flatMap((group) => group.examples);

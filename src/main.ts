@@ -19,7 +19,7 @@ import { setupModelViews } from './ui/model-views';
 import { setupAnnotations } from './ui/annotations';
 import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, applyViewState } from './ui/view-state';
 import { parseMolBlock, type Molecule } from './mol-parser';
-import { EXAMPLES } from './ui/examples';
+import { EXAMPLE_GROUPS, EXAMPLES } from './ui/examples';
 import { isVseprElement } from './chem/vsepr/assign-orbitals';
 import { preloadGfn2 } from './geometry/gfn2-refine';
 import { setupTheme } from './ui/theme';
@@ -72,12 +72,19 @@ function loadMolecule(ctx: SceneContext, parsed: Molecule, multiplicity = 1): st
 function setupExamples(ctx: SceneContext) {
   const dropdown = document.getElementById('examples-dropdown') as HTMLSelectElement;
 
-  // Populate from EXAMPLES array — single source of truth
-  for (let i = 0; i < EXAMPLES.length; i++) {
-    const opt = document.createElement('option');
-    opt.value = String(i);
-    opt.textContent = EXAMPLES[i].name;
-    dropdown.appendChild(opt);
+  // One section per group; each option's value is its index in EXAMPLES,
+  // which lists the groups' examples in this same order
+  let index = 0;
+  for (const group of EXAMPLE_GROUPS) {
+    const section = document.createElement('optgroup');
+    section.label = group.label;
+    for (const example of group.examples) {
+      const opt = document.createElement('option');
+      opt.value = String(index++);
+      opt.textContent = example.name;
+      section.appendChild(opt);
+    }
+    dropdown.appendChild(section);
   }
 
   dropdown.addEventListener('change', () => {
