@@ -5602,3 +5602,32 @@ fitted to the same potential as the dipole and on X read −0.57, −0.20, −0.
 −0.26, −0.21) and Hirshfeld (−0.29, −0.22, −0.21, −0.18) fall, so the note
 names Mulliken and CM5. The ESP map comes from the same density as the dipole,
 so it is no guide to this trend either.
+
+## Groups only take an end atom's place; JSME's zoom kept (2026-10-30)
+
+Supersedes "A group takes the place of an end atom" (2026-10-26). A group
+from "Groups…" took an end atom's place but was bonded to a ring or chain
+atom, and the substitution showed JSME's bonded group for the length of the
+press: JSME applies a substituent action on the press (its drawing changes
+within the mousedown), and the rewrite ran after the release. Now one rule:
+a group takes the place of an end atom or a lone atom, bonded to the
+neighbour by the group's own bond (=O on ethane's methyl is formaldehyde),
+and on a ring or chain atom it is not drawn — a ring substituent is a bond
+first, then the group on its end. The rewrite runs from the press in a
+requestAnimationFrame: JSME's read redraws its SVG synchronously (measured),
+so the frame after the press already paints the group in place. A refused
+group reads back the drawing from the press, whole: JSME had also charged
+the atom (pyridine's N, nitro bonded, read N⁺, and taking only the group
+out kept it). Checked in the app: methanol's O → nitromethane, pyridine's N
+unchanged; the smoke test drags CN onto methylamine's N (acetonitrile) and
+clicks it on dimethylamine's N (unchanged, after JSME drew it).
+
+**The zoom.** JSME's zoom is its "molecular area scale" — 2 on a fresh page,
+changed by the mouse wheel (three notches: 2.12), read and set by
+`getMolecularAreaScale`/`setMolecularAreaScale`. `readMolFile` and
+`readMolecule` put it back to 1, synchronously; `readGenericMolecularInput`
+does too, a moment later. Every read the toolbar makes (Clean, an example
+drawn, Undo over a read, a group, a refused charge, a radical, an
+unpairing) now goes through `readMolFile`/`readJme`, which set the scale
+back. Every example fits the sketcher at 2 (the widest, Ni(CN)₄²⁻ and PCl₅,
+checked by eye).
