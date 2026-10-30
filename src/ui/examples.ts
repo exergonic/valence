@@ -571,6 +571,23 @@ const ISOCYANATE_BENT: InfoNote = {
   },
 };
 
+// GFN2-xTB's full dipole does not fall down group 17 as experiment's does
+// (2.52, 1.05, 2.51, 2.37 D for HF to HI; xtb 6.7.1 agrees — NOTES.md,
+// 2026-10-29), and neither do the ESP-fitted charges, fitted to the same
+// potential (X −0.57, −0.20, −0.38, −0.32). Mulliken's (−0.39, −0.33, −0.27,
+// −0.19) and CM5's (−0.36, −0.27, −0.26, −0.21) do. The lesson is read from
+// those (the user's call, 2026-10-30); the note gives experiment's dipoles.
+const HALIDE_DIPOLES: InfoNote = {
+  text: 'Experiment\'s dipoles fall down the group: HF 1.83, HCl 1.09, HBr 0.83, HI 0.45 D. '
+    + 'GFN2-xTB\'s computed dipole does not follow them for HBr and HI, nor do its ESP-fitted '
+    + 'charges, fitted to the same potential. Read the trend from the Mulliken or CM5 charges '
+    + '(Charge Model, "Charges from"), which do.',
+  link: {
+    label: 'NIST CCCBDB, experimental dipoles',
+    href: 'https://cccbdb.nist.gov/diplistx.asp',
+  },
+};
+
 /**
  * The dropdown's sections, in the order a bonding course meets them: the
  * electron-domain count is the model's own organising idea (hybridization is
@@ -592,10 +609,10 @@ export const EXAMPLE_GROUPS: { label: string; examples: Example[] }[] = [
   {
     label: 'Hydrogen halides',
     examples: [
-      { name: 'Hydrogen fluoride (HF)', mol: HF },
-      { name: 'Hydrogen chloride (HCl)', mol: HCL },
-      { name: 'Hydrogen bromide (HBr)', mol: HBR },
-      { name: 'Hydrogen iodide (HI)', mol: HI },
+      { name: 'Hydrogen fluoride (HF)', mol: HF, note: HALIDE_DIPOLES },
+      { name: 'Hydrogen chloride (HCl)', mol: HCL, note: HALIDE_DIPOLES },
+      { name: 'Hydrogen bromide (HBr)', mol: HBR, note: HALIDE_DIPOLES },
+      { name: 'Hydrogen iodide (HI)', mol: HI, note: HALIDE_DIPOLES },
     ],
   },
   {
