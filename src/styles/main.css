@@ -1077,7 +1077,8 @@ button, input, select, textarea { font-family: inherit; }
 .inspector-section .label-mode-select { font-size: 12px; padding: 6px 8px; }
 
 /* one view's section at a time */
-.for-vsepr, .for-charge, .for-localized, .for-delocalized { display: none; }
+.for-structure, .for-vsepr, .for-charge, .for-localized, .for-delocalized { display: none; }
+#inspector[data-view="structure"] .for-structure,
 #inspector[data-view="vsepr"] .for-vsepr,
 #inspector[data-view="charge"] .for-charge,
 #inspector[data-view="localized"] .for-localized,
@@ -1377,8 +1378,8 @@ button, input, select, textarea { font-family: inherit; }
   color: var(--text-2);
 }
 
-/* the Refine button and other plain buttons inside a section */
-.ctrl-section > button:not([class]) {
+/* the Refine button */
+.refine-btn {
   width: 100%;
   padding: 6px 8px;
   border: 1px solid var(--border);
@@ -1391,7 +1392,7 @@ button, input, select, textarea { font-family: inherit; }
   box-shadow: var(--bevel);
 }
 
-.ctrl-section > button:not([class]):hover {
+.refine-btn:hover:not(:disabled) {
   border-color: var(--accent-soft-border);
   color: var(--accent);
 }
@@ -1715,6 +1716,9 @@ button, input, select, textarea { font-family: inherit; }
   margin-top: 8px;
   padding: 4px 0;
 }
+.measure-clear.hidden,
+#measure-points:empty,
+#measure-result:empty { display: none; }
 
 /* ── Floating Action Buttons ── */
 

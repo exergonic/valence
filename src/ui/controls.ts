@@ -26,7 +26,7 @@ export function setupControls(ctx: SceneContext): { measure: MeasureTool } {
     });
   };
 
-  // The controls live in two places — the inspector (the active model's) and
+  // The controls live in two places — the inspector (the active view's) and
   // the settings drawer (everything global) — so they are found by id.
 
   // ── Settings drawer ──
