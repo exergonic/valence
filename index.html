@@ -117,6 +117,7 @@
         <!-- Model views: one per model of bonding; the inspector follows (src/ui/model-views.ts) -->
         <div id="model-views">
           <div class="model-views-bar" role="toolbar" aria-label="Model views">
+            <button data-model="structure" title="Structure: the atoms and bonds alone, labelled by element">Structure</button>
             <button data-model="vsepr" title="VSEPR: the hybrid orbitals and lone pairs, labelled by element">VSEPR</button>
             <button data-model="charge" title="Charge model: the atoms with their partial charges, the electrostatic potential surface and the dipole">Charge Model</button>
             <button data-model="localized" title="Localized orbitals: the bonds and lone pairs (Pipek–Mezey), the highest occupied one drawn">Localized Orbitals</button>
@@ -164,15 +165,15 @@
 
       <!-- The inspector: the active model view's controls, and nothing else.
            Its sections show by the view (data-view, set in model-views.ts). -->
-      <aside id="inspector" data-view="vsepr" aria-label="Model controls">
+      <aside id="inspector" data-view="structure" aria-label="Model controls">
         <button id="inspector-rail" title="Show the model panel (O)">
           <span class="rail-expand">+</span>
-          <span class="rail-label" id="inspector-rail-label">VSEPR</span>
+          <span class="rail-label" id="inspector-rail-label">Structure</span>
         </button>
         <div class="inspector-head">
           <div class="inspector-heading">
             <span class="inspector-eyebrow">Model</span>
-            <h2 id="inspector-title">VSEPR</h2>
+            <h2 id="inspector-title">Structure</h2>
           </div>
           <button id="inspector-collapse" class="panel-fold-btn" title="Collapse (O)" aria-label="Collapse the model panel">&raquo;</button>
           <p id="inspector-blurb"></p>

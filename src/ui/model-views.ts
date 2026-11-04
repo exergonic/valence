@@ -1,10 +1,12 @@
 /**
- * The four model views: one button per model of bonding the app can draw, and
- * the inspector on the right that holds that model's controls and nothing
- * else.
+ * The model views: the bare structure, then one button per model of bonding
+ * the app can draw, and the inspector on the right that holds that model's
+ * controls and nothing else.
  *
+ *   Structure    — the atoms and bonds alone, element labels (the view the app
+ *                  opens on: a lesson about a shape, a bond length or an angle
+ *                  wants nothing drawn over the atoms — asked for 2026-11-04)
  *   VSEPR        — the hybrid orbitals and lone pairs alone, element labels
- *                  (the view the app opens on)
  *   Charge Model — the atoms, their partial charges, the ESP surface, the dipole
  *   Localized    — the atoms, element labels, the Pipek–Mezey orbital list
  *                  with its highest occupied orbital drawn
@@ -23,7 +25,7 @@
 import type { SceneContext } from '../render';
 import type { MoPanel } from './mo-diagram';
 
-export type ModelView = 'vsepr' | 'charge' | 'localized' | 'delocalized';
+export type ModelView = 'structure' | 'vsepr' | 'charge' | 'localized' | 'delocalized';
 
 interface Preset {
   /** Atoms & bonds */
@@ -40,6 +42,11 @@ interface Preset {
 }
 
 const PRESETS: Record<ModelView, Preset> = {
+  structure: {
+    atoms: true, vseprOrbitals: false, labels: 'atom', esp: false, dipole: false, orbitals: 'none',
+    title: 'Structure',
+    blurb: 'The atoms where the calculation put them: the shape, the bond lengths, the angles (Settings → Tools → Measure).',
+  },
   vsepr: {
     atoms: false, vseprOrbitals: true, labels: 'atom', esp: false, dipole: false, orbitals: 'none',
     title: 'VSEPR',
@@ -83,7 +90,7 @@ export function setupModelViews(ctx: SceneContext, moPanel: MoPanel): void {
   const railLabel = document.getElementById('inspector-rail-label')!;
   const blurb = document.getElementById('inspector-blurb')!;
 
-  let active: ModelView = 'vsepr';
+  let active: ModelView = 'structure';
   // Numbered element labels are a reader's choice, not a view's: once picked,
   // a view that shows element symbols shows them numbered, until plain
   // symbols are picked again.
@@ -142,5 +149,5 @@ export function setupModelViews(ctx: SceneContext, moPanel: MoPanel): void {
     if (active === 'localized' || active === 'delocalized') moPanel.selectHomo();
   };
 
-  apply('vsepr');
+  apply('structure');
 }

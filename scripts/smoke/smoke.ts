@@ -17,7 +17,7 @@
 import { launchBrowser, sleep, type Browser } from './browser';
 
 const url = process.argv[2] ?? 'http://localhost:5173/valence/';
-const VIEWS = ['vsepr', 'charge', 'localized', 'delocalized'] as const;
+const VIEWS = ['structure', 'vsepr','charge', 'localized', 'delocalized'] as const;
 
 interface Result { name: string; ok: boolean; detail: string }
 const results: Result[] = [];
