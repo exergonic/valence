@@ -5662,3 +5662,16 @@ history the same way; only the group left a wrong molecule in it.
 **JSME's Undo and Redo reset the zoom** to 1, as a read does: the toolbar's
 buttons go through `keepingZoom`, and Ctrl+Z / Ctrl+Y typed on the keyboard
 get the zoom put back before the next frame.
+
+## The app opens on Structure (2026-11-04)
+
+Asked for by the user: many lessons want only a geometrical point made — a
+shape, a bond length, an angle — and the VSEPR view, which the app opened on,
+hid the atoms under its lobes. A Structure view now comes first: the atoms and
+bonds, element labels, nothing drawn over them, the measure tool named in its
+blurb. It has no section of its own in the inspector (the shared Atoms & bonds
+and Labels controls are all it needs) and no hover, since nothing on screen is
+an orbital or a surface to describe. VSEPR is unchanged, one click away.
+ISSUES.md asked for "no view selected"; a lit Structure button was chosen
+instead, because the inspector names the view it shows and would otherwise
+name nothing (model-views.ts).

@@ -154,7 +154,9 @@ Made with the user; the reasons are in NOTES.md under the date.
 - **Keep optimising** (2026-10-24): a free run that stops short offers it in
   the header — another run from the best structure reached, with a fresh
   budget, as often as the user likes; no unlimited mode.
-- **The hover, per view** (2026-10-21): VSEPR the lobe's hybrid; Charge Model
+- **The app opens on Structure** (2026-11-04): the atoms and bonds alone,
+  element labels; VSEPR and the bonding models are views a click away.
+- **The hover, per view** (2026-10-21): Structure none; VSEPR the lobe's hybrid; Charge Model
   the ESP under the pointer; Localized the orbital's NBO hybrid on the atom
   and its E(2) with the anchor; Delocalized the MO, the lobe's atom by s/p/d
   share, and its phase.
