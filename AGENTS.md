@@ -155,7 +155,12 @@ Made with the user; the reasons are in NOTES.md under the date.
   the header — another run from the best structure reached, with a fresh
   budget, as often as the user likes; no unlimited mode.
 - **The app opens on Structure** (2026-11-04): the atoms and bonds alone,
-  element labels; VSEPR and the bonding models are views a click away.
+  element labels; VSEPR and the bonding models are views a click away. Its
+  panel holds what bears on the geometry itself — Measure, the vibrations,
+  the spin and Refine, Skip PubChem, Snap to point group — not Settings.
+- **A carbene is two dots** (2026-11-04): the radical tool's second click,
+  "C••". The dots say nothing of the spin: a singlet until a triplet is
+  chosen beside Refine.
 - **The hover, per view** (2026-10-21): Structure none; VSEPR the lobe's hybrid; Charge Model
   the ESP under the pointer; Localized the orbital's NBO hybrid on the atom
   and its E(2) with the anchor; Delocalized the MO, the lobe's atom by s/p/d
@@ -232,7 +237,7 @@ Each module's header comment says what it does and why; this list says where.
   pressed once, out of sight, to borrow the "Nonstandard atom" text box.
 - Charges JSME refuses go on its X atom (`x-atom-labels.ts`), and so does a
   radical, which JSME has no tool for: the radical tool writes the atom
-  "C•".
+  "C•", then "C••", then takes the dots off.
 - **A drawn zwitterion stays as drawn** (2026-10-26): JSME pairs two
   neighbouring opposite charges into a bond on every edit (C⁻ beside N⁺
   becomes C=N, N five-bonded), and the toolbar undoes each pairing.
@@ -272,14 +277,16 @@ Each module's header comment says what it does and why; this list says where.
   through to the local pipeline, never to a wrong "PubChem 3D" render.
 - **Implicit hydrogens go on nonmetals and semimetals only** (H, B, C, N, O,
   F, Si, P, S, Cl, Ge, As, Se, Br, Sb, Te, I), to their usual valence; a
-  drawn radical centre takes one fewer, its unpaired electron in that bond's
-  place (2026-10-26), and only an atom with a hydrogen to give takes the dot.
+  drawn radical centre takes one fewer per dot, its nonbonding electron in
+  that bond's place (2026-10-26; two dots 2026-11-04), and only an atom with a
+  hydrogen to give takes another dot.
   A metal or a noble gas carries only the hydrogens drawn: the user is
   responsible for charges, hydrogens and the rest of the 2D structure, and we
   give back what they give us. "More…" enters a metal or noble gas into JSME bracketed
   (`[Ni]`) so JSME's SMILES agrees.
 - Export keeps one source of truth per field: the SDF carries formal charges
-  on `M  CHG` lines and a drawn radical on `M  RAD` (a doublet), and leaves
+  on `M  CHG` lines and a drawn radical on `M  RAD` (a doublet; two dots
+  1 or 3, the spin computed), and leaves
   the atom-block charge columns 0.
 
 ## Commits

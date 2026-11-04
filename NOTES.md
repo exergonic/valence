@@ -5675,3 +5675,49 @@ an orbital or a surface to describe. VSEPR is unchanged, one click away.
 ISSUES.md asked for "no view selected"; a lit Structure button was chosen
 instead, because the inspector names the view it shows and would otherwise
 name nothing (model-views.ts).
+
+## The structure tools leave Settings (2026-11-04, later)
+
+The user: Refine, the spin, the vibrations, Skip PubChem and Snap to point
+group "never quite sat well" under Settings — a hint that the structure
+wanted a place of its own. They are the Structure view's panel now, with
+Measure above them and the Info log below; Settings keeps appearance,
+display, annotations and export. The spin sits above Refine, the order they
+are used in. A vibration and the measure tool stop when the view changes:
+their controls go with the view, and a vibration hides every orbital and
+surface, so one left playing under VSEPR could not be stopped from there.
+
+## A carbene's two dots; OCC's open shell is spin-polarized (2026-11-04, later)
+
+In a lesson there was no way to draw methylcarbene: one dot was all the
+radical tool gave, and the filler made CH₃–C ethane. The tool now cycles one
+dot, two ("C••", JSME keeps the label as it keeps "C•"), none. The user
+chose to let the drawing say nothing of the spin ("not too smart"): two dots
+are a singlet by the lowest-multiplicity rule, and a triplet is chosen beside
+Refine. The VSEPR picture needed nothing: the lone-pair count from the
+electron count already makes the carbene carbon sp² with one lone pair and an
+empty p, AX₂E — the singlet's picture.
+
+Methylcarbene, built from the sketch (local, GFN2, Cs):
+
+| | E (Eh) | C–C | H–C–C at C: | Hessian |
+|---|---|---|---|---|
+| singlet | −6.158587 | 1.452 Å | 110.2° | minimum |
+| triplet (chosen) | −6.162001 | 1.459 Å | 134.7° | minimum |
+
+The textbook shapes — singlet bent near the tetrahedral angle, triplet opened
+toward linear — and the triplet lower by 2.1 kcal/mol. GFN2 calls the singlet
+a minimum; it does not slide to ethylene by the 1,2-H shift. The Lewis
+structure gives C2 its lone pair and an empty valence orbital, the methyl's
+C–H σ donating 18.4 kcal/mol into it.
+
+**The oracle as AGENTS.md writes it does not reproduce an open shell.** The
+singlet matches xtb 6.7.1 to the µEh. The triplet with `--uhf 2` came out
+−6.119752 Eh, 24 kcal/mol *above* the singlet. With `--uhf 2 --tblite
+--spinpol` it is −6.162007 Eh, and its optimisation lands on the app's
+geometry to ~1 mÅ (0 imaginary modes). OCC's GFN2 is the spin-polarized
+variant; plain xtb is not. So an open-shell question goes to the oracle as
+`xtb --gfn 2 --chrg <q> --uhf <n> --tblite --spinpol --ohess vtight`. Runs
+and inputs: `~/valence-checks/methylcarbene/{s,t,tsp}` on lenovo. The
+NiCl₄²⁻ triplet/singlet comparison of 2026-10-06 was app against app and is
+unaffected.
