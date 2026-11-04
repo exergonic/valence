@@ -36,12 +36,12 @@ M  END
 
 describe('charges and radicals carried on JSME\'s X atom', () => {
   it('reads an X atom\'s label as an element, a charge and a radical', () => {
-    expect(parseXAtomLabel('I-')).toEqual({ element: 'I', charge: -1, radical: false });
-    expect(parseXAtomLabel('Si-2')).toEqual({ element: 'Si', charge: -2, radical: false });
-    expect(parseXAtomLabel('Xe+')).toEqual({ element: 'Xe', charge: 1, radical: false });
-    expect(parseXAtomLabel('C•')).toEqual({ element: 'C', charge: 0, radical: true });
-    expect(parseXAtomLabel('C•-')).toEqual({ element: 'C', charge: -1, radical: true });
-    expect(parseXAtomLabel('N•+')).toEqual({ element: 'N', charge: 1, radical: true });
+    expect(parseXAtomLabel('I-')).toEqual({ element: 'I', charge: -1, radical: 0 });
+    expect(parseXAtomLabel('Si-2')).toEqual({ element: 'Si', charge: -2, radical: 0 });
+    expect(parseXAtomLabel('Xe+')).toEqual({ element: 'Xe', charge: 1, radical: 0 });
+    expect(parseXAtomLabel('C•')).toEqual({ element: 'C', charge: 0, radical: 1 });
+    expect(parseXAtomLabel('C•-')).toEqual({ element: 'C', charge: -1, radical: 1 });
+    expect(parseXAtomLabel('N•+')).toEqual({ element: 'N', charge: 1, radical: 1 });
     expect(parseXAtomLabel('Cl')).toBeNull();
     expect(parseXAtomLabel('Q')).toBeNull();
   });
@@ -51,8 +51,16 @@ describe('charges and radicals carried on JSME\'s X atom', () => {
     expect(jmeAtomLabel('Si', -2)).toBe('[Si-2]');
     expect(jmeAtomLabel('I', 1)).toBe('[I+]');
     expect(jmeAtomLabel('I', 0)).toBe('I'); // JSME's own atom again
-    expect(jmeAtomLabel('C', 0, true)).toBe('[C•]');
-    expect(jmeAtomLabel('C', -1, true)).toBe('[C•-]');
+    expect(jmeAtomLabel('C', 0, 1)).toBe('[C•]');
+    expect(jmeAtomLabel('C', -1, 1)).toBe('[C•-]');
+  });
+
+  it('carries a carbene\'s two dots, and no more', () => {
+    expect(parseXAtomLabel('C••')).toEqual({ element: 'C', charge: 0, radical: 2 });
+    expect(parseXAtomLabel('N••+')).toEqual({ element: 'N', charge: 1, radical: 2 });
+    expect(parseXAtomLabel('C•••')).toBeNull();
+    expect(jmeAtomLabel('C', 0, 2)).toBe('[C••]');
+    expect(parseXAtomLabel(jmeAtomLabel('N', 0, 2).slice(1, -1))).toEqual({ element: 'N', charge: 0, radical: 2 });
   });
 
   it('finds SiF₆²⁻\'s charged Si in the V3000 block, and nothing else', () => {

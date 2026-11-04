@@ -15,7 +15,8 @@
  * drawn as written, the dot beside the element, and a radical centre takes
  * one hydrogen fewer than its usual valence (fill-hydrogens.ts). A charge
  * goes after the dot: "C•-" is a radical anion's carbon (NOTES.md,
- * 2026-10-26).
+ * 2026-10-26). Two dots, "C••", are a carbene's or a nitrene's nonbonding
+ * pair, two hydrogens fewer (2026-11-04).
  *
  * The X atom's charge and dot live only in its label. The V2000 MOL block
  * writes the label as the atom symbol ("I-"), with no M  CHG line, and a
@@ -29,26 +30,29 @@
 /** The dot of a radical centre, as the label carries it. */
 export const RADICAL_DOT = '•';
 
-/** An X atom's label: an element, a radical's dot and a signed charge, "I-",
- *  "Si-2", "Xe+", "C•", "C•-". Null for anything else — a bare element is an
- *  ordinary atom. */
-export function parseXAtomLabel(label: string): { element: string; charge: number; radical: boolean } | null {
-  const match = /^([A-Z][a-z]?)(•?)(?:([+-])(\d*))?$/.exec(label);
+/** The dots an atom can carry: none, a radical's one, a carbene's two. */
+export type RadicalDots = 0 | 1 | 2;
+
+/** An X atom's label: an element, a radical's dots and a signed charge, "I-",
+ *  "Si-2", "Xe+", "C•", "C•-", "C••". Null for anything else — a bare element
+ *  is an ordinary atom. */
+export function parseXAtomLabel(label: string): { element: string; charge: number; radical: RadicalDots } | null {
+  const match = /^([A-Z][a-z]?)(•{0,2})(?:([+-])(\d*))?$/.exec(label);
   if (!match || (!match[2] && !match[3])) return null;
   const size = match[4] ? Number(match[4]) : 1;
   const charge = !match[3] ? 0 : match[3] === '-' ? -size : size;
-  return { element: match[1], charge, radical: match[2] === RADICAL_DOT };
+  return { element: match[1], charge, radical: match[2].length as RadicalDots };
 }
 
 /** An atom's label in a JME string for JSME to read: the X atom "[I-]",
- *  "[Si-2]", "[C•]", "[C•-]" for a charge or a radical (bracketed, it carries
- *  no implicit hydrogens in JSME's SMILES, as a hypervalent centre has none),
- *  the bare element — JSME's own atom again — for neither. */
-export function jmeAtomLabel(element: string, charge: number, radical = false): string {
+ *  "[Si-2]", "[C•]", "[C•-]", "[C••]" for a charge or dots (bracketed, it
+ *  carries no implicit hydrogens in JSME's SMILES, as a hypervalent centre has
+ *  none), the bare element — JSME's own atom again — for neither. */
+export function jmeAtomLabel(element: string, charge: number, radical: RadicalDots = 0): string {
   if (charge === 0 && !radical) return element;
   const size = Math.abs(charge);
   const sign = charge === 0 ? '' : `${charge < 0 ? '-' : '+'}${size > 1 ? size : ''}`;
-  return `[${element}${radical ? RADICAL_DOT : ''}${sign}]`;
+  return `[${element}${RADICAL_DOT.repeat(radical)}${sign}]`;
 }
 
 /** The labelled X atoms of a V3000 MOL block — a charge or a radical: atom

@@ -4,6 +4,7 @@
  *
  *   bun run smoke                                       # against `bun run dev`
  *   bun run smoke https://exergonic.github.io/valence/  # against the live site
+ *   bun run smoke http://localhost:5173/valence/ sketcherCarbene  # one part
  *
  * The unit tests hold the chemistry to outside references; this holds the app
  * together. Every bug of the 2026-10-06 session (a triplet refined as a
@@ -17,7 +18,9 @@
 import { launchBrowser, sleep, type Browser } from './browser';
 
 const url = process.argv[2] ?? 'http://localhost:5173/valence/';
-const VIEWS = ['structure', 'vsepr','charge', 'localized', 'delocalized'] as const;
+/** One part alone, by its function's name: `bun run smoke <url> sketcherCarbene` */
+const only = process.argv[3];
+const VIEWS = ['structure', 'vsepr', 'charge', 'localized', 'delocalized'] as const;
 
 interface Result { name: string; ok: boolean; detail: string }
 const results: Result[] = [];
@@ -514,6 +517,67 @@ async function sketcherRadicalKeepsYlide(b: Browser) {
   check('the edit keeps the drawn ylide, C⁻–N⁺, single-bonded', labels[0] === 'C-' && labels[1] === 'N+' && / 1 2 1 /.test(` ${now.trim().split(/\s+/).slice(20).join(' ')} `), now);
 }
 
+/** A carbene or nitrene (asked for 2026-11-04): the radical tool's second
+ *  click on an atom gives it two dots, two hydrogens fewer, and a third takes
+ *  them off — on methylamine's N, which JSME labels, so it can be found and
+ *  clicked: CH₃–N••, methylnitrene. Then methylcarbene, CH₃–C••H, as the tool
+ *  writes it, built: C₂H₄, not ethane. */
+async function sketcherCarbene(b: Browser) {
+  await b.open(url);
+  const centre = (selector: string) => b.run(`const r = document.querySelector('${selector}').getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+  const jme = (): Promise<string> => b.run(`return window.jsmeApplet.jmeFile();`);
+  const header = (): Promise<string> => b.run(`return document.getElementById('molecule-info').textContent.replace(/\\s+/g, ' ').trim();`);
+  const buildSketch = async () => {
+    await b.run(`document.getElementById('render-btn').click();`);
+    await sleep(800);
+    await settle(b, 1000);
+  };
+  const corner = await b.run(`
+    const r = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150).getBoundingClientRect();
+    return { x: r.x + 20, y: r.y + r.height - 20 };`);
+  await b.moveTo(corner.x, corner.y);
+  await b.click(corner.x, corner.y);
+  await b.run(`window.jsmeApplet.readMolecule('2 1 C 0 0 N 1.4 0 1 2 1'); window.jsmeApplet.repaint();`);
+  await sleep(400);
+  const tool = await centre('#sketch-tools [data-tool="radical"]');
+  await b.moveTo(tool.x, tool.y);
+  await b.click(tool.x, tool.y);
+  await sleep(300);
+  const clickNitrogen = async () => {
+    const start = await jme();
+    let now = start;
+    for (let tries = 0; tries < 3 && now === start; tries++) {
+      const atom = await b.run(`
+        const svg = [...document.querySelectorAll('#jsme-stage svg')].find((s) => s.getBoundingClientRect().height > 150);
+        const r = [...svg.querySelectorAll('text')].find((t) => /^(N|H2N)/.test(t.textContent)).getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };`);
+      await b.moveTo(atom.x - 20, atom.y - 20);
+      await b.moveTo(atom.x, atom.y);
+      await sleep(300);
+      await b.click(atom.x, atom.y);
+      await sleep(400);
+      now = await jme();
+    }
+    return now.trim().split(/\s+/).slice(2, 8).filter((_, i) => i % 3 === 0)[1];
+  };
+  const oneDot = await clickNitrogen();
+  const twoDots = await clickNitrogen();
+  check('the radical tool gives one dot, then two — N•, N••', oneDot === 'N•' && twoDots === 'N••', `${oneDot} → ${twoDots}`);
+  await buildSketch();
+  let built = await header();
+  let err = await banner(b);
+  check('methylnitrene builds as CH₃N', /CH3N\b/.test(built) && !err, err || built.slice(0, 90));
+  const off = await clickNitrogen();
+  check('a third click takes the dots off', off === 'N', off);
+
+  await b.run(`window.jsmeApplet.readMolecule('2 1 C 0 0 [C••] 1.4 0 1 2 1'); window.jsmeApplet.repaint();`);
+  await sleep(400);
+  await buildSketch();
+  built = await header();
+  err = await banner(b);
+  check('methylcarbene builds as C₂H₄, not ethane', /C2H4\b/.test(built) && !err, err || built.slice(0, 90));
+}
+
 /** Clicking an orbital must not scroll the list (reported 2026-10-06). */
 async function orbitalListStaysPut(b: Browser) {
   await b.open(url);
@@ -598,7 +662,7 @@ async function loadsCleanWhenNarrow() {
 const started = Date.now();
 console.log(`Valence smoke test — ${url}\n`);
 try {
-  await loadsCleanWhenNarrow();
+  if (!only) await loadsCleanWhenNarrow();
 } catch (error) {
   check('loadsCleanWhenNarrow', false, `stopped: ${(error as Error).message.split('\n')[0]}`);
 }
@@ -606,7 +670,8 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, sketcherRadicalKeepsYlide, orbitalListStaysPut, lewisStructureDonation]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, sketcherRadicalKeepsYlide, sketcherCarbene, orbitalListStaysPut, lewisStructureDonation]) {
+    if (only && part.name !== only) continue;
     try {
       await part(b);
     } catch (error) {

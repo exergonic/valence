@@ -204,7 +204,7 @@ function withXAtomLabels(molecule: Molecule, v3000: string): Molecule {
   const atoms = molecule.atoms.map((atom, i) => {
     const label = parseXAtomLabel(labels.get(i) ?? '');
     if (!label) return atom;
-    return { ...atom, element: label.element, charge: label.charge, ...(label.radical ? { radical: true as const } : {}) };
+    return { ...atom, element: label.element, charge: label.charge, ...(label.radical ? { radical: label.radical } : {}) };
   });
   return { ...molecule, atoms };
 }

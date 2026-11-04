@@ -11,12 +11,15 @@ export interface Atom {
    */
   charge?: number;
   /**
-   * A radical centre: one unpaired electron, drawn as a dot (the sketcher's
-   * X atom "C•", or a V2000 `M  RAD` doublet). It takes one hydrogen fewer
-   * than its usual valence (fill-hydrogens.ts); the spin follows from the
-   * electron count, as for any structure. Absent for every other atom.
+   * The nonbonding electrons drawn as dots on a radical centre: 1 for a
+   * radical ("C•", a V2000 `M  RAD` doublet), 2 for a carbene or nitrene
+   * ("C••", `M  RAD` 1 or 3). Each dot takes one hydrogen fewer than the
+   * usual valence (fill-hydrogens.ts). The dots say nothing of the spin: that
+   * follows from the electron count, or is chosen, as for any structure — two
+   * dots are a singlet carbene until a triplet is asked for. Absent for every
+   * other atom.
    */
-  radical?: true;
+  radical?: 1 | 2;
 }
 
 export interface Bond {

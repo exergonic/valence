@@ -16,7 +16,8 @@ export interface ViewState {
    *  absent from views saved before they were kept — such a view of an ion
    *  reloads neutral. */
   molecule: {
-    atoms: { element: string; x: number; y: number; z: number; charge?: number; radical?: true }[];
+    /** `radical`: the dots, 1 or 2; `true` in views saved before carbenes, one dot */
+    atoms: { element: string; x: number; y: number; z: number; charge?: number; radical?: true | 1 | 2 }[];
     bonds: { atom1Index: number; atom2Index: number; order: number; stereo?: Bond['stereo'] }[];
     multiplicity?: number;
   };
@@ -85,7 +86,7 @@ export function applyViewState(ctx: SceneContext, state: ViewState, annotations:
 
   const { atoms, bonds, multiplicity } = state.molecule;
   ctx.currentMolecule = {
-    atoms: atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z, ...(a.charge ? { charge: a.charge } : {}), ...(a.radical ? { radical: true as const } : {}) })),
+    atoms: atoms.map((a) => ({ element: a.element, x: a.x, y: a.y, z: a.z, ...(a.charge ? { charge: a.charge } : {}), ...(a.radical ? { radical: a.radical === true ? 1 as const : a.radical } : {}) })),
     bonds: bonds.map((b) => ({ atom1Index: b.atom1Index, atom2Index: b.atom2Index, order: b.order, ...(b.stereo === 1 || b.stereo === 6 ? { stereo: b.stereo } : {}) })),
     ...(multiplicity && multiplicity > 1 ? { multiplicity } : {}),
   };

@@ -68,14 +68,16 @@ function parseV2000(molBlock: string): Molecule {
   for (let i = propStart; i < lines.length; i++) {
     if (/^M\s+END/.test(lines[i])) break;
     // Radicals from M RAD lines, the same index/value pairs: 2 is a doublet,
-    // one unpaired electron — what Valence's own export writes for a drawn
-    // radical. Singlet and triplet carbenes (1, 3) are not drawn here.
+    // one dot; 1 and 3 are a singlet and a triplet carbene, two dots — what
+    // Valence's own export writes for a drawn radical or carbene.
     const rad = /^M\s+RAD\s+(\d+)\s*(.*)$/.exec(lines[i]);
     if (rad) {
       const nums = rad[2].trim().split(/\s+/).map(Number);
       for (let k = 0; k + 1 < nums.length; k += 2) {
         const idx = nums[k] - 1;
-        if (idx >= 0 && idx < atoms.length && nums[k + 1] === 2) atoms[idx].radical = true;
+        if (idx < 0 || idx >= atoms.length) continue;
+        if (nums[k + 1] === 2) atoms[idx].radical = 1;
+        else if (nums[k + 1] === 1 || nums[k + 1] === 3) atoms[idx].radical = 2;
       }
       continue;
     }

@@ -140,7 +140,7 @@ describe('fillMissingHydrogens', () => {
     // propane's CH₂, which would close the shell the user drew open
     const mol = {
       atoms: [
-        { element: 'C', radical: true as const, x: 0, y: 0, z: 0 },
+        { element: 'C', radical: 1 as const, x: 0, y: 0, z: 0 },
         { element: 'C', x: 1.5, y: 0, z: 0 },
         { element: 'C', x: -1.5, y: 0, z: 0 },
       ],
@@ -154,8 +154,34 @@ describe('fillMissingHydrogens', () => {
     expect(hCount(result, 1)).toBe(3);
     // a radical anion's carbon: the charge and the dot both count (CH₂•⁻ is
     // isoelectronic with NH₂•, so two hydrogens on a bare C•⁻)
-    const radicalAnion = fillMissingHydrogens({ atoms: [{ element: 'C', charge: -1, radical: true as const, x: 0, y: 0, z: 0 }], bonds: [] });
+    const radicalAnion = fillMissingHydrogens({ atoms: [{ element: 'C', charge: -1, radical: 1 as const, x: 0, y: 0, z: 0 }], bonds: [] });
     expect(hCount(radicalAnion, 0)).toBe(2);
+  });
+
+  it('two dots take two hydrogens (methylcarbene, methylnitrene, dichlorocarbene)', () => {
+    // CH₃–C••: the drawn carbene carbon keeps one hydrogen, not ethane's three
+    const methylcarbene = fillMissingHydrogens({
+      atoms: [{ element: 'C', radical: 2 as const, x: 0, y: 0, z: 0 }, { element: 'C', x: 1.5, y: 0, z: 0 }],
+      bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }],
+    });
+    expect(hCount(methylcarbene, 0)).toBe(1);
+    expect(hCount(methylcarbene, 1)).toBe(3);
+    // CH₃–N••: none on the nitrene nitrogen
+    const methylnitrene = fillMissingHydrogens({
+      atoms: [{ element: 'N', radical: 2 as const, x: 0, y: 0, z: 0 }, { element: 'C', x: 1.5, y: 0, z: 0 }],
+      bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }],
+    });
+    expect(hCount(methylnitrene, 0)).toBe(0);
+    // :CCl₂, not CH₂Cl₂
+    const dichlorocarbene = fillMissingHydrogens({
+      atoms: [
+        { element: 'C', radical: 2 as const, x: 0, y: 0, z: 0 },
+        { element: 'Cl', x: 1.7, y: 0, z: 0 },
+        { element: 'Cl', x: -1.7, y: 0, z: 0 },
+      ],
+      bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }, { atom1Index: 0, atom2Index: 2, order: 1 }],
+    });
+    expect(hCount(dichlorocarbene, 0)).toBe(0);
   });
 
   it('adds no hydrogens to ammonium nitrogen', () => {

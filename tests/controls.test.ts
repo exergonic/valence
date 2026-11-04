@@ -51,10 +51,23 @@ describe('SDF export — formal charges (2026-09-23)', () => {
 
   it('a drawn radical rides on an M  RAD line and reads back as one', () => {
     const radical = formate();
-    radical.atoms[2] = { element: 'O', radical: true, x: -0.625, y: 1.083, z: 0 }; // formyloxyl, HCO₂•
+    radical.atoms[2] = { element: 'O', radical: 1, x: -0.625, y: 1.083, z: 0 }; // formyloxyl, HCO₂•
     const sdf = moleculeToSDF(radical);
     expect(sdf).toContain('M  RAD  1   3   2');
-    expect(parseMolBlock(sdf).atoms.map((a) => a.radical)).toEqual([undefined, undefined, true, undefined]);
+    expect(parseMolBlock(sdf).atoms.map((a) => a.radical)).toEqual([undefined, undefined, 1, undefined]);
+  });
+
+  it('a carbene\'s two dots are M  RAD 1 or 3, the spin it was computed at, and read back as two', () => {
+    // methylcarbene, CH₃–CH: the dots do not say singlet or triplet
+    const carbene = (multiplicity?: number): Molecule => ({
+      atoms: [{ element: 'C', radical: 2, x: 0, y: 0, z: 0 }, { element: 'C', x: 1.5, y: 0, z: 0 }],
+      bonds: [{ atom1Index: 0, atom2Index: 1, order: 1 }],
+      ...(multiplicity ? { multiplicity } : {}),
+    });
+    expect(moleculeToSDF(carbene())).toContain('M  RAD  1   1   1');
+    expect(moleculeToSDF(carbene(3))).toContain('M  RAD  1   1   3');
+    expect(parseMolBlock(moleculeToSDF(carbene(3))).atoms[0].radical).toBe(2);
+    expect(parseMolBlock(moleculeToSDF(carbene())).atoms[0].radical).toBe(2);
   });
 
   it('round-trips through parseMolBlock — charges and classification identical', () => {

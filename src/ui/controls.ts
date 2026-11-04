@@ -410,7 +410,7 @@ export function capturePng(ctx: SceneContext): Promise<Blob> {
  * format, so blank lines inside a value are dropped.
  */
 export function moleculeToSDF(
-  mol: { atoms: any[]; bonds: any[] },
+  mol: { atoms: any[]; bonds: any[]; multiplicity?: number },
   fields: SdfField[] = [],
   title = 'Valence export',
 ): string {
@@ -444,11 +444,14 @@ export function moleculeToSDF(
       + chunk.map((c) => c.idx.toString().padStart(4) + c.charge.toString().padStart(4)).join(''));
   }
   // A drawn radical rides on M  RAD lines the same way: 2, a doublet — one
-  // unpaired electron on that atom, which parseMolBlock reads back.
-  const radicals = mol.atoms.flatMap((a, i) => (a.radical ? [i + 1] : []));
+  // unpaired electron on that atom. A carbene's two dots are 1 or 3, singlet
+  // or triplet; the dots do not say which, so it is the spin the structure
+  // was computed at. parseMolBlock reads all three back.
+  const carbeneRad = (mol.multiplicity ?? 1) >= 3 ? 3 : 1;
+  const radicals = mol.atoms.flatMap((a, i) => (a.radical ? [{ idx: i + 1, rad: a.radical === 2 ? carbeneRad : 2 }] : []));
   for (let i = 0; i < radicals.length; i += 8) {
     const chunk = radicals.slice(i, i + 8);
-    lines.push('M  RAD' + chunk.length.toString().padStart(3) + chunk.map((idx) => idx.toString().padStart(4) + '2'.padStart(4)).join(''));
+    lines.push('M  RAD' + chunk.length.toString().padStart(3) + chunk.map((r) => r.idx.toString().padStart(4) + r.rad.toString().padStart(4)).join(''));
   }
   lines.push('M  END');
   for (const field of fields) {

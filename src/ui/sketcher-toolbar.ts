@@ -32,7 +32,7 @@ import { setupPeriodicTable } from './periodic-table';
 import { groupByCode, setupGroupPalette, type FunctionalGroup } from './functional-groups';
 import { implicitHydrogenCounts, takesImplicitHydrogens } from '../chem/fill-hydrogens';
 import { parseMolBlock } from '../mol-parser';
-import { jmeAtomLabel, parseXAtomLabel, xAtomLabels } from './x-atom-labels';
+import { jmeAtomLabel, parseXAtomLabel, xAtomLabels, type RadicalDots } from './x-atom-labels';
 
 /** setAction() codes for our tools. */
 const TOOL_ACTIONS: Record<string, number> = {
@@ -193,7 +193,7 @@ function setRefusedCharge(applet: Window['jsmeApplet'], atom: { index: number; e
   const before = drawingNow(applet);
   const jme = jmeTokens(applet);
   for (const [index, label] of before.xAtoms) jme[jmeLabel(index)] = `[${label}]`;
-  const radical = parseXAtomLabel(before.xAtoms.get(atom.index) ?? '')?.radical ?? false;
+  const radical = parseXAtomLabel(before.xAtoms.get(atom.index) ?? '')?.radical ?? 0;
   jme[jmeLabel(atom.index)] = jmeAtomLabel(atom.element, charge, radical);
   readJme(applet, jme);
   return before;
@@ -389,14 +389,16 @@ function ownAtomLabel(element: string, charge: number): string {
 const RADICAL_PLACEHOLDER = '[Rn]';
 
 /**
- * Put a radical's dot on the atom under the pointer, or take it off. JSME
+ * Add a dot to the atom under the pointer — one, a radical; two, a carbene
+ * or nitrene — and on the next click take them off. JSME
  * draws no label on a plain carbon, so the hover cannot name the atom; its X
  * key can — it turns the atom under the pointer into whatever the X box
  * holds. So the box holds a placeholder for the moment of the key press, and
  * the atom that became it is the one; the drawing is then read back from
- * before, that atom relabelled. A radical centre is one hydrogen short of its
- * usual valence, so only an atom the filler would give a hydrogen takes the
- * dot. Returns the drawing before, to undo to, or null when nothing changed.
+ * before, that atom relabelled. Each dot is one hydrogen short of the usual
+ * valence, so only an atom the filler would still give a hydrogen takes
+ * another; one that has none left loses its dots instead. Returns the drawing
+ * before, to undo to, or null when nothing changed.
  */
 function toggleRadical(applet: Window['jsmeApplet'], stage: HTMLElement, box: HTMLInputElement): Drawing | null {
   const before = drawingNow(applet);
@@ -419,17 +421,17 @@ function toggleRadical(applet: Window['jsmeApplet'], stage: HTMLElement, box: HT
   const xAtom = parseXAtomLabel(label);
   const element = xAtom?.element ?? /^[A-Z][a-z]?/.exec(label)?.[0] ?? 'C';
   const charge = xAtom?.charge ?? labelCharge(label);
-  const radical = !xAtom?.radical;
+  const dots = xAtom?.radical ?? 0;
   const molecule = parseMolBlock(before.molFile);
-  molecule.atoms[index] = { ...molecule.atoms[index], element, charge };
+  molecule.atoms[index] = { ...molecule.atoms[index], element, charge, ...(dots ? { radical: dots } : {}) };
   const hasHydrogenToGive = takesImplicitHydrogens(element) && implicitHydrogenCounts(molecule)[index] > 0;
-  if (radical && !hasHydrogenToGive) {
+  const radical: RadicalDots = dots < 2 && hasHydrogenToGive ? (dots + 1) as RadicalDots : 0;  if (radical === 0 && dots === 0) {
     readJme(applet, jme); // the placeholder out again
     return null;
   }
   // off again: back to JSME's own atom where JSME holds the charge, the X
   // atom where it does not (a charge JSME refused stays refused)
-  jme[jmeLabel(index)] = radical ? jmeAtomLabel(element, charge, true)
+  jme[jmeLabel(index)] = radical ? jmeAtomLabel(element, charge, radical)
     : element in ELEMENT_KEYS ? ownAtomLabel(element, charge)
       : jmeAtomLabel(element, charge);
   readJme(applet, jme);
