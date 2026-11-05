@@ -311,7 +311,9 @@ Decided with the user 2026-10-26.
   Tailscale route in `AGENTS.local.md`, which is gitignored). A GFN2
   question — a geometry, a minimum, an energy, a frequency — is checked
   against the Fortran **xtb 6.7.1** there (`~/opt/xtb/bin/xtb --gfn 2 --chrg
-  <q> --ohess vtight`) before the app's answer is blamed or trusted. Beside
+  <q> --ohess vtight`) before the app's answer is blamed or trusted. An open
+  shell adds `--uhf <unpaired> --tblite --spinpol`: OCC's GFN2 is
+  spin-polarized, plain xtb's is not (NOTES.md, 2026-11-04). Beside
   it: YAeHMOP `bind` (`~/yaehmop/tightbind/bind`, the extended-Hückel oracle),
   occpy 0.9.4 (`~/opt/occ-venv`), and a spare OCC tree (`~/Code/occ`).
 

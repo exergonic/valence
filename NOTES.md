@@ -5717,7 +5717,8 @@ singlet matches xtb 6.7.1 to the µEh. The triplet with `--uhf 2` came out
 --spinpol` it is −6.162007 Eh, and its optimisation lands on the app's
 geometry to ~1 mÅ (0 imaginary modes). OCC's GFN2 is the spin-polarized
 variant; plain xtb is not. So an open-shell question goes to the oracle as
-`xtb --gfn 2 --chrg <q> --uhf <n> --tblite --spinpol --ohess vtight`. Runs
+`xtb --gfn 2 --chrg <q> --uhf <n> --tblite --spinpol --ohess vtight` —
+AGENTS.md's oracle command says so, with the user's approval the same day. Runs
 and inputs: `~/valence-checks/methylcarbene/{s,t,tsp}` on lenovo. The
 NiCl₄²⁻ triplet/singlet comparison of 2026-10-06 was app against app and is
 unaffected.
