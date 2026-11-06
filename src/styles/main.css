@@ -1077,12 +1077,13 @@ button, input, select, textarea { font-family: inherit; }
 .inspector-section .label-mode-select { font-size: 12px; padding: 6px 8px; }
 
 /* one view's section at a time */
-.for-structure, .for-vsepr, .for-charge, .for-localized, .for-delocalized { display: none; }
+.for-structure, .for-vsepr, .for-charge, .for-localized, .for-delocalized, .for-thermo { display: none; }
 #inspector[data-view="structure"] .for-structure,
 #inspector[data-view="vsepr"] .for-vsepr,
 #inspector[data-view="charge"] .for-charge,
 #inspector[data-view="localized"] .for-localized,
-#inspector[data-view="delocalized"] .for-delocalized { display: flex; }
+#inspector[data-view="delocalized"] .for-delocalized,
+#inspector[data-view="thermo"] .for-thermo { display: flex; }
 
 /* the ESP colour key, negative to positive: its gradient is set from the
    surface's own colour function (controls.ts) */
@@ -1717,6 +1718,8 @@ button, input, select, textarea { font-family: inherit; }
   padding: 4px 0;
 }
 .measure-clear.hidden,
+#thermo-status.hidden,
+#thermo-compute.hidden,
 #measure-points:empty,
 #measure-result:empty { display: none; }
 

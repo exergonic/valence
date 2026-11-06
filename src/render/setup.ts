@@ -310,6 +310,10 @@ export interface SceneContext {
    *  that structure is GFN2's own minimum (a fetched conformer is not one, so
    *  its "frequencies" would be meaningless). Paired with its molecule. */
   vibrations: { molecule: Molecule; modes: NormalMode[] } | null;
+  /** Why optimising the structure on screen would not give a minimum of the
+   *  molecule drawn — a held structure, or GFN2's set-aside result shown on
+   *  request — paired with its molecule; the Thermo view refuses with it. */
+  noMinimum: { molecule: Molecule; reason: string } | null;
   /** Called on every animation frame (the vibration drives it), or null.
    *  While it is set, frames are drawn continuously. */
   frame: { onFrame: ((now: number) => void) | null };
@@ -509,6 +513,7 @@ export function initScene(container: HTMLElement): SceneContext {
     rerender: () => {},
     requestRender,
     vibrations: null,
+    noMinimum: null,
     frame,
     onSceneBuilt: () => {},
     onGfn2Orbitals: () => {},

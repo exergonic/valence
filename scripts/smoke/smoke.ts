@@ -646,6 +646,47 @@ async function lewisStructureDonation(b: Browser) {
  * dozens of invalid-SVG errors (index.html corrects their markup); the main
  * run's wide window never showed them. Its own browser, at its own size.
  */
+/**
+ * The Thermo view (2026-11-05): a fetched structure above the optimiser's
+ * 16-atom gate is optimised, vibrated and replaced unasked when the estimate
+ * is short (hexane, 20 atoms), and waits with its estimate on the button when
+ * it is long (octadecane, 56 atoms: about 30 s on the user's machine).
+ */
+async function thermoView(b: Browser) {
+  await b.open(url);
+  await build(b, 'CCCCCC');
+  await view(b, 'thermo');
+  let modes = 0;
+  for (let waited = 0; waited < 90_000 && modes === 0; waited += 500) {
+    await sleep(500);
+    modes = await b.run(`return document.getElementById('ctrl-vibration').options.length - 1;`);
+  }
+  const state = await b.run(`return {
+    source: document.getElementById('mol-source').textContent.trim(),
+    playing: document.getElementById('ctrl-vibration').value,
+    readout: !document.getElementById('thermo-readout').classList.contains('hidden'),
+  };`);
+  check('Thermo: hexane vibrated unasked, the minimum on screen', modes === 3 * 20 - 6 && state.source === 'GFN2-xTB',
+    `${modes} modes, source ${state.source}`);
+  check('Thermo: the slowest mode plays', state.playing === '0', `selected "${state.playing}"`);
+  for (let waited = 0; waited < 10_000 && !(await b.run(`return !document.getElementById('thermo-readout').classList.contains('hidden');`)); waited += 500) {
+    await sleep(500);
+  }
+  check('Thermo: the thermochemistry is shown', await b.run(`return /U − E/.test(document.getElementById('thermo-readout').textContent);`));
+
+  await build(b, 'CCCCCCCCCCCCCCCCCC');
+  let button = '';
+  for (let waited = 0; waited < 20_000 && !button; waited += 500) {
+    await sleep(500);
+    button = await b.run(`const c = document.getElementById('thermo-compute'); return c.classList.contains('hidden') ? '' : c.textContent;`);
+  }
+  check('Thermo: a long Hessian waits, its estimate on the button', /about \d+ s/.test(button), button || 'no button');
+
+  await view(b, 'structure');
+  check('Structure: the vibrations have left its panel',
+    await b.run(`return document.getElementById('ctrl-vibration').offsetParent === null;`));
+}
+
 async function loadsCleanWhenNarrow() {
   const narrow = await launchBrowser(800, 870, 1);
   try {
@@ -670,7 +711,7 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, sketcherRadicalKeepsYlide, sketcherCarbene, orbitalListStaysPut, lewisStructureDonation]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, sketcherRadicalKeepsYlide, sketcherCarbene, orbitalListStaysPut, lewisStructureDonation, thermoView]) {
     if (only && part.name !== only) continue;
     try {
       await part(b);

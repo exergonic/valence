@@ -114,7 +114,7 @@ export function syncVibration(ctx: SceneContext, properties: Gfn2Properties | nu
     select.title = modes
       ? 'Play a vibration of this GFN2-xTB minimum: harmonic frequencies (cm⁻¹), semiempirical — typically within '
         + '5–10 % of experiment. The speed is a picture: a higher frequency beats faster.'
-      : 'Vibrations come with a GFN2-xTB optimisation below 16 atoms: build the sketch locally, or press Refine.';
+      : 'The vibrations of the GFN2-xTB minimum: opening the Thermo view computes them.';
   }
   const index = ctx.display.vibrationIndex;
   if (modes && index !== null && modes[index]) startVibration(ctx, modes[index]);
@@ -144,8 +144,9 @@ export function thermochemistryOf(
 
 const KCAL_PER_HARTREE = 627.5094740631;
 
-/** The readout under the vibration control: the corrections in kcal/mol, the
- *  entropy in cal/(mol K) with its parts, the totals in Eh. */
+/** The readout under the vibration control, in the Thermo view: the
+ *  corrections in kcal/mol, the entropy in cal/(mol K) with its parts, the
+ *  totals in Eh. */
 function writeThermochemistry(result: Thermochemistry | null): void {
   const readout = document.getElementById('thermo-readout');
   if (!readout) return;
@@ -161,11 +162,15 @@ function writeThermochemistry(result: Thermochemistry | null): void {
     `<dt${hint ? ` title="${hint}"` : ''}>${term}</dt><dd>${value}<span>${unit}</span></dd>`;
   readout.innerHTML = `<div class="thermo-head">Thermochemistry · ${result.temperature} K, 1 atm</div><dl>`
     + row('ZPE', kcal(result.zeroPoint), 'kcal/mol', 'Zero-point vibrational energy: ½hcν̃ summed over the modes')
-    + row('H − E', kcal(result.enthalpyCorrection), 'kcal/mol', 'Zero-point, thermal (translation, rotation, vibration) and pV')
+    + row('U − E', kcal(result.internalEnergy - result.energy), 'kcal/mol',
+      'Internal energy above the electronic energy: zero-point, and thermal (translation, rotation, vibration)')
+    + row('H − E', kcal(result.enthalpyCorrection), 'kcal/mol', 'U − E, and pV = RT')
     + row('S', calPerK(result.entropy), 'cal/(mol·K)',
       `Translation ${calPerK(parts.translational)} · rotation ${calPerK(parts.rotational)} · vibration `
       + `${calPerK(parts.vibrational)}${parts.electronic > 0 ? ` · spin ${calPerK(parts.electronic)}` : ''}`)
     + row('G − E', kcal(result.freeEnergy - result.energy), 'kcal/mol', 'H − TS, less the electronic energy')
+    + row('E', result.energy.toFixed(6), 'Eh', 'GFN2-xTB’s electronic energy, at the minimum')
+    + row('U', result.internalEnergy.toFixed(6), 'Eh')
     + row('H', result.enthalpy.toFixed(6), 'Eh')
     + row('G', result.freeEnergy.toFixed(6), 'Eh')
     + '</dl>'

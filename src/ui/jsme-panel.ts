@@ -64,7 +64,17 @@ function showLoading(text: string, cancellable = false) {
   overlay.classList.remove('hidden');
 }
 
+/** The overlay's clock while the Thermo view's Hessian runs (see
+ *  trackGfn2Progress); stopped with the overlay. */
+let hessianClock: ReturnType<typeof setInterval> | null = null;
+
+function stopHessianClock() {
+  if (hessianClock !== null) clearInterval(hessianClock);
+  hessianClock = null;
+}
+
 function hideLoading() {
+  stopHessianClock();
   document.getElementById('loading-overlay')!.classList.add('hidden');
   document.getElementById('loading-cancel')!.classList.add('hidden');
 }
@@ -74,19 +84,32 @@ function hideLoading() {
  * energy evaluations it has made, the lowest energy so far and the time spent.
  * A larger molecule takes tens of seconds, and a counter that moves is the
  * difference between "working" and "hung".
+ *
+ * The Thermo view's Hessian is one call into the engine that reports nothing
+ * until it returns, so given its estimate (`hessianSeconds`) the overlay keeps
+ * its own clock: the time so far against the estimate.
  */
-function trackGfn2Progress(): (progress: Gfn2Progress) => void {
+function trackGfn2Progress(hessianSeconds: number | null = null): (progress: Gfn2Progress) => void {
   const started = performance.now();
   return (progress) => {
-    const stage = progress.stage === 'optimising' ? 'Optimising with GFN2-xTB…'
-      : progress.stage === 'curvature' ? 'Checking the curvature (numerical Hessian)…'
-      : progress.stage === 'holding' ? 'The bonding changed — relaxing the molecule drawn with its bonds held…'
-      : 'Converged to a saddle point — pushing it downhill and re-optimising…';
-    document.getElementById('loading-text')!.textContent = stage;
-    const seconds = ((performance.now() - started) / 1000).toFixed(0);
-    const energy = progress.energyHartree === null ? '' : ` · E ${progress.energyHartree.toFixed(5)} Eh`;
-    document.getElementById('loading-detail')!.textContent =
-      `${progress.evaluations} energy evaluations${energy} · ${seconds} s`;
+    // a saddle's escape ends one Hessian, and its check starts another
+    stopHessianClock();
+    const hessianStarted = progress.stage === 'curvature' && hessianSeconds !== null ? performance.now() : null;
+    const write = () => {
+      const stage = progress.stage === 'optimising' ? 'Optimising with GFN2-xTB…'
+        : progress.stage === 'curvature'
+          ? hessianStarted === null ? 'Checking the curvature (numerical Hessian)…' : 'Computing the vibrations (numerical Hessian)…'
+        : progress.stage === 'holding' ? 'The bonding changed — relaxing the molecule drawn with its bonds held…'
+        : 'Converged to a saddle point — pushing it downhill and re-optimising…';
+      document.getElementById('loading-text')!.textContent = stage;
+      const seconds = ((performance.now() - started) / 1000).toFixed(0);
+      const energy = progress.energyHartree === null ? '' : ` · E ${progress.energyHartree.toFixed(5)} Eh`;
+      document.getElementById('loading-detail')!.textContent = hessianStarted !== null
+        ? `${((performance.now() - hessianStarted) / 1000).toFixed(0)} s of about ${Math.max(1, Math.round(hessianSeconds!))} s`
+        : `${progress.evaluations} energy evaluations${energy} · ${seconds} s`;
+    };
+    if (hessianStarted !== null) hessianClock = setInterval(write, 1000);
+    write();
   };
 }
 
@@ -180,7 +203,7 @@ function gfn2RunNotes(run: Gfn2Result): string[] {
   const escapes = run.saddleEscapes === 1 ? 'once' : `${run.saddleEscapes} times`;
   if (run.lowestFrequency === null) {
     notes.push('GFN2-xTB Hessian check skipped (above 16 atoms, where it costs more than the optimisation): '
-      + 'the structure is a converged stationary point, not verified to be a minimum.');
+      + 'the structure is a converged stationary point, not verified to be a minimum. The Thermo view computes it.');
   } else if (run.lowestFrequency < SADDLE_FREQUENCY_THRESHOLD) {
     notes.push('GFN2-xTB converged to a saddle, not a minimum — the lowest vibration is imaginary '
       + `(${Math.abs(run.lowestFrequency).toFixed(0)}i cm⁻¹)`
@@ -229,14 +252,20 @@ function gfn2ShapeNotes(molecule: Molecule): string[] {
 /**
  * Put a geometry in the scene. `gfn2Charges` rides along only when the GFN2
  * tier produced this structure — they belong to exactly this atom list, and
- * buildScene drops the pairing if it is ever broken.
+ * buildScene drops the pairing if it is ever broken. `noMinimum` says why
+ * optimising this structure would not give a minimum of the molecule drawn
+ * (the Thermo view reads it).
  */
-function showMolecule(ctx: SceneContext, molecule: Molecule, gfn2Charges: number[] | null, vibrations: NormalMode[] | null = null) {
+function showMolecule(
+  ctx: SceneContext, molecule: Molecule, gfn2Charges: number[] | null, vibrations: NormalMode[] | null = null,
+  noMinimum: string | null = null,
+) {
   ctx.currentMolecule = molecule;
   ctx.gfn2Charges =
     gfn2Charges && gfn2Charges.length === molecule.atoms.length ? { molecule, charges: gfn2Charges } : null;
   // the snap moved atoms by under a milliångström, so the minimum's modes still describe it
   ctx.vibrations = vibrations && vibrations.length > 0 ? { molecule, modes: vibrations } : null;
+  ctx.noMinimum = noMinimum ? { molecule, reason: noMinimum } : null;
   ctx.display.vibrationIndex = null;
   buildScene(ctx);
 }
@@ -362,8 +391,20 @@ function offerSetAside(label: string, show: () => void) {
 }
 
 /** The refinement of the structure on screen — the "Refine with GFN2-xTB"
- *  control's, set when the panel mounts. */
-let refineOnScreen: () => Promise<void> = async () => {};
+ *  control's, set when the panel mounts. Given a Hessian estimate it is the
+ *  Thermo view's run (refineForVibrations). */
+let refineOnScreen: (hessianSeconds?: number) => Promise<void> = async () => {};
+
+/**
+ * The Thermo view's run: the structure on screen optimised with GFN2-xTB (a
+ * minimum barely moves), its Hessian computed whatever its size, a saddle
+ * escaped — and the result put on screen as any refinement is, the bonding
+ * guard and the Info log included. `hessianSeconds` is the estimate the
+ * overlay counts against.
+ */
+export function refineForVibrations(hessianSeconds: number): Promise<void> {
+  return refineOnScreen(hessianSeconds);
+}
 
 /** The header's "Keep optimising", offered when a free GFN2 run stopped short
  *  (its 30 s budget, or its step budgets): another run from the best structure
@@ -397,6 +438,16 @@ function heldNotes(held: Gfn2Held, free: Gfn2Result, change: string): { warning:
       + 'kcal/mol above GFN2-xTB\'s own result.';
   return { warning, info };
 }
+
+/** Why the Thermo view will not optimise a held structure: it is the drawing
+ *  held at the guard's limits, and a free run would only break it again. */
+const HELD_NO_MINIMUM = 'This is the held structure: GFN2-xTB\'s own result broke or made a bond, so the molecule '
+  + 'drawn is shown held at its bond limits — not a minimum, so it has no vibrations. Check the drawing (its charges, '
+  + 'hydrogens and bonds) and build it again.';
+
+/** Why the Thermo view will not optimise GFN2's set-aside result. */
+const SET_ASIDE_NO_MINIMUM = 'This is GFN2-xTB\'s set-aside result, shown on request: it is no longer the molecule '
+  + 'drawn, so its vibrations would be another molecule\'s.';
 
 /** What the header says of GFN2's free result when the user asks for it. */
 const freeOnRequest = (change: string) =>
@@ -516,7 +567,8 @@ export function mountJsmePanel(ctx: SceneContext) {
           showMoleculeHeader(next, { source, ...notes });
           // a held structure has its own charges, and no vibrations (it is not a minimum)
           const charges = shown.engine === 'held' ? shown.held?.charges ?? null : shown.gfn2?.charges ?? null;
-          showMolecule(ctx, next, charges, shown.engine === 'gfn2' ? shown.gfn2?.vibrations ?? null : null);
+          const noMinimum = onRequest ? SET_ASIDE_NO_MINIMUM : shown.engine === 'held' ? HELD_NO_MINIMUM : null;
+          showMolecule(ctx, next, charges, shown.engine === 'gfn2' ? shown.gfn2?.vibrations ?? null : null, noMinimum);
           if (shown.engine === 'gfn2' && shown.gfn2 && !shown.gfn2.converged) offerContinue();
         };
 
@@ -557,7 +609,7 @@ export function mountJsmePanel(ctx: SceneContext) {
   // run that stopped short is on screen as the best it reached, and another
   // run from there, with a fresh budget, is exactly what continuing means.
   const gfn2Btn = document.getElementById('ctrl-gfn2-refine') as HTMLButtonElement | null;
-  refineOnScreen = async () => {
+  refineOnScreen = async (hessianSeconds?: number) => {
     const current = ctx.currentMolecule;
     if (!current) return;
     if (current.atoms.length === 1) {
@@ -582,7 +634,8 @@ export function mountJsmePanel(ctx: SceneContext) {
     hideRenderError();
     showLoading('Starting GFN2-xTB…', true);
     try {
-      const refined = await refineWithGfn2(molecule, trackGfn2Progress());
+      const thermo = hessianSeconds !== undefined;
+      const refined = await refineWithGfn2(molecule, trackGfn2Progress(hessianSeconds ?? null), thermo);
       if (!refined) {
         showRenderError('GFN2-xTB found no usable geometry from this structure — the geometry is unchanged.');
         return;
@@ -594,7 +647,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       const show = (onRequest?: string) => {
         const snapped = snapToSymmetry(markBondingChanges(refined.molecule, verdict));
         const next = snapped.molecule;
-        showMolecule(ctx, next, refined.charges, refined.vibrations);
+        showMolecule(ctx, next, refined.charges, refined.vibrations, onRequest ? SET_ASIDE_NO_MINIMUM : null);
         // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
         // the geometry no longer comes from MMFF94, so calling it "approximate"
         // would be stale.
@@ -622,7 +675,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       const showHeld = () => {
         const snapped = snapToSymmetry(markBondingChanges(held.molecule, { stretched: verdict.stretched, formedPairs: [] }));
         const next = snapped.molecule;
-        showMolecule(ctx, next, held.charges, null);
+        showMolecule(ctx, next, held.charges, null, HELD_NO_MINIMUM);
         const notes = heldNotes(held, refined, change);
         showMoleculeHeader(next, { source: 'gfn2', warnings: [notes.warning],
           info: [GFN2_NOTE, notes.info, ...gfn2ShapeNotes(next), ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info] });
@@ -646,7 +699,7 @@ export function mountJsmePanel(ctx: SceneContext) {
       hideLoading();
     }
   };
-  if (gfn2Btn) gfn2Btn.onclick = refineOnScreen;
+  if (gfn2Btn) gfn2Btn.onclick = () => { void refineOnScreen(); };
 
   // The sketcher docks to a slim Build rail — a workspace preference that
   // survives reloads, like the Orbitals rail.

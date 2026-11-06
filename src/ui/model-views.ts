@@ -7,7 +7,7 @@
  *                  opens on: a lesson about a shape, a bond length or an angle
  *                  wants nothing drawn over the atoms — asked for 2026-11-04),
  *                  and the tools that bear on the geometry itself: measure,
- *                  vibrations, the spin and Refine, the build's two switches
+ *                  the spin and Refine, the build's two switches
  *   VSEPR        — the hybrid orbitals and lone pairs alone, element labels
  *   Charge Model — the atoms, their partial charges, the ESP surface, the dipole
  *   Localized    — the atoms, element labels, the Pipek–Mezey orbital list
@@ -15,6 +15,8 @@
  *   Delocalized  — the atoms, element labels, the MO ladder (GFN2-xTB's by
  *                  default, extended Hückel's beside it)
  *                  with the HOMO drawn
+ *   Thermo       — the atoms, the slowest vibration playing, and the
+ *                  thermochemistry those vibrations give (thermo-panel.ts)
  *
  * A view is a mode, not a one-off preset: it stays selected while the user
  * adjusts its controls, because the inspector shows that view's controls —
@@ -26,8 +28,9 @@
  */
 import type { SceneContext } from '../render';
 import type { MoPanel } from './mo-diagram';
+import type { ThermoPanel } from './thermo-panel';
 
-export type ModelView = 'structure' | 'vsepr' | 'charge' | 'localized' | 'delocalized';
+export type ModelView = 'structure' | 'vsepr' | 'charge' | 'localized' | 'delocalized' | 'thermo';
 
 interface Preset {
   /** Atoms & bonds */
@@ -47,7 +50,7 @@ const PRESETS: Record<ModelView, Preset> = {
   structure: {
     atoms: true, vseprOrbitals: false, labels: 'atom', esp: false, dipole: false, orbitals: 'none',
     title: 'Structure',
-    blurb: 'The atoms where the calculation put them: the shape, the bond lengths and angles, the vibrations.',
+    blurb: 'The atoms where the calculation put them: the shape, the bond lengths and angles.',
   },
   vsepr: {
     atoms: false, vseprOrbitals: true, labels: 'atom', esp: false, dipole: false, orbitals: 'none',
@@ -69,6 +72,11 @@ const PRESETS: Record<ModelView, Preset> = {
     title: 'Delocalized orbitals',
     blurb: 'The canonical molecular orbitals, GFN2-xTB’s or extended Hückel’s: each spread over the molecule.',
   },
+  thermo: {
+    atoms: true, vseprOrbitals: false, labels: 'atom', esp: false, dipole: false, orbitals: 'none',
+    title: 'Thermochemistry',
+    blurb: 'The molecule never stands still: its vibrations, and the energy, enthalpy, entropy and free energy they give at 298 K.',
+  },
 };
 
 function setChecked(id: string, checked: boolean): void {
@@ -85,7 +93,7 @@ function setSelected(id: string, value: string): void {
   select.dispatchEvent(new Event('change', { bubbles: true }));
 }
 
-export function setupModelViews(ctx: SceneContext, moPanel: MoPanel): void {
+export function setupModelViews(ctx: SceneContext, moPanel: MoPanel, thermoPanel: ThermoPanel): void {
   const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('#model-views [data-model]'));
   const inspector = document.getElementById('inspector')!;
   const title = document.getElementById('inspector-title')!;
@@ -117,11 +125,14 @@ export function setupModelViews(ctx: SceneContext, moPanel: MoPanel): void {
     setSelected('ctrl-label-mode', preset.labels === 'atom' && numberedLabels ? 'atom-id' : preset.labels);
     setChecked('ctrl-show-esp', preset.esp);
     setChecked('ctrl-show-dipole', preset.dipole);
-    // A vibration and the measure tool are the Structure view's: their controls
-    // go with it, so they do not keep running where they cannot be stopped.
+    // A vibration is the Thermo view's and the measure tool the Structure
+    // view's: their controls go with the view, so they do not keep running
+    // where they cannot be stopped. Thermo starts its own vibration.
     setSelected('ctrl-vibration', '');
     const measureToggle = document.getElementById('ctrl-measure-toggle');
     if (view !== 'structure' && measureToggle?.classList.contains('active')) measureToggle.click();
+    if (view === 'thermo') thermoPanel.enter();
+    else thermoPanel.leave();
     if (preset.orbitals === 'none') {
       // a drawn MO takes the stage over everything else, so it goes too
       moPanel.clearSelections();

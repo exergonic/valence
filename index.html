@@ -122,6 +122,7 @@
             <button data-model="charge" title="Charge model: the atoms with their partial charges, the electrostatic potential surface and the dipole">Charge Model</button>
             <button data-model="localized" title="Localized orbitals: the bonds and lone pairs (Pipek–Mezey), the highest occupied one drawn">Localized Orbitals</button>
             <button data-model="delocalized" title="Delocalized orbitals: the GFN2-xTB molecular orbitals (extended Hückel beside them), the HOMO drawn">Delocalized Orbitals</button>
+            <button data-model="thermo" title="Thermo: the molecule vibrating, and its energy, enthalpy, entropy and free energy at 298 K">Thermo</button>
           </div>
         </div>
 
@@ -312,9 +313,12 @@
             <button id="ctrl-measure-clear" class="export-btn measure-clear hidden">Clear</button>
           </section>
 
-          <section class="inspector-section for-structure">
+          <!-- the Thermo view: the molecule moving, and what its motion is worth -->
+          <section class="inspector-section for-thermo">
             <span class="ctrl-label">Vibrations</span>
-            <select id="ctrl-vibration" class="ctrl-select" disabled title="Vibrations come with a GFN2-xTB optimisation below 16 atoms: build the sketch locally, or press Refine.">
+            <p id="thermo-status" class="measure-hint hidden"></p>
+            <button id="thermo-compute" class="refine-btn hidden"></button>
+            <select id="ctrl-vibration" class="ctrl-select" disabled title="The vibrations of the GFN2-xTB minimum: opening the Thermo view computes them.">
               <option value="">Off</option>
             </select>
             <div id="thermo-readout" class="thermo-readout hidden"></div>
