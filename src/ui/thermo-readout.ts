@@ -3,12 +3,11 @@
  * numbers in three units was hard to parse, even for the teacher). Clean at
  * first sight, more the deeper one digs, rigorous all the way down:
  *
- *   - a ledger that builds G from E, each step a bar to scale: + ZPE, + the
- *     thermal energy, = U, + pV, = H, − TS, = G. E is GFN2's, in hartrees as
- *     everywhere else; the steps are kcal/mol, and a total is E plus their
- *     sum ("E + 67.13") — small numbers that add up by eye, without zeroing E
- *     (asked for 2026-11-05: a zeroed E jarred beside the energy shown
- *     elsewhere, and absolute totals in kcal/mol ran to five digits).
+ *   - a ledger that builds G from E, every row in kcal/mol above E, each step
+ *     a bar to scale: + ZPE, + the thermal energy, = U, + pV, = H, − TS, = G.
+ *     E is the ledger's zero, with GFN2's own energy in hartrees beside it in
+ *     plain sight, so the zero explains itself (2026-11-05: absolute totals
+ *     and "E + 67.13" were both tried live; one unit and one zero read best).
  *     The "=" rows carry their defining relation; a click on a "+" or "−"
  *     row opens its statistical-mechanics formula, kept out of sight so a
  *     general-chemistry class is not met with partition functions;
@@ -35,11 +34,9 @@ interface LedgerRow {
   sign: '' | '+' | '−' | '=';
   term: string;
   says: string;
-  /** What the value column shows: E in hartrees, a step in kcal/mol, a
-   *  total as E plus its kcal/mol. */
+  /** kcal/mol above E, formatted. */
   value: string;
-  /** The bar: from and to, kcal/mol above E — the steps are what is drawn
-   *  to scale; a total has none. */
+  /** The bar: from and to, kcal/mol above E; absent on a total. */
   bar?: { from: number; to: number; loss?: boolean };
   /** The relation an "=" row always shows, or the formula behind a click. */
   relation?: string;
@@ -54,18 +51,17 @@ function ledgerRows(t: Thermochemistry, modeCount: number): LedgerRow[] {
   const u = k(t.internalEnergy - t.energy);
   const h = k(t.enthalpy - t.energy);
   const g = k(t.freeEnergy - t.energy);
+  // A true minus sign: a tiny molecule's TS can outweigh its ZPE, leaving G below E.
   const minus = (text: string) => text.replace('-', '−');
-  const step = (kcalPerMol: number) => kcalPerMol.toFixed(2);
-  // A tiny molecule's TS can outweigh its ZPE, leaving G below E.
-  const aboveE = (kcalPerMol: number) => `E ${kcalPerMol < 0 ? '−' : '+'} ${Math.abs(kcalPerMol).toFixed(2)}`;
+  const step = (kcalPerMol: number) => minus(kcalPerMol.toFixed(2));
   const rotation = t.linear ? 'RT (linear: two axes)' : '³⁄₂RT';
   return [
     {
-      sign: '', term: 'E', says: 'electronic energy: the atoms at rest at the bottom of the well',
-      value: `${minus(t.energy.toFixed(6))} Eh`,
-      formula: [`GFN2-xTB’s energy at this minimum, ${minus(k(t.energy).toFixed(2))} kcal/mol`,
+      sign: '', term: 'E', says: `electronic energy, ${minus(t.energy.toFixed(6))} Eh: the zero of this ledger`,
+      value: step(0),
+      formula: ['GFN2-xTB’s energy at this minimum: the atoms at rest at the bottom of the well.',
         'Semiempirical, and meaningful only in differences: with an isomer, a conformer. '
-          + 'The steps below are what this molecule adds to it.'],
+          + 'Every row below is kcal/mol above it; add it back for an absolute energy.'],
     },
     {
       sign: '+', term: 'ZPE', says: 'zero-point energy: no vibration ever stops', value: step(zpe), bar: { from: 0, to: zpe },
@@ -78,12 +74,12 @@ function ledgerRows(t: Thermochemistry, modeCount: number): LedgerRow[] {
       value: step(thermal), bar: { from: zpe, to: u },
       formula: ['translation  ³⁄₂RT', `rotation  ${rotation}`, 'vibration  Σ hcν̃ / (e<sup>hcν̃/kT</sup> − 1)'],
     },
-    { sign: '=', term: 'U', says: 'internal energy', value: aboveE(u), relation: 'U = E + ZPE + E<sub>thermal</sub>' },
+    { sign: '=', term: 'U', says: 'internal energy', value: step(u), relation: 'U = E + ZPE + E<sub>thermal</sub>' },
     {
       sign: '+', term: 'pV', says: 'making room against the atmosphere', value: step(h - u), bar: { from: u, to: h },
       formula: ['pV = nRT: RT for a mole of ideal gas'],
     },
-    { sign: '=', term: 'H', says: 'enthalpy', value: aboveE(h), relation: 'H = U + pV' },
+    { sign: '=', term: 'H', says: 'enthalpy', value: step(h), relation: 'H = U + pV' },
     {
       sign: '−', term: 'TS', says: `${t.temperature} K × ${calPerK(t.entropy)} cal/(mol·K)`, value: step(h - g),
       bar: { from: g, to: h, loss: true },
@@ -99,7 +95,7 @@ function ledgerRows(t: Thermochemistry, modeCount: number): LedgerRow[] {
         'S<sub>spin</sub> = R ln(2S + 1)',
       ],
     },
-    { sign: '=', term: 'G', says: 'free energy', value: aboveE(g), relation: 'G = H − TS' },
+    { sign: '=', term: 'G', says: 'free energy', value: step(g), relation: 'G = H − TS' },
   ];
 }
 
@@ -188,7 +184,7 @@ function foldedHtml(t: Thermochemistry): string {
  *  with a mode's index (into the structure's normal modes) when its row is
  *  clicked. */
 export function drawThermoReadout(el: HTMLElement, t: Thermochemistry, onPlay: (index: number) => void): void {
-  el.innerHTML = `<div class="thermo-subhead">Building G from E · steps in kcal/mol · click a step for its formula</div>`
+  el.innerHTML = `<div class="thermo-subhead">Building G from E · kcal/mol above E · click a step for its formula</div>`
     + `<div class="ledger">${ledgerHtml(t, t.modes.length)}</div>`
     + entropyHtml(t) + modesHtml(t) + foldedHtml(t);
   el.querySelectorAll<HTMLButtonElement>('.ledger-row[data-formula]').forEach((row) => {
