@@ -170,7 +170,14 @@ Made with the user; the reasons are in NOTES.md under the date.
   The thermochemistry is xtb's, to be checked against it (decided the same
   day): a soft mode's entropy by Grimme's quasi-RRHO with xtb's **50 cm⁻¹**
   cut-off, and an imaginary mode above **−20 cm⁻¹** — a methyl rotor not quite
-  settled — counted as real.
+  settled — counted as real. The readout builds G from E in kcal/mol, the
+  formulas behind a click; the vibrations are a table of each mode's share
+  of the ZPE and of TS, the softest and stiffest few shown, the rest folded.
+- **Clean at first sight, rigorous all the way down** (2026-11-05, the
+  user's philosophy for the app): what a view shows at first is the least a
+  general-chemistry student needs; more is there the deeper one digs —
+  behind a click, a fold, a hover — and every layer is exact, never a
+  simplification that the next layer contradicts.
 - **A carbene is two dots** (2026-11-04): the radical tool's second click,
   "C••". The dots say nothing of the spin: a singlet until a triplet is
   chosen beside Refine.
@@ -229,7 +236,7 @@ Each module's header comment says what it does and why; this list says where.
   the active view's controls); everything global in the settings drawer.
   `model-views.ts`, `controls.ts`, `jsme-panel.ts`, `sketcher-toolbar.ts`,
   `x-atom-labels.ts`, `periodic-table.ts`, `functional-groups.ts`,
-  `mo-diagram.ts`, `thermo-panel.ts`, `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
+  `mo-diagram.ts`, `thermo-panel.ts`, `thermo-readout.ts`, `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
   (`sdf-data.ts`, `mo-data.ts`), `theme.ts` (the three looks)
 - `src/utils/` — generic math, no chemistry: `vec3.ts`, `eigen.ts`,
   `march-tetrahedra.ts`

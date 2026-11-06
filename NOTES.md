@@ -5834,3 +5834,38 @@ In the app, octadecane (CIR, the same minimum as before, −57.966700 Eh): S
 180.78 → 169.12 cal/(mol K), G up by about 3.5 kcal/mol. The readout's note
 and the SDF's conditions field name quasi-RRHO, and a mode counted as real
 from just below zero is said in the note.
+
+## The Thermo readout builds G from E (2026-11-05, later)
+
+The user found the readout — ZPE, U − E, H − E, S, G − E, then E, U, H, G
+in hartrees — hard to parse ("even I have to puzzle it out"), and so would
+their students: three units, corrections and totals interleaved, S on a
+scale no energy shares, and no relation between them stated. Designed with
+them from a mockup on hexane's numbers, and settled: kcal/mol only; the
+statistical mechanics behind a click, so a general-chemistry class never
+meets a partition function unasked; no temperature slider for now; the
+softest and stiffest few modes, the rest folded. Their philosophy, now in
+AGENTS.md: clean at first sight, more the deeper one digs, rigorous all the
+way down.
+
+`ui/thermo-readout.ts`, top to bottom: a ledger in kcal/mol above E — E,
++ ZPE, + E_thermal (by motion), = U, + pV, = H, − TS, = G — each step a bar
+to scale (ZPE dwarfs the thermal energy, and −TS is not small), each total
+with its defining relation, each step's formula behind a click (TS's is the
+whole entropy: Sackur–Tetrode, the rigid rotor with σ, quasi-RRHO's blend);
+the entropy by motion; the vibrations, each with ½hcν̃ and TS, a click
+playing one, the column sums equal to the ledger's ZPE and vibrational TS;
+and two folds, the totals in hartrees and the model.
+
+Hexane, the numbers the table makes visible: its 14 C–H stretches hold 60
+of the 117.5 kcal/mol of ZPE and no entropy; its 6 softest modes hold 5.1
+of the 6.5 kcal/mol of vibrational TS — the stiff bonds hold the zero-point
+energy, the floppy motions the entropy. Translation is the largest share of
+its entropy (39.3 of 87.1 cal/(mol K)).
+
+The inspector is about 250 px wide even at 1600 px, so a step reads term and
+value on one line, its description beneath. thermochemistry.ts now keeps
+the parts it summed (thermal energy by motion, pV, each mode's shares), and
+a test holds the ledger's sums exact. The render layer hands the vibrations
+to the panel through `ctx.onVibrations`; the readout is redrawn only for new
+numbers, so an opened formula or fold stays open while modes are played.
