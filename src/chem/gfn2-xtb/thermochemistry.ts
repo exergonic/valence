@@ -84,6 +84,24 @@ export interface Thermochemistry {
   imaginary: number;
   /** Imaginary modes above SADDLE_FREQUENCY_THRESHOLD, counted as real. */
   invertedImaginary: number;
+  /** U − E − ZPE by motion, Eh: the energy of motion at T, above the zero point. */
+  thermalParts: { translational: number; rotational: number; vibrational: number };
+  /** pV = RT for a mole of ideal gas, Eh: H − U. */
+  pressureVolume: number;
+  /** Each counted mode's share of the ZPE (Eh) and of the vibrational
+   *  entropy (Eh/K), at its index in the input frequencies; they sum to
+   *  `zeroPoint` and `entropyParts.vibrational`. */
+  modes: ModeShare[];
+}
+
+export interface ModeShare {
+  /** Index into the input frequencies (and so into the normal modes). */
+  index: number;
+  /** cm⁻¹, as counted: an artifact imaginary mode at |ν̃|. */
+  wavenumber: number;
+  inverted: boolean;
+  zeroPoint: number;
+  entropy: number;
 }
 
 export interface ThermochemistryInput {
@@ -141,23 +159,27 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
   const artifact = (f: number) => f < -RIGID_MOTION_CM && f > SADDLE_FREQUENCY_THRESHOLD;
   const invertedImaginary = input.frequencies.filter(artifact).length;
   const wavenumbers = input.frequencies.map((f) => (artifact(f) ? -f : f));
-  const real = wavenumbers.filter((f) => f > RIGID_MOTION_CM);
   const imaginary = wavenumbers.filter((f) => f < -RIGID_MOTION_CM).length;
   let zeroPoint = 0;
   let uVib = 0;
   let sVib = 0;
-  for (const wavenumber of real) {
+  const modes: ModeShare[] = [];
+  wavenumbers.forEach((wavenumber, index) => {
+    if (wavenumber <= RIGID_MOTION_CM) return;
     const quantum = PLANCK * LIGHT_CM * wavenumber; // J
     const x = quantum / (BOLTZMANN * T);
-    zeroPoint += 0.5 * quantum * AVOGADRO;
+    const modeZeroPoint = 0.5 * quantum * AVOGADRO;
+    zeroPoint += modeZeroPoint;
     uVib += quantum * AVOGADRO * (0.5 + 1 / Math.expm1(x));
     const harmonic = x / Math.expm1(x) - Math.log(-Math.expm1(-x));
     const rotorMoment = PLANCK / (8 * Math.PI ** 2 * LIGHT_CM * wavenumber);
     const capped = (rotorMoment * averageMoment) / (rotorMoment + averageMoment);
     const freeRotor = 0.5 + Math.log(Math.sqrt((8 * Math.PI ** 3 * capped * BOLTZMANN * T) / PLANCK ** 2));
     const harmonicWeight = 1 / (1 + (ROTOR_CUTOFF_CM / wavenumber) ** 4);
-    sVib += GAS_CONSTANT * (harmonicWeight * harmonic + (1 - harmonicWeight) * freeRotor);
-  }
+    const modeEntropy = GAS_CONSTANT * (harmonicWeight * harmonic + (1 - harmonicWeight) * freeRotor);
+    sVib += modeEntropy;
+    modes.push({ index, wavenumber, inverted: artifact(input.frequencies[index]), zeroPoint: modeZeroPoint, entropy: modeEntropy });
+  });
 
   const sElec = GAS_CONSTANT * Math.log(Math.max(1, input.multiplicity));
 
@@ -186,6 +208,13 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     linear,
     imaginary,
     invertedImaginary,
+    thermalParts: {
+      translational: toHartree(uTrans),
+      rotational: toHartree(uRot),
+      vibrational: toHartree(uVib - zeroPoint),
+    },
+    pressureVolume: toHartree(RT),
+    modes: modes.map((mode) => ({ ...mode, zeroPoint: toHartree(mode.zeroPoint), entropy: toHartree(mode.entropy) })),
   };
 }
 

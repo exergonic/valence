@@ -107,3 +107,27 @@ describe('xtb’s rules for soft and nearly-zero modes', () => {
     expect(real.invertedImaginary).toBe(0);
   });
 });
+
+describe('the ledger the Thermo view shows adds up', () => {
+  const hexane = oracle.molecules.hexane;
+  const result = thermochemistry({
+    atoms: hexane.atoms, frequencies: hexane.frequencies, energy: hexane.energy, multiplicity: 1, symmetryNumber: 2,
+  });
+  const sum = (values: number[]) => values.reduce((s, v) => s + v, 0);
+
+  it('U = E + ZPE + the thermal energy by motion; H = U + pV; G = H − TS', () => {
+    const thermal = sum(Object.values(result.thermalParts));
+    expect(result.internalEnergy).toBeCloseTo(result.energy + result.zeroPoint + thermal, 12);
+    expect(result.enthalpy).toBeCloseTo(result.internalEnergy + result.pressureVolume, 12);
+    expect(result.freeEnergy).toBeCloseTo(result.enthalpy - result.temperature * result.entropy, 12);
+  });
+
+  it('the modes’ shares sum to the ZPE and the vibrational entropy, one per real mode', () => {
+    expect(result.modes).toHaveLength(3 * 20 - 6);
+    expect(sum(result.modes.map((m) => m.zeroPoint))).toBeCloseTo(result.zeroPoint, 12);
+    expect(sum(result.modes.map((m) => m.entropy))).toBeCloseTo(result.entropyParts.vibrational, 12);
+    // indexed like the frequencies: the six rigid motions come first
+    expect(result.modes[0].index).toBe(6);
+    expect(result.modes[0].wavenumber).toBe(hexane.frequencies[6]);
+  });
+});
