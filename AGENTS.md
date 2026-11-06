@@ -156,12 +156,21 @@ Made with the user; the reasons are in NOTES.md under the date.
   budget, as often as the user likes; no unlimited mode.
 - **The app opens on Structure** (2026-11-04): the atoms and bonds alone,
   element labels; VSEPR and the bonding models are views a click away. Its
-  panel holds what bears on the geometry itself — Measure, the vibrations,
-  the spin and Refine, Skip PubChem, Snap to point group — not Settings.
+  panel holds what bears on the geometry itself — Measure, the spin and
+  Refine, Skip PubChem, Snap to point group — not Settings.
+- **The Thermo view** (2026-11-05): the vibrations and the molecule's
+  ideal-gas thermochemistry at 298.15 K, 1 atm, on GFN2's harmonic
+  frequencies; it opens on the slowest mode, playing. It needs a GFN2
+  minimum: a structure that is not one is optimised first and replaced on
+  screen, and a held structure is refused with the reason. The Hessian runs
+  on request at any size; its time is estimated from the engine's gradient
+  time on this machine, an estimate over **15 s** waits for the user's
+  go-ahead, and the run shows its time against the estimate and can be
+  cancelled. A saddle is pushed down its imaginary mode and checked again.
 - **A carbene is two dots** (2026-11-04): the radical tool's second click,
   "C••". The dots say nothing of the spin: a singlet until a triplet is
   chosen beside Refine.
-- **The hover, per view** (2026-10-21): Structure none; VSEPR the lobe's hybrid; Charge Model
+- **The hover, per view** (2026-10-21): Structure and Thermo none; VSEPR the lobe's hybrid; Charge Model
   the ESP under the pointer; Localized the orbital's NBO hybrid on the atom
   and its E(2) with the anchor; Delocalized the MO, the lobe's atom by s/p/d
   share, and its phase.
@@ -340,8 +349,9 @@ Deliberate; the evidence is in NOTES.md or the test named.
 - A fetched MMFF94 conformer can pucker a trigonal 3-ring centre's substituent
   well out of the ring plane (`tests/ring-pucker.test.ts`): reported, never
   repaired.
-- The Hessian verdict and the saddle escape run below 16 atoms only; above,
-  a converged structure is a stationary point, not a verified minimum.
+- During an optimisation, the Hessian verdict and the saddle escape run below
+  16 atoms only; the Thermo view runs them at any size. Above, until then, a
+  converged structure is a stationary point, not a verified minimum.
 - Berny is held to the loose gate, so a soft torsion can stop a fraction of a
   kcal/mol above its minimum (NOTES.md, 2026-10-23).
 - The engine is pinned at an untagged OCC commit (5644eaf, unreleased 0.9.6);

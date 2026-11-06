@@ -5722,3 +5722,50 @@ AGENTS.md's oracle command says so, with the user's approval the same day. Runs
 and inputs: `~/valence-checks/methylcarbene/{s,t,tsp}` on lenovo. The
 NiCl₄²⁻ triplet/singlet comparison of 2026-10-06 was app against app and is
 unaffected.
+
+## A Thermo view, and the Hessian at any size (2026-11-05)
+
+Asked for by the user (ISSUES.md's "data" view, renamed): a view of the
+molecule's thermochemistry — U, H, S, G — opening on a slow vibration, so a
+student sees the molecule *moving*, which is what thermal energy is. The
+vibrations and the readout move there from the Structure panel. Decided with
+the user, and written into AGENTS.md the same day:
+
+- **It needs a GFN2 minimum.** The app had frequencies only from its own
+  converged optimisation below 16 atoms; a fetched structure (most organics),
+  a held one and a run that stopped short had none. A fetched or stopped
+  structure is optimised first and the minimum *replaces* it on screen — the
+  numbers belong to GFN2's minimum and to nothing else. A held structure is
+  refused: it is the drawing held at the guard's limits, not a stationary
+  point, and the reason tells the user to redraw.
+- **The 16-atom gate is the optimiser's, not Thermo's.** It was set because
+  the verdict spent the 30 s budget on a convenience; in Thermo the Hessian is
+  the product.
+- **The gate is a time, measured, not an atom count.** OCC's numerical
+  Hessian, Node, one thread, at PubChem's 3D structures (this machine, after
+  a RAM upgrade to dual channel — October's 3.1 s at N=21 was before it):
+
+  | | N | Hessian |
+  |---|---|---|
+  | hexane | 20 | 1.2 s |
+  | heptane | 23 | 1.8 s |
+  | decane | 32 | 4.9 s |
+  | ibuprofen | 33 | 9.3 s |
+  | tetradecane | 44 | 14.4 s |
+  | sucrose | 45 | 27.9 s |
+  | hexadecane | 50 | 21.6 s |
+  | octadecane | 56 | 30.9 s |
+
+  Sucrose costs twice tetradecane at the same N — oxygen carries s and p, H
+  only s — so N alone is a poor predictor. The Hessian is 6N gradients, so it
+  is estimated from the gradient time on the user's own machine, and an
+  estimate over 15 s (half the optimiser's budget; the user's figure) waits
+  for a go-ahead.
+- **No progress bar.** Driving the same central differences from TypeScript
+  would give one: it costs about what OCC's call does (hexane 1.2 vs 1.3 s,
+  decane 4.9 vs 4.8 s, ibuprofen 10.9 vs 9.5 s) and gives the same matrix to
+  1e-5 Eh/bohr², far under the 3e-3 noise floor. The user declined it as
+  code for a bar's sake; the panel shows the time so far against the
+  estimate instead, and the run can be cancelled.
+- **A saddle is escaped**, as the optimiser does: the re-optimisation from
+  a push down one mode is short, but the second Hessian costs a full one.
