@@ -5796,3 +5796,41 @@ oscillator, which overstates its entropy (xtb's quasi-RRHO would
 interpolate it toward a free rotor). Below 16 atoms such modes were rare;
 at any size they are common. Said in thermochemistry.ts's header, not yet
 in the view.
+
+## Quasi-RRHO, as xtb does it (2026-11-05, later)
+
+The Thermo view vibrates molecules of any size, and so meets soft torsions:
+octadecane's lowest mode is 10 cm⁻¹, and a harmonic oscillator's entropy
+grows without bound as ν̃ → 0. OCC has no vibrational thermochemistry at
+all (only the rotational and translational free energies of its crystal
+work, and the SCF's smearing entropy), so this is TypeScript, in
+thermochemistry.ts. The user chose xtb's settings over Grimme's paper's —
+both cut-offs are arbitrary, and xtb is the oracle and Grimme's own code.
+
+Read from xtb's source (`~/src/xtb` on lenovo, fa035bc; the oracle binary is
+6.7.1): `thermo.f90`'s `thermodyn` and `main/property.F90`.
+- Each mode's entropy is w S_HO + (1 − w) S_FR, w = 1/(1 + (ν̃₀/ν̃)⁴), ν̃₀ =
+  50 cm⁻¹ (`thermo_sthr`; Grimme 2012 used 100). Only S: xtb's enthalpy
+  stays harmonic, which is why the app's H already matched it to 1e-6 Eh.
+- The free rotor's moment is μ = h/(8π²cν̃), capped as μI_av/(μ + I_av), with
+  I_av the molecule's mean principal moment (`axis2`'s `avmom`) — not the
+  paper's fixed 10⁻⁴⁴ kg m². For hexane the cap barely matters (μ is 4e-48
+  kg m² at 68 cm⁻¹); it is matched anyway.
+- `thermo_ithr = −20`: an imaginary mode between −20 cm⁻¹ and 0 is an
+  "artifact" and is inverted to a real one before anything is summed; ZPE
+  and U take it too. Our SADDLE_FREQUENCY_THRESHOLD was already −20, so the
+  Hessian verdict called such a structure a minimum while the thermochemistry
+  left the mode out and called it a saddle; the two now agree. The user: these
+  are always methyl rotors, a plague to optimisations for little benefit.
+
+Hexane (PubChem CID 8058 → xtb `--ohess vtight`, `~/valence-checks/qrrho/hexane/xyz`)
+joined `tests/references/xtb-thermochemistry.json` as the first molecule
+soft enough to tell the two apart: plain RRHO was 0.29 cal/(mol K) high, and
+now it is 0.017 off, the same translational-constant offset as the other four.
+Its 68 cm⁻¹ mode's T·S, 1.18797 kcal/mol in xtb's own table (77.76 %
+oscillator), is pinned per mode.
+
+In the app, octadecane (CIR, the same minimum as before, −57.966700 Eh): S
+180.78 → 169.12 cal/(mol K), G up by about 3.5 kcal/mol. The readout's note
+and the SDF's conditions field name quasi-RRHO, and a mode counted as real
+from just below zero is said in the note.

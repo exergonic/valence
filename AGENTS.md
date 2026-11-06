@@ -167,6 +167,10 @@ Made with the user; the reasons are in NOTES.md under the date.
   time on this machine, an estimate over **15 s** waits for the user's
   go-ahead, and the run shows its time against the estimate and can be
   cancelled. A saddle is pushed down its imaginary mode and checked again.
+  The thermochemistry is xtb's, to be checked against it (decided the same
+  day): a soft mode's entropy by Grimme's quasi-RRHO with xtb's **50 cm⁻¹**
+  cut-off, and an imaginary mode above **−20 cm⁻¹** — a methyl rotor not quite
+  settled — counted as real.
 - **A carbene is two dots** (2026-11-04): the radical tool's second click,
   "C••". The dots say nothing of the spin: a singlet until a triplet is
   chosen beside Refine.
