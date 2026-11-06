@@ -225,7 +225,7 @@ Each module's header comment says what it does and why; this list says where.
   the active view's controls); everything global in the settings drawer.
   `model-views.ts`, `controls.ts`, `jsme-panel.ts`, `sketcher-toolbar.ts`,
   `x-atom-labels.ts`, `periodic-table.ts`, `functional-groups.ts`,
-  `mo-diagram.ts`, `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
+  `mo-diagram.ts`, `thermo-panel.ts`, `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
   (`sdf-data.ts`, `mo-data.ts`), `theme.ts` (the three looks)
 - `src/utils/` — generic math, no chemistry: `vec3.ts`, `eigen.ts`,
   `march-tetrahedra.ts`

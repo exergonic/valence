@@ -5769,3 +5769,30 @@ the user, and written into AGENTS.md the same day:
   estimate instead, and the run can be cancelled.
 - **A saddle is escaped**, as the optimiser does: the re-optimisation from
   a push down one mode is short, but the second Hessian costs a full one.
+
+**Built the same day.** The run is the Refine path with one option
+(`vibrationsAtAnySize`): the optimiser's Hessian gate lifted, and the
+Hessian's time kept out of the 30 s budget, since a 30 s Hessian would
+otherwise leave the saddle escape no time at all. Through Refine, the
+bonding guard, the held structure and the Info log's notes come for
+nothing. The estimate times two gradients displaced as the Hessian's are
+and scales by 6N. It runs a little high: hexane 1.7 s for a 1.3 s Hessian
+(Node, quiet machine), octadecane 30 s for about 28 s in the app's pane;
+the smoke test's headless browser estimated octadecane at 54 s — the
+estimate is the machine's, as intended. Under `bun run test`'s parallel
+load the Hessian's own time doubles, so the test checks the estimate's
+units, not its accuracy.
+
+In the app: hexane from PubChem, Thermo pressed — optimised, 54 modes, the
+slowest playing, 4.5 s in all, unasked. Octadecane from CIR — "Compute
+vibrations — about 30 s", waiting; pressed, 4 Berny steps and the Hessian,
+162 modes, a minimum, 32 s in all. The held-structure refusal was not
+exercised in the app (it reads `ctx.noMinimum`, set where the held
+structure is shown).
+
+**Plain RRHO now meets floppy molecules.** Octadecane's lowest mode is
+10 cm⁻¹, a chain torsion; thermochemistry.ts treats it as a harmonic
+oscillator, which overstates its entropy (xtb's quasi-RRHO would
+interpolate it toward a free rotor). Below 16 atoms such modes were rare;
+at any size they are common. Said in thermochemistry.ts's header, not yet
+in the view.
