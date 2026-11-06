@@ -2,9 +2,10 @@
  * Thermochemistry from GFN2's vibrations (gfn2-xtb/thermochemistry.ts), held
  * to the Fortran xtb oracle: its own optimised geometries and frequencies go
  * in, and its printed ZPE, entropy (by part), enthalpy and free energy must
- * come out (tests/references/xtb-thermochemistry.json). None of the four has
- * a mode soft enough for xtb's quasi-RRHO to differ from the plain RRHO used
- * here. Argon pins the translational part alone.
+ * come out (tests/references/xtb-thermochemistry.json). Hexane is the one
+ * with modes soft enough (68 and 94 cm⁻¹) for xtb's quasi-RRHO entropy to
+ * differ from the plain RRHO's — by 0.29 cal/(mol K), six times the test's
+ * margin. Argon pins the translational part alone.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -74,5 +75,35 @@ describe('the parts that are not vibrational', () => {
     const { atoms, frequencies, energy } = oracle.molecules.water;
     const result = thermochemistry({ atoms, frequencies: [-166, ...frequencies], energy, multiplicity: 1, symmetryNumber: 2 });
     expect(result.imaginary).toBe(1);
+  });
+});
+
+describe('xtb’s rules for soft and nearly-zero modes', () => {
+  const hexane = oracle.molecules.hexane;
+  const run = (frequencies: number[]) => thermochemistry({
+    atoms: hexane.atoms, frequencies, energy: hexane.energy, multiplicity: 1, symmetryNumber: 2,
+  });
+
+  it('a soft mode’s entropy is blended toward a free rotor’s: hexane’s 68 cm⁻¹ torsion', () => {
+    // xtb's own table for this mode: T·S 1.25214 kcal/mol as an oscillator,
+    // 0.96361 as a free rotor, 1.18797 blended (77.76 % oscillator)
+    const T = 298.15;
+    const without = hexane.frequencies.map((f, i) => (i === 6 ? 0 : f));
+    const share = (run(hexane.frequencies).entropy - run(without).entropy) * T * 627.5094740631;
+    expect(share).toBeCloseTo(1.18797, 3);
+  });
+
+  it('an imaginary mode above −20 cm⁻¹ is a methyl rotor’s artifact, counted as real', () => {
+    const real = run(hexane.frequencies);
+    const flipped = run(hexane.frequencies.map((f, i) => (i === 6 ? -f : f)));
+    expect(hexane.frequencies[6]).toBeGreaterThan(20); // so its flip is a saddle's
+    expect(flipped.imaginary).toBe(1);
+
+    const settled = run(hexane.frequencies.map((f, i) => (i === 6 ? 15 : f)));
+    const artifact = run(hexane.frequencies.map((f, i) => (i === 6 ? -15 : f)));
+    expect(artifact.imaginary).toBe(0);
+    expect(artifact.invertedImaginary).toBe(1);
+    expect(artifact.freeEnergy).toBe(settled.freeEnergy);
+    expect(real.invertedImaginary).toBe(0);
   });
 });

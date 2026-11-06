@@ -95,7 +95,7 @@ export function sdfDataFields(input: SdfDataInput): SdfField[] {
   }
   const thermo = thermochemistryOf(molecule, input.vibrations, properties);
   if (thermo) {
-    add('GFN2_THERMO_CONDITIONS', `${thermo.temperature} K, 1 atm; ideal gas, rigid rotor, harmonic oscillator (RRHO); symmetry number ${thermo.symmetryNumber}`);
+    add('GFN2_THERMO_CONDITIONS', `${thermo.temperature} K, 1 atm; ideal gas, rigid rotor, harmonic oscillator, soft modes' entropy by Grimme's quasi-RRHO (50 cm-1, as xtb); symmetry number ${thermo.symmetryNumber}`);
     add('GFN2_ZERO_POINT_ENERGY_HARTREE', fixed(8)(thermo.zeroPoint));
     add('GFN2_INTERNAL_ENERGY_HARTREE', fixed(8)(thermo.internalEnergy));
     add('GFN2_ENTHALPY_HARTREE', fixed(8)(thermo.enthalpy));

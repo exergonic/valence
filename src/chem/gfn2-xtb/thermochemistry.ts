@@ -1,13 +1,14 @@
 /**
  * Thermochemistry from GFN2-xTB's vibrations: the zero-point energy, the
- * enthalpy, the entropy and the free energy of the molecule as an ideal gas
- * at 298.15 K and 1 atm — the textbook ideal-gas / rigid-rotor / harmonic-
- * oscillator (RRHO) sums every quantum chemistry program prints.
+ * internal energy, the enthalpy, the entropy and the free energy of the
+ * molecule as an ideal gas at 298.15 K and 1 atm — the ideal-gas / rigid-rotor
+ * / harmonic-oscillator sums, with the soft modes' entropy taken as xtb takes
+ * it (quasi-RRHO, below).
  *
  *   translation   U = 3/2 RT          S = R [ln((2πmkT/h²)^3/2 · kT/p) + 5/2]
  *   rotation      U = 3/2 RT (RT linear)
  *                 S = R [ln(√π/σ · √(T³/ΘₐΘ_bΘ_c)) + 3/2]   (R [ln(T/σΘ) + 1] linear)
- *   vibration     U = Σ hcν̃ (½ + 1/(eˣ − 1))   S = R Σ [x/(eˣ − 1) − ln(1 − e⁻ˣ)],  x = hcν̃/kT
+ *   vibration     U = Σ hcν̃ (½ + 1/(eˣ − 1))   S_HO = R [x/(eˣ − 1) − ln(1 − e⁻ˣ)],  x = hcν̃/kT
  *   electronic    S = R ln(2S + 1)
  *   U = E + the three U's above,  H = U + RT,  G = H − TS
  *
@@ -16,17 +17,31 @@
  * partition function, since a rotation that maps the molecule onto itself is
  * not a new orientation.
  *
- * Plain RRHO, not Grimme's quasi-RRHO that the Fortran xtb prints: below
- * ~100 cm⁻¹ a harmonic oscillator's entropy grows without bound, so a soft
- * torsion's S (and G) is overstated here; xtb interpolates such modes toward
- * a free rotor. For the small molecules Valence vibrates (under 16 atoms)
- * the two agree wherever no mode is that soft. An imaginary mode has no
- * harmonic partition function and is left out — the structure is then a
- * saddle, and the result says so.
+ * Quasi-RRHO (Grimme, Chem. Eur. J. 2012, 18, 9955), exactly as xtb 6.7.1
+ * does it (decided with the user 2026-11-05, to compare against the oracle).
+ * A harmonic oscillator's entropy grows without bound as ν̃ → 0, which
+ * overstates a soft torsion's S, and a torsion that soft is more nearly a
+ * free internal rotation. So each mode's entropy is a blend,
+ *
+ *   S = w S_HO + (1 − w) S_FR,   w = 1 / (1 + (ν̃₀/ν̃)⁴),   ν̃₀ = 50 cm⁻¹,
+ *
+ * the free rotor's being S_FR = R [½ + ln √(8π³ μ′ kT / h²)], for the moment
+ * of inertia μ = h / (8π² c ν̃) of a rotor with that frequency, capped by the
+ * molecule's own average moment: μ′ = μ I_av / (μ + I_av), I_av the mean of
+ * the principal moments (xtb's choice; Grimme's paper fixes it at 10⁻⁴⁴ kg m²).
+ * Only the entropy is blended: U and H stay harmonic, as in xtb. The cut-off
+ * is as arbitrary as the 100 cm⁻¹ of Grimme's paper; 50 is xtb's.
+ *
+ * An imaginary mode above SADDLE_FREQUENCY_THRESHOLD (−20 cm⁻¹) is an artifact
+ * — a methyl rotor not quite settled at its minimum, which the optimiser's
+ * gate leaves and the Hessian verdict already calls a minimum — and counts as
+ * real at |ν̃|, as xtb counts it. Below that, a mode has no harmonic partition
+ * function and is left out: the structure is a saddle, and the result says so.
  */
 
 import { ATOMIC_MASS } from '../assign-mass';
 import { jacobiSymmetric } from '../../utils/eigen';
+import { SADDLE_FREQUENCY_THRESHOLD } from './normal-modes';
 
 // CODATA 2018, SI
 const PLANCK = 6.62607015e-34;
@@ -42,6 +57,9 @@ export const STANDARD_TEMPERATURE = 298.15;
 /** Modes below this many cm⁻¹ (in magnitude) are rigid motions the
  *  projection left behind, not vibrations. */
 const RIGID_MOTION_CM = 1;
+/** Quasi-RRHO's cut-off, cm⁻¹: a mode this soft has half its entropy from the
+ *  harmonic oscillator and half from the free rotor. xtb's value. */
+const ROTOR_CUTOFF_CM = 50;
 
 export interface Thermochemistry {
   temperature: number;
@@ -64,6 +82,8 @@ export interface Thermochemistry {
   linear: boolean;
   /** Imaginary modes left out: a saddle, not a minimum. */
   imaginary: number;
+  /** Imaginary modes above SADDLE_FREQUENCY_THRESHOLD, counted as real. */
+  invertedImaginary: number;
 }
 
 export interface ThermochemistryInput {
@@ -98,6 +118,7 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     for (let p = 0; p < 3; p++) for (let q = 0; q < 3; q++) inertia[p][q] += masses[i] * ((p === q ? r2 : 0) - r[p] * r[q]);
   });
   const moments = jacobiSymmetric(inertia).values.map((I) => I * AMU * 1e-20); // amu Å² → kg m²
+  const averageMoment = (moments[0] + moments[1] + moments[2]) / 3;
   const largest = moments[2];
   const linear = input.atoms.length === 2 || moments[0] < 1e-3 * largest;
   const theta = (I: number) => PLANCK ** 2 / (8 * Math.PI ** 2 * I * BOLTZMANN); // rotational temperature, K
@@ -115,9 +136,13 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     }
   }
 
-  // vibration: each real mode a harmonic oscillator
-  const real = input.frequencies.filter((f) => f > RIGID_MOTION_CM);
-  const imaginary = input.frequencies.filter((f) => f < -RIGID_MOTION_CM).length;
+  // vibration: each real mode a harmonic oscillator, its entropy blended
+  // toward a free rotor's when it is soft
+  const artifact = (f: number) => f < -RIGID_MOTION_CM && f > SADDLE_FREQUENCY_THRESHOLD;
+  const invertedImaginary = input.frequencies.filter(artifact).length;
+  const wavenumbers = input.frequencies.map((f) => (artifact(f) ? -f : f));
+  const real = wavenumbers.filter((f) => f > RIGID_MOTION_CM);
+  const imaginary = wavenumbers.filter((f) => f < -RIGID_MOTION_CM).length;
   let zeroPoint = 0;
   let uVib = 0;
   let sVib = 0;
@@ -126,7 +151,12 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     const x = quantum / (BOLTZMANN * T);
     zeroPoint += 0.5 * quantum * AVOGADRO;
     uVib += quantum * AVOGADRO * (0.5 + 1 / Math.expm1(x));
-    sVib += GAS_CONSTANT * (x / Math.expm1(x) - Math.log(-Math.expm1(-x)));
+    const harmonic = x / Math.expm1(x) - Math.log(-Math.expm1(-x));
+    const rotorMoment = PLANCK / (8 * Math.PI ** 2 * LIGHT_CM * wavenumber);
+    const capped = (rotorMoment * averageMoment) / (rotorMoment + averageMoment);
+    const freeRotor = 0.5 + Math.log(Math.sqrt((8 * Math.PI ** 3 * capped * BOLTZMANN * T) / PLANCK ** 2));
+    const harmonicWeight = 1 / (1 + (ROTOR_CUTOFF_CM / wavenumber) ** 4);
+    sVib += GAS_CONSTANT * (harmonicWeight * harmonic + (1 - harmonicWeight) * freeRotor);
   }
 
   const sElec = GAS_CONSTANT * Math.log(Math.max(1, input.multiplicity));
@@ -155,6 +185,7 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     symmetryNumber: sigma,
     linear,
     imaginary,
+    invertedImaginary,
   };
 }
 

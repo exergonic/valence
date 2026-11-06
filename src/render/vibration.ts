@@ -175,7 +175,12 @@ function writeThermochemistry(result: Thermochemistry | null): void {
     + row('G', result.freeEnergy.toFixed(6), 'Eh')
     + '</dl>'
     + `<div class="thermo-note">σ = ${result.symmetryNumber}${result.linear ? ', linear' : ''}. Ideal gas, rigid rotor, `
-    + 'harmonic oscillator (RRHO) on GFN2-xTB’s frequencies — semiempirical.'
+    + 'harmonic oscillator, a soft mode’s entropy tending to a free rotor’s (quasi-RRHO, 50 cm⁻¹, as xtb) — on '
+    + 'GFN2-xTB’s frequencies, semiempirical.'
+    + (result.invertedImaginary > 0
+      ? ` ${result.invertedImaginary} imaginary mode${result.invertedImaginary > 1 ? 's' : ''} above 20i cm⁻¹ counted as `
+        + 'real: a methyl rotor not quite settled, as xtb counts it.'
+      : '')
     + (result.imaginary > 0 ? ` ${result.imaginary} imaginary mode${result.imaginary > 1 ? 's' : ''} left out: a saddle, not a minimum.` : '')
     + '</div>';
 }
