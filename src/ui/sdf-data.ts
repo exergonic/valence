@@ -97,6 +97,7 @@ export function sdfDataFields(input: SdfDataInput): SdfField[] {
   if (thermo) {
     add('GFN2_THERMO_CONDITIONS', `${thermo.temperature} K, 1 atm; ideal gas, rigid rotor, harmonic oscillator (RRHO); symmetry number ${thermo.symmetryNumber}`);
     add('GFN2_ZERO_POINT_ENERGY_HARTREE', fixed(8)(thermo.zeroPoint));
+    add('GFN2_INTERNAL_ENERGY_HARTREE', fixed(8)(thermo.internalEnergy));
     add('GFN2_ENTHALPY_HARTREE', fixed(8)(thermo.enthalpy));
     add('GFN2_ENTROPY_HARTREE_PER_K', thermo.entropy.toExponential(8));
     add('GFN2_FREE_ENERGY_HARTREE', fixed(8)(thermo.freeEnergy));

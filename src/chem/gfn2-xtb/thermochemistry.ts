@@ -9,7 +9,7 @@
  *                 S = R [ln(√π/σ · √(T³/ΘₐΘ_bΘ_c)) + 3/2]   (R [ln(T/σΘ) + 1] linear)
  *   vibration     U = Σ hcν̃ (½ + 1/(eˣ − 1))   S = R Σ [x/(eˣ − 1) − ln(1 − e⁻ˣ)],  x = hcν̃/kT
  *   electronic    S = R ln(2S + 1)
- *   H = E + U + RT,  G = H − TS
+ *   U = E + the three U's above,  H = U + RT,  G = H − TS
  *
  * σ, the rotational symmetry number, is the number of proper rotations in the
  * point group (water 2, NH₃ 3, CH₄ 12, benzene 12): it divides the rotational
@@ -49,6 +49,8 @@ export interface Thermochemistry {
   energy: number;
   /** Zero-point vibrational energy, Eh. */
   zeroPoint: number;
+  /** U = E + zero-point and thermal energy, Eh. */
+  internalEnergy: number;
   /** H − E: zero-point, thermal and pV, Eh. */
   enthalpyCorrection: number;
   /** H = E + the correction, Eh. */
@@ -131,6 +133,7 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
 
   // J/mol → Eh
   const toHartree = (joulesPerMole: number) => joulesPerMole / HARTREE_J_PER_MOL;
+  const internalEnergy = input.energy + toHartree(uTrans + uRot + uVib);
   const enthalpyCorrection = toHartree(uTrans + uRot + uVib + RT);
   const entropy = toHartree(sTrans + sRot + sVib + sElec);
   const enthalpy = input.energy + enthalpyCorrection;
@@ -138,6 +141,7 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     temperature: T,
     energy: input.energy,
     zeroPoint: toHartree(zeroPoint),
+    internalEnergy,
     enthalpyCorrection,
     enthalpy,
     entropy,

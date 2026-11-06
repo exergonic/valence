@@ -53,6 +53,9 @@ describe('against the xtb oracle, on its own geometry and frequencies', () => {
       expect(result.entropyParts.rotational * CAL_PER_MOL_K).toBeCloseTo(reference.entropyCalPerMolK.rotational, 2);
       expect(result.entropy * CAL_PER_MOL_K).toBeCloseTo(reference.entropyCalPerMolK.total, 1);
       expect(result.enthalpy).toBeCloseTo(reference.enthalpy, 5);
+      // xtb prints no U; for an ideal gas it is H less pV = RT
+      const RT = (8.314462618 * 298.15) / (4.3597447222071e-18 * 6.02214076e23);
+      expect(result.internalEnergy).toBeCloseTo(result.enthalpy - RT, 9);
       // G carries T times that translational offset: 7.5e-6 Eh, 0.005 kcal/mol
       expect(Math.abs(result.freeEnergy - reference.freeEnergy)).toBeLessThan(1e-5);
     });
