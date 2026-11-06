@@ -7,6 +7,7 @@ import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { Gfn2Properties, Gfn2ChargeSets } from '../geometry/gfn2-refine';
 import type { Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
+import type { Thermochemistry } from '../chem/gfn2-xtb/thermochemistry';
 import type { EspSurfaceData } from '../chem/charge-model/esp';
 import {
   LOCALIZED_ISOVALUE, LOCALIZED_PERCENTILE, MO_SURFACE_ISOVALUE, MO_SURFACE_PERCENTILE,
@@ -314,6 +315,10 @@ export interface SceneContext {
    *  molecule drawn — a held structure, or GFN2's set-aside result shown on
    *  request — paired with its molecule; the Thermo view refuses with it. */
   noMinimum: { molecule: Molecule; reason: string } | null;
+  /** Called whenever the vibrations are synced with the structure on screen:
+   *  their thermochemistry (null until the structure has both vibrations and
+   *  GFN2's energy) and the modes — the Thermo view's panel draws them. */
+  onVibrations: (thermochemistry: Thermochemistry | null, modes: NormalMode[] | null) => void;
   /** Called on every animation frame (the vibration drives it), or null.
    *  While it is set, frames are drawn continuously. */
   frame: { onFrame: ((now: number) => void) | null };
@@ -514,6 +519,7 @@ export function initScene(container: HTMLElement): SceneContext {
     requestRender,
     vibrations: null,
     noMinimum: null,
+    onVibrations: () => {},
     frame,
     onSceneBuilt: () => {},
     onGfn2Orbitals: () => {},

@@ -659,20 +659,20 @@ async function thermoView(b: Browser) {
   let modes = 0;
   for (let waited = 0; waited < 90_000 && modes === 0; waited += 500) {
     await sleep(500);
-    modes = await b.run(`return document.getElementById('ctrl-vibration').options.length - 1;`);
+    modes = await b.run(`return document.querySelectorAll('#thermo-readout .mode-row').length;`);
   }
   const state = await b.run(`return {
     source: document.getElementById('mol-source').textContent.trim(),
-    playing: document.getElementById('ctrl-vibration').value,
+    playing: document.querySelector('#thermo-readout .mode-row.playing')?.dataset.mode ?? '',
     readout: !document.getElementById('thermo-readout').classList.contains('hidden'),
   };`);
   check('Thermo: hexane vibrated unasked, the minimum on screen', modes === 3 * 20 - 6 && state.source === 'GFN2-xTB',
     `${modes} modes, source ${state.source}`);
-  check('Thermo: the slowest mode plays', state.playing === '0', `selected "${state.playing}"`);
+  check('Thermo: the slowest mode plays', state.playing === '0', `playing "${state.playing}"`);
   for (let waited = 0; waited < 10_000 && !(await b.run(`return !document.getElementById('thermo-readout').classList.contains('hidden');`)); waited += 500) {
     await sleep(500);
   }
-  check('Thermo: the thermochemistry is shown', await b.run(`return /U − E/.test(document.getElementById('thermo-readout').textContent);`));
+  check('Thermo: the ledger builds G from E', await b.run(`return /U = E \\+ ZPE/.test(document.getElementById('thermo-readout').textContent);`));
 
   await build(b, 'CCCCCCCCCCCCCCCCCC');
   let button = '';
@@ -684,7 +684,7 @@ async function thermoView(b: Browser) {
 
   await view(b, 'structure');
   check('Structure: the vibrations have left its panel',
-    await b.run(`return document.getElementById('ctrl-vibration').offsetParent === null;`));
+    await b.run(`return document.getElementById('thermo-readout').offsetParent === null;`));
 }
 
 async function loadsCleanWhenNarrow() {

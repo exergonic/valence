@@ -92,30 +92,14 @@ function stopVibration(ctx: SceneContext): void {
 }
 
 /**
- * Keep the vibration control and the animation in step with the structure on
- * screen. The control lists the modes when the structure has them, and says
- * how to get them when it does not.
+ * Keep the animation in step with the structure on screen, and tell the
+ * Thermo view's panel (ui/thermo-panel.ts, through ctx.onVibrations) what the
+ * structure's vibrations are and what they give.
  */
 export function syncVibration(ctx: SceneContext, properties: Gfn2Properties | null): void {
   const modes = ctx.vibrations && ctx.vibrations.molecule === ctx.currentMolecule ? ctx.vibrations.modes : null;
-  writeThermochemistry(ctx.currentMolecule ? thermochemistryOf(ctx.currentMolecule, modes, properties) : null);
   if (!modes) ctx.display.vibrationIndex = null;
-  const select = document.getElementById('ctrl-vibration') as HTMLSelectElement | null;
-  if (select) {
-    const options = ['<option value="">Off</option>', ...(modes ?? []).map((mode, i) =>
-      `<option value="${i}">ν${i + 1} · ${mode.frequency < 0 ? `${Math.abs(mode.frequency).toFixed(0)}i` : mode.frequency.toFixed(0)} cm⁻¹</option>`)];
-    const html = options.join('');
-    if (select.dataset.options !== html) {
-      select.innerHTML = html;
-      select.dataset.options = html;
-    }
-    select.value = ctx.display.vibrationIndex === null ? '' : String(ctx.display.vibrationIndex);
-    select.disabled = !modes || modes.length === 0;
-    select.title = modes
-      ? 'Play a vibration of this GFN2-xTB minimum: harmonic frequencies (cm⁻¹), semiempirical — typically within '
-        + '5–10 % of experiment. The speed is a picture: a higher frequency beats faster.'
-      : 'The vibrations of the GFN2-xTB minimum: opening the Thermo view computes them.';
-  }
+  ctx.onVibrations(ctx.currentMolecule ? thermochemistryOf(ctx.currentMolecule, modes, properties) : null, modes);
   const index = ctx.display.vibrationIndex;
   if (modes && index !== null && modes[index]) startVibration(ctx, modes[index]);
   else stopVibration(ctx);
@@ -140,47 +124,4 @@ export function thermochemistryOf(
     multiplicity: properties.multiplicity,
     symmetryNumber: symmetryNumber(detectPointGroup(molecule)),
   });
-}
-
-const KCAL_PER_HARTREE = 627.5094740631;
-
-/** The readout under the vibration control, in the Thermo view: the
- *  corrections in kcal/mol, the entropy in cal/(mol K) with its parts, the
- *  totals in Eh. */
-function writeThermochemistry(result: Thermochemistry | null): void {
-  const readout = document.getElementById('thermo-readout');
-  if (!readout) return;
-  readout.classList.toggle('hidden', !result);
-  if (!result) {
-    readout.innerHTML = '';
-    return;
-  }
-  const kcal = (eh: number) => (eh * KCAL_PER_HARTREE).toFixed(2);
-  const calPerK = (eh: number) => (eh * KCAL_PER_HARTREE * 1000).toFixed(2);
-  const parts = result.entropyParts;
-  const row = (term: string, value: string, unit: string, hint = '') =>
-    `<dt${hint ? ` title="${hint}"` : ''}>${term}</dt><dd>${value}<span>${unit}</span></dd>`;
-  readout.innerHTML = `<div class="thermo-head">Thermochemistry · ${result.temperature} K, 1 atm</div><dl>`
-    + row('ZPE', kcal(result.zeroPoint), 'kcal/mol', 'Zero-point vibrational energy: ½hcν̃ summed over the modes')
-    + row('U − E', kcal(result.internalEnergy - result.energy), 'kcal/mol',
-      'Internal energy above the electronic energy: zero-point, and thermal (translation, rotation, vibration)')
-    + row('H − E', kcal(result.enthalpyCorrection), 'kcal/mol', 'U − E, and pV = RT')
-    + row('S', calPerK(result.entropy), 'cal/(mol·K)',
-      `Translation ${calPerK(parts.translational)} · rotation ${calPerK(parts.rotational)} · vibration `
-      + `${calPerK(parts.vibrational)}${parts.electronic > 0 ? ` · spin ${calPerK(parts.electronic)}` : ''}`)
-    + row('G − E', kcal(result.freeEnergy - result.energy), 'kcal/mol', 'H − TS, less the electronic energy')
-    + row('E', result.energy.toFixed(6), 'Eh', 'GFN2-xTB’s electronic energy, at the minimum')
-    + row('U', result.internalEnergy.toFixed(6), 'Eh')
-    + row('H', result.enthalpy.toFixed(6), 'Eh')
-    + row('G', result.freeEnergy.toFixed(6), 'Eh')
-    + '</dl>'
-    + `<div class="thermo-note">σ = ${result.symmetryNumber}${result.linear ? ', linear' : ''}. Ideal gas, rigid rotor, `
-    + 'harmonic oscillator, a soft mode’s entropy tending to a free rotor’s (quasi-RRHO, 50 cm⁻¹, as xtb) — on '
-    + 'GFN2-xTB’s frequencies, semiempirical.'
-    + (result.invertedImaginary > 0
-      ? ` ${result.invertedImaginary} imaginary mode${result.invertedImaginary > 1 ? 's' : ''} above 20i cm⁻¹ counted as `
-        + 'real: a methyl rotor not quite settled, as xtb counts it.'
-      : '')
-    + (result.imaginary > 0 ? ` ${result.imaginary} imaginary mode${result.imaginary > 1 ? 's' : ''} left out: a saddle, not a minimum.` : '')
-    + '</div>';
 }

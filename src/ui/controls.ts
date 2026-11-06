@@ -122,13 +122,6 @@ export function setupControls(ctx: SceneContext): { measure: MeasureTool } {
     rerender();
   });
 
-  // A vibration of the GFN2 minimum on screen, played until switched off.
-  const vibration = document.querySelector<HTMLSelectElement>('#ctrl-vibration');
-  vibration?.addEventListener('change', () => {
-    ctx.display.vibrationIndex = vibration.value === '' ? null : Number(vibration.value);
-    ctx.rerender();
-  });
-
   // Representation: ball and stick, stick, or space-filling
   const representationButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#ctrl-representation [data-representation]'));
   for (const button of representationButtons) {

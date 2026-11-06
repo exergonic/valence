@@ -14,11 +14,17 @@
  * Once tried, a structure is not tried again on its own — a run that was
  * cancelled, or found no minimum, leaves the button for the user to press —
  * so a result without vibrations never sets off another run.
+ *
+ * The readout itself is thermo-readout.ts's; it is redrawn only when the
+ * numbers change, so a formula or a fold the reader opened stays open while
+ * the modes are played.
  */
 import type { SceneContext } from '../render';
 import type { Molecule } from '../mol-parser';
 import { gfn2HessianSeconds } from '../geometry/gfn2-refine';
+import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { refineForVibrations } from './jsme-panel';
+import { drawThermoReadout, markPlayingMode } from './thermo-readout';
 
 /** Above this estimate (seconds) the Hessian waits for a go-ahead: half the
  *  optimiser's budget, and as long as a lesson can wait unasked. */
@@ -33,7 +39,7 @@ export interface ThermoPanel {
 export function setupThermoPanel(ctx: SceneContext): ThermoPanel {
   const status = document.getElementById('thermo-status')!;
   const compute = document.getElementById('thermo-compute') as HTMLButtonElement;
-  const vibration = document.getElementById('ctrl-vibration') as HTMLSelectElement;
+  const readout = document.getElementById('thermo-readout')!;
 
   let active = false;
   let running = false;
@@ -79,9 +85,9 @@ export function setupThermoPanel(ctx: SceneContext): ThermoPanel {
       say('');
       // the slowest mode first: the gentlest motion to watch, and the one that
       // carries the most entropy (modes come lowest first)
-      if (vibration.value === '') {
-        vibration.value = '0';
-        vibration.dispatchEvent(new Event('change', { bubbles: true }));
+      if (ctx.display.vibrationIndex === null) {
+        ctx.display.vibrationIndex = 0;
+        ctx.rerender();
       }
       return;
     }
@@ -125,6 +131,25 @@ export function setupThermoPanel(ctx: SceneContext): ThermoPanel {
     });
   });
 
+  // the readout follows the vibrations the render layer synced; drawn anew
+  // only for new numbers (the modes, or the single point's energy, arriving)
+  let drawnFor: { modes: NormalMode[]; energy: number } | null = null;
+  ctx.onVibrations = (thermochemistry, modes) => {
+    readout.classList.toggle('hidden', !thermochemistry || !modes);
+    if (!thermochemistry || !modes) {
+      drawnFor = null;
+      return;
+    }
+    if (drawnFor?.modes !== modes || drawnFor.energy !== thermochemistry.energy) {
+      drawThermoReadout(readout, thermochemistry, (index) => {
+        ctx.display.vibrationIndex = ctx.display.vibrationIndex === index ? null : index;
+        ctx.rerender();
+      });
+      drawnFor = { modes, energy: thermochemistry.energy };
+    }
+    markPlayingMode(readout, ctx.display.vibrationIndex);
+  };
+
   // a new structure while the view is open is entered afresh
   const sceneBuilt = ctx.onSceneBuilt;
   ctx.onSceneBuilt = () => {
@@ -139,6 +164,9 @@ export function setupThermoPanel(ctx: SceneContext): ThermoPanel {
     },
     leave() {
       active = false;
+      // the vibrations' controls are this view's, so one does not keep
+      // playing where it cannot be stopped
+      ctx.display.vibrationIndex = null;
       compute.classList.add('hidden');
       say('');
     },
