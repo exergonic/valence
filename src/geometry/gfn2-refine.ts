@@ -121,15 +121,25 @@ function ask<T>(message: object, onProgress?: (progress: Gfn2Progress) => void):
  * the engine ran and no optimiser rung produced a geometry; rejects with
  * Gfn2Unavailable when there is no Worker, Gfn2Cancelled when `cancelGfn2`
  * stops it, and the engine's own error when it fails outright.
+ * `vibrationsAtAnySize` is the Thermo view's run: the Hessian, and the saddle
+ * escape, at any size.
  */
 export function refineWithGfn2(
   molecule: Molecule,
   onProgress?: (progress: Gfn2Progress) => void,
+  vibrationsAtAnySize = false,
 ): Promise<Gfn2Result | null> {
   // The embedder emits exact symmetries and a symmetric start traps the
   // descent at a spurious stationary point (drawn water arrives exactly
   // linear and comes back exactly linear) — a deterministic kick first.
-  return ask({ task: 'optimise', molecule: breakSymmetry(molecule) }, onProgress);
+  const task = vibrationsAtAnySize ? 'vibrations' : 'optimise';
+  return ask({ task, molecule: breakSymmetry(molecule) }, onProgress);
+}
+
+/** How long GFN2-xTB's Hessian of this structure will take on this machine,
+ *  seconds (the worker's `hessianSeconds`); null when it cannot say. */
+export function gfn2HessianSeconds(molecule: Molecule): Promise<number | null> {
+  return ask({ task: 'hessian-seconds', molecule });
 }
 
 /**

@@ -364,11 +364,17 @@ const energyComponents = (totalHartree: number) => ({
  * If it is a saddle, the structure is pushed down the imaginary mode both ways,
  * each push re-optimised, and the lower minimum kept — at most
  * MAX_SADDLE_ESCAPES times.
+ *
+ * `vibrationsAtAnySize` is the Thermo view's run: there the vibrations are
+ * what was asked for, not a convenience, so the Hessian runs above the size
+ * gate, and its time is not taken from the optimisation's budget — a Hessian
+ * of 30 s would otherwise leave no time to escape the saddle it found.
  */
 export async function optimizeWithGfn2(
   input: Molecule,
   locateFile?: (path: string) => string,
   onProgress?: (progress: Gfn2Progress) => void,
+  vibrationsAtAnySize = false,
 ): Promise<Gfn2Result | null> {
   const molecule = fillMissingHydrogens(input);
   const count = molecule.atoms.length;
@@ -396,7 +402,7 @@ export async function optimizeWithGfn2(
 
   // Progress, over the whole run — every rung, every saddle escape.
   let evaluations = 0;
-  const deadline = performance.now() + TIME_BUDGET_MS;
+  let deadline = performance.now() + TIME_BUDGET_MS;
   let lowestEnergy: number | null = null;
   let stage: Gfn2Progress['stage'] = 'optimising';
   const report = () => onProgress?.({ stage, evaluations, energyHartree: lowestEnergy });
@@ -687,9 +693,11 @@ export async function optimizeWithGfn2(
    *  measured: a rigid translation gives |H·t| ≈ 1e-6 that way and ≈ 1 the
    *  other. */
   const curvature = (relaxed: Relaxed) => {
-    if (!relaxed.converged || !relaxed.evaluates || count > MAX_HESSIAN_ATOMS) return null;
+    if (!relaxed.converged || !relaxed.evaluates) return null;
+    if (count > MAX_HESSIAN_ATOMS && !vibrationsAtAnySize) return null;
     stage = 'curvature';
     report();
+    const hessianStarted = performance.now();
     try {
       const H = relaxed.calc.hessian(HESSIAN_STEP_BOHR);
       const dim = H.rows();
@@ -706,6 +714,8 @@ export async function optimizeWithGfn2(
       return { frequency: modes[0].frequency, mode, modes };
     } catch {
       return null; // no verdict rather than a wrong one
+    } finally {
+      if (vibrationsAtAnySize) deadline += performance.now() - hessianStarted;
     }
   };
 
@@ -847,6 +857,46 @@ export async function optimizeWithGfn2(
     vibrations: lowest && lowest.frequency >= SADDLE_FREQUENCY_THRESHOLD ? lowest.modes : null,
     held: held && multiplicity > 1 ? { ...held, molecule: { ...held.molecule, multiplicity } } : held,
   };
+}
+
+/**
+ * How long the Hessian of this structure will take on this machine, in
+ * seconds — what the Thermo view weighs against its 15 s gate. The Hessian is
+ * 6N gradients at geometries a finite-difference step from the structure, each
+ * one's SCF starting from its neighbour's density, so two such gradients are
+ * timed and scaled. Atom count alone predicts it badly: an O or N carries s and
+ * p functions where an H carries one s (NOTES.md, 2026-11-05: sucrose costs
+ * twice tetradecane at the same N). Null when the engine cannot evaluate it.
+ */
+export async function hessianSeconds(
+  input: Molecule,
+  locateFile?: (path: string) => string,
+): Promise<number | null> {
+  const molecule = fillMissingHydrogens(input);
+  const count = molecule.atoms.length;
+  if (count < 2) return null;
+  const M = await (locateFile ? loadGfn2(locateFile) : loadGfn2());
+  const flat = molecule.atoms.flatMap((a) => [a.x, a.y, a.z]);
+  const calc = M.XtbCalculator.fromMolecule(occMolecule(M, molecule.atoms, flat));
+  try {
+    calc.charge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
+    calc.numUnpairedElectrons = (molecule.multiplicity ?? lowestMultiplicity(molecule.atoms)) - 1;
+    evaluate(M, calc, flat); // the converged density the displaced SCFs start from
+    const step = HESSIAN_STEP_BOHR * ANGSTROM_PER_BOHR;
+    const started = performance.now();
+    for (const sign of [1, -1]) {
+      const displaced = flat.slice();
+      displaced[0] += sign * step;
+      evaluate(M, calc, displaced);
+    }
+    // a little high (hexane: 1.7 s for 1.3 s), which errs toward asking
+    const perGradient = (performance.now() - started) / 2 / 1000;
+    return 6 * count * perGradient;
+  } catch {
+    return null;
+  } finally {
+    release(calc);
+  }
 }
 
 /** Releasing an engine handle is best-effort. */
@@ -1565,7 +1615,7 @@ function freeAtomDensity(M: any, element: string): RadialDensity | null {
   return result;
 }
 
-type Task = 'optimise' | 'properties' | 'surface' | 'esp' | 'charges' | 'load';
+type Task = 'optimise' | 'vibrations' | 'hessian-seconds' | 'properties' | 'surface' | 'esp' | 'charges' | 'load';
 
 async function run(task: Task, id: number, molecule?: Molecule, surface?: OrbitalSurfaceRequest, key?: number) {
   switch (task) {
@@ -1577,6 +1627,9 @@ async function run(task: Task, id: number, molecule?: Molecule, surface?: Orbita
     case 'esp': return espSurface(key!);
     case 'charges': return chargeSets(key!);
     case 'optimise': return optimizeWithGfn2(molecule!, undefined, (progress) => self.postMessage({ id, progress }));
+    case 'vibrations':
+      return optimizeWithGfn2(molecule!, undefined, (progress) => self.postMessage({ id, progress }), true);
+    case 'hessian-seconds': return hessianSeconds(molecule!);
   }
 }
 
