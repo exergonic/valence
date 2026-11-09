@@ -162,7 +162,9 @@ Made with the user; the reasons are in NOTES.md under the date.
   ideal-gas thermochemistry at 298.15 K, 1 atm, on GFN2's harmonic
   frequencies; it opens on the slowest mode, playing. It needs a GFN2
   minimum: a structure that is not one is optimised first and replaced on
-  screen, and a held structure is refused with the reason. The Hessian runs
+  screen, and a held structure or GFN2's set-aside result is refused with
+  the reason, at any size (2026-11-09) — neither is the molecule drawn, and
+  the fix is to draw the one meant. The Hessian runs
   on request at any size; its time is estimated from the engine's gradient
   time on this machine, an estimate over **15 s** waits for the user's
   go-ahead, and the run shows its time against the estimate and can be
