@@ -263,8 +263,12 @@ function showMolecule(
   ctx.currentMolecule = molecule;
   ctx.gfn2Charges =
     gfn2Charges && gfn2Charges.length === molecule.atoms.length ? { molecule, charges: gfn2Charges } : null;
-  // the snap moved atoms by under a milliångström, so the minimum's modes still describe it
-  ctx.vibrations = vibrations && vibrations.length > 0 ? { molecule, modes: vibrations } : null;
+  // the snap moved atoms by under a milliångström, so the minimum's modes still describe it.
+  // A structure that is not the molecule drawn keeps none, at any size: GFN2's
+  // set-aside result below 16 atoms arrives with the Hessian verdict's modes,
+  // but its thermochemistry would be another molecule's — redraw that one
+  // (decided with the user 2026-11-09)
+  ctx.vibrations = vibrations && vibrations.length > 0 && !noMinimum ? { molecule, modes: vibrations } : null;
   ctx.noMinimum = noMinimum ? { molecule, reason: noMinimum } : null;
   ctx.display.vibrationIndex = null;
   buildScene(ctx);
@@ -447,7 +451,7 @@ const HELD_NO_MINIMUM = 'This is the held structure: GFN2-xTB\'s own result brok
 
 /** Why the Thermo view will not optimise GFN2's set-aside result. */
 const SET_ASIDE_NO_MINIMUM = 'This is GFN2-xTB\'s set-aside result, shown on request: it is no longer the molecule '
-  + 'drawn, so its vibrations would be another molecule\'s.';
+  + 'drawn, so its vibrations would be another molecule\'s. If it is the molecule meant, draw it and build it again.';
 
 /** What the header says of GFN2's free result when the user asks for it. */
 const freeOnRequest = (change: string) =>

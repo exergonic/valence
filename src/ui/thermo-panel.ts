@@ -9,7 +9,8 @@
  * screen). Before that, the Hessian's time is estimated on this machine; at
  * 15 s or less it simply runs, and above it waits for the user's go-ahead,
  * the estimate on the button. A held structure, or GFN2's set-aside result,
- * is refused with the reason (ctx.noMinimum).
+ * is refused with the reason (ctx.noMinimum), at any size: neither is the
+ * molecule drawn, and the fix is to draw the one meant.
  *
  * Once tried, a structure is not tried again on its own — a run that was
  * cancelled, or found no minimum, leaves the button for the user to press —
