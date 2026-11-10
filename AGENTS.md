@@ -157,7 +157,9 @@ Made with the user; the reasons are in NOTES.md under the date.
 - **The app opens on Structure** (2026-11-04): the atoms and bonds alone,
   element labels; VSEPR and the bonding models are views a click away. Its
   panel holds what bears on the geometry itself — Measure, the spin and
-  Refine, Skip PubChem, Snap to point group — not Settings.
+  Refine, Snap to point group — not Settings. Where a structure comes from
+  is chosen before it is built: "Build locally with GFN2-xTB", which skips
+  PubChem and CIR, sits under Build 3D (2026-11-09).
 - **The Thermo view** (2026-11-05): the vibrations and the molecule's
   ideal-gas thermochemistry at 298.15 K, 1 atm, on GFN2's harmonic
   frequencies; it opens on the slowest mode, playing. It needs a GFN2

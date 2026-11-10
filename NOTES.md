@@ -5869,3 +5869,15 @@ the parts it summed (thermal energy by motion, pV, each mode's shares), and
 a test holds the ledger's sums exact. The render layer hands the vibrations
 to the panel through `ctx.onVibrations`; the readout is redrawn only for new
 numbers, so an opened formula or fold stays open while modes are played.
+
+## "Skip PubChem" becomes "Build locally with GFN2-xTB" (2026-11-09)
+
+The user, from ISSUES.md: the box controls how the sketch becomes a
+structure, so it belongs with JSME, not in the Structure view's panel —
+which is about the structure on screen (measure it, refine it, snap it).
+And "Skip PubChem" said less than it does: it skips CIR as well, so the
+start is the embedder's and GFN2-xTB optimises it here. It is now a
+checkbox under Build 3D, labelled for what it does instead of what it
+leaves out; the tooltip names both services skipped and the cases that go
+local regardless (a metal, a drawn radical, a single atom). Its id,
+`ctrl-force-fallback`, is unchanged, and the smoke test still drives it.
