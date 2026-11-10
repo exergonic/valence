@@ -80,8 +80,8 @@ function lewisNote(list: LocalizedList) {
       + 'The first orbital you draw is the anchor (outlined): the empty orbitals it donates into show E(2), the '
       + 'second-order stabilization q·F²/Δε, and an underline as long as its share of the strongest — an empty anchor '
       + 'shows its donors. The numbers stay with the anchor while you draw its partners beside it; take it away and the '
-      + 'next orbital drawn becomes the anchor. A tick marks mixing within a section, as in Pipek–Mezey. The table '
-      + 'above ranks every donation in the molecule, and an entry draws its pair. E(2) is a '
+      + 'next orbital drawn becomes the anchor. A tick marks mixing within a section, as in Pipek–Mezey. “Donations” '
+      + 'above opens a table of every donation in the molecule, strongest first; an entry draws its pair. E(2) is a '
       + 'perturbative estimate that overstates strong '
       + 'resonance, and GFN2’s empty orbitals sit low, so compare the numbers with each other rather than with NBO’s. '
       + 'Draw another resonance structure to see its Lewis orbitals.'
@@ -221,8 +221,10 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   const composition = document.getElementById('mo-composition')!;
   const note = document.getElementById('mo-note')!;
   const e2Panel = document.getElementById('mo-e2');
-  // the table's open/closed state outlives the redraws that rebuild it
-  let e2Open = true;
+  // Closed until asked for: at first sight the view is the Lewis structure's
+  // orbitals, and the anchor's own donations already show E(2) beside them.
+  // The open/closed state outlives the redraws that rebuild the table.
+  let e2Open = false;
   const clear = document.getElementById('ctrl-mo-clear') as HTMLButtonElement | null;
 
   const select = (index: number | null) => {
@@ -619,7 +621,8 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const [anchor, partner, extra] = ctx.display.localizedSelection;
     const name = (index: number) => localizedType(molecule, orbitals[index]);
     e2Panel.innerHTML = `<details class="e2-table"${e2Open ? ' open' : ''}>`
-      + `<summary><span>Strongest donations · ${table.length}</span><span class="orb-unit">E(2), ${ENERGY_UNIT}</span></summary>`
+      + `<summary title="Every donation from a filled orbital into an empty one, strongest first; an entry draws the pair">`
+      + `<span>Donations, E(2) · ${table.length}</span><span class="orb-unit">${ENERGY_UNIT}</span></summary>`
       + '<div class="e2-list">'
       + table.map(({ donor, acceptor, e2 }) => {
         const drawn = anchor === donor && partner === acceptor && extra === undefined;

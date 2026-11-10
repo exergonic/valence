@@ -2329,19 +2329,28 @@ body .mosaic-WindowPanel button:first-of-type:hover { background: var(--accent-h
 #mo-e2 { margin-bottom: 6px; }
 #mo-e2.hidden { display: none; }
 
+/* closed at first sight, so the summary is drawn as the button it is */
 .e2-table summary {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  padding: 2px 9px 2px 0;
-  color: var(--text-faint);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-2);
+  font-size: 11px;
   cursor: pointer;
   list-style: none;
+  transition: all 0.12s;
 }
+
+.e2-table summary:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.e2-table[open] summary { margin-bottom: 4px; }
 
 .e2-table summary::-webkit-details-marker { display: none; }
 .e2-table summary > span:first-child::before { content: '▸ '; }
