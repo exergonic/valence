@@ -12,6 +12,16 @@
  *   electronic    S = R ln(2S + 1)
  *   U = E + the three U's above,  H = U + RT,  G = H − TS
  *
+ * The heat capacity at constant pressure, C_p = dH/dT (added 2026-11-10, the
+ * user's ask: the total, where it lives, and each vibration's own), booked as
+ * MolCalc and xtb book it: translation 5/2 R (3/2 R, and the R of pV), rotation
+ * 3/2 R (R linear), and each vibration Einstein's
+ *
+ *   C = R x² eˣ / (eˣ − 1)²,   x = hcν̃/kT,
+ *
+ * which runs from 0 for a stiff mode frozen in its ground state to R, the
+ * classical equipartition value, for a loose one.
+ *
  * σ, the rotational symmetry number, is the number of proper rotations in the
  * point group (water 2, NH₃ 3, CH₄ 12, benzene 12): it divides the rotational
  * partition function, since a rotation that maps the molecule onto itself is
@@ -29,7 +39,9 @@
  * of inertia μ = h / (8π² c ν̃) of a rotor with that frequency, capped by the
  * molecule's own average moment: μ′ = μ I_av / (μ + I_av), I_av the mean of
  * the principal moments (xtb's choice; Grimme's paper fixes it at 10⁻⁴⁴ kg m²).
- * Only the entropy is blended: U and H stay harmonic, as in xtb. The cut-off
+ * The heat capacity is blended the same way, toward a free rotor's R/2 — xtb
+ * does (its C_p for hexane, tests/references/xtb-thermochemistry.json) — but
+ * U and H stay harmonic, as in xtb. The cut-off
  * is as arbitrary as the 100 cm⁻¹ of Grimme's paper; 50 is xtb's.
  *
  * An imaginary mode above SADDLE_FREQUENCY_THRESHOLD (−20 cm⁻¹) is an artifact
@@ -53,6 +65,8 @@ const GAS_CONSTANT = BOLTZMANN * AVOGADRO; // J/(mol K)
 const HARTREE_J_PER_MOL = 4.3597447222071e-18 * AVOGADRO;
 const STANDARD_PRESSURE = 101325; // 1 atm, Pa — as xtb and Gaussian report
 export const STANDARD_TEMPERATURE = 298.15;
+/** R in Eh/K: a heat capacity read in units of R, 0 to 1 per vibration. */
+export const GAS_CONSTANT_HARTREE_PER_K = GAS_CONSTANT / HARTREE_J_PER_MOL;
 
 /** Modes below this many cm⁻¹ (in magnitude) are rigid motions the
  *  projection left behind, not vibrations. */
@@ -73,6 +87,9 @@ export interface Thermochemistry {
   enthalpyCorrection: number;
   /** H = E + the correction, Eh. */
   enthalpy: number;
+  /** C_p, Eh/K, and its parts: translation (with pV's R), rotation, vibration. */
+  heatCapacity: number;
+  heatCapacityParts: { translational: number; rotational: number; vibrational: number };
   /** S, Eh/K, and its parts. */
   entropy: number;
   entropyParts: { translational: number; rotational: number; vibrational: number; electronic: number };
@@ -109,9 +126,11 @@ export interface ModeShare {
    *  ZPE and no entropy; larger, it is spread over its levels, and that
    *  spread is its entropy. */
   partitionFunction: number;
-  /** Quasi-RRHO's w: the harmonic oscillator's share of the mode's entropy,
-   *  the free rotor's being 1 − w. */
+  /** Quasi-RRHO's w: the harmonic oscillator's share of the mode's entropy
+   *  and heat capacity, the free rotor's being 1 − w. */
   harmonicWeight: number;
+  /** The mode's heat capacity, Eh/K: between 0 (frozen) and R (classical). */
+  heatCapacity: number;
 }
 
 export interface ThermochemistryInput {
@@ -153,14 +172,17 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
   const sigma = Math.max(1, input.symmetryNumber);
   let sRot = 0;
   let uRot = 0;
+  let cpRot = 0;
   if (input.atoms.length > 1) {
     if (linear) {
       sRot = GAS_CONSTANT * (Math.log(T / (sigma * theta(largest))) + 1);
       uRot = RT;
+      cpRot = GAS_CONSTANT;
     } else {
       const product = theta(moments[0]) * theta(moments[1]) * theta(moments[2]);
       sRot = GAS_CONSTANT * (Math.log((Math.sqrt(Math.PI) / sigma) * Math.sqrt(T ** 3 / product)) + 1.5);
       uRot = 1.5 * RT;
+      cpRot = 1.5 * GAS_CONSTANT;
     }
   }
 
@@ -173,6 +195,7 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
   let zeroPoint = 0;
   let uVib = 0;
   let sVib = 0;
+  let cpVib = 0;
   const modes: ModeShare[] = [];
   wavenumbers.forEach((wavenumber, index) => {
     if (wavenumber <= RIGID_MOTION_CM) return;
@@ -188,9 +211,14 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     const harmonicWeight = 1 / (1 + (ROTOR_CUTOFF_CM / wavenumber) ** 4);
     const modeEntropy = GAS_CONSTANT * (harmonicWeight * harmonic + (1 - harmonicWeight) * freeRotor);
     sVib += modeEntropy;
+    // Einstein's C, written in e⁻ˣ so a stiff mode's large x cannot overflow;
+    // a free rotor's C is R/2
+    const einstein = (x * x * Math.exp(-x)) / Math.expm1(-x) ** 2;
+    const modeHeatCapacity = GAS_CONSTANT * (harmonicWeight * einstein + (1 - harmonicWeight) * 0.5);
+    cpVib += modeHeatCapacity;
     modes.push({
       index, wavenumber, inverted: artifact(input.frequencies[index]), zeroPoint: modeZeroPoint, entropy: modeEntropy,
-      partitionFunction: -1 / Math.expm1(-x), harmonicWeight,
+      partitionFunction: -1 / Math.expm1(-x), harmonicWeight, heatCapacity: modeHeatCapacity,
     });
   });
 
@@ -201,6 +229,8 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
   const internalEnergy = input.energy + toHartree(uTrans + uRot + uVib);
   const enthalpyCorrection = toHartree(uTrans + uRot + uVib + RT);
   const entropy = toHartree(sTrans + sRot + sVib + sElec);
+  // translation's 3/2 R, and the R that H = U + pV adds at constant pressure
+  const cpTrans = 2.5 * GAS_CONSTANT;
   const enthalpy = input.energy + enthalpyCorrection;
   return {
     temperature: T,
@@ -209,6 +239,8 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     internalEnergy,
     enthalpyCorrection,
     enthalpy,
+    heatCapacity: toHartree(cpTrans + cpRot + cpVib),
+    heatCapacityParts: { translational: toHartree(cpTrans), rotational: toHartree(cpRot), vibrational: toHartree(cpVib) },
     entropy,
     entropyParts: {
       translational: toHartree(sTrans),
@@ -227,7 +259,9 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
       vibrational: toHartree(uVib - zeroPoint),
     },
     pressureVolume: toHartree(RT),
-    modes: modes.map((mode) => ({ ...mode, zeroPoint: toHartree(mode.zeroPoint), entropy: toHartree(mode.entropy) })),
+    modes: modes.map((mode) => ({
+      ...mode, zeroPoint: toHartree(mode.zeroPoint), entropy: toHartree(mode.entropy), heatCapacity: toHartree(mode.heatCapacity),
+    })),
   };
 }
 

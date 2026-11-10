@@ -57,6 +57,7 @@
   --thermo-gain: #6fcf97;
   --thermo-loss: #f0997b;
   --thermo-entropy: #a99ff0;
+  --thermo-heat-capacity: #e5b45a;
 }
 
 :root[data-theme="steel"] {
@@ -104,6 +105,7 @@
   --thermo-gain: #6fcf97;
   --thermo-loss: #f0997b;
   --thermo-entropy: #a99ff0;
+  --thermo-heat-capacity: #e5b45a;
 }
 
 :root[data-theme="light"] {
@@ -154,6 +156,7 @@
   --thermo-gain: #1d8a5c;
   --thermo-loss: #c4552d;
   --thermo-entropy: #6b5fd0;
+  --thermo-heat-capacity: #a8720f;
 }
 
 * {
@@ -782,12 +785,13 @@ button.ledger-row:hover { background: var(--hover); }
 }
 .ledger-formula.hidden { display: none; }
 
-.entropy-bar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; }
-.entropy-part { background: var(--thermo-entropy); }
+.motion-bar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; }
+.motion-part.entropy, .motion-key.entropy { background: var(--thermo-entropy); }
+.motion-part.heat-capacity, .motion-key.heat-capacity { background: var(--thermo-heat-capacity); }
 .part-1 { opacity: 0.75; }
 .part-2 { opacity: 0.5; }
 .part-3 { opacity: 0.3; }
-.entropy-labels {
+.motion-labels {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 10px;
@@ -795,20 +799,19 @@ button.ledger-row:hover { background: var(--hover); }
   color: var(--text-muted);
   font-size: 11px;
 }
-.entropy-key {
+.motion-key {
   display: inline-block;
   width: 8px;
   height: 8px;
   margin-right: 4px;
   border-radius: 2px;
-  background: var(--thermo-entropy);
 }
 
 .mode-head,
 .mode-row,
 .mode-sum {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
   width: 100%;
   padding: 2px 4px;
   font-family: var(--font-mono);

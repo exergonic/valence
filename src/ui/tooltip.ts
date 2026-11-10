@@ -15,8 +15,8 @@
  * - Thermo (asked for 2026-11-09): the vibration playing, hovered anywhere on
  *   the molecule — its share of the ZPE and of TS, its partition function
  *   q_vib, read as Ault reads it (the molecules in all its levels per molecule in
- *   the ground state, so 1/q_vib of them are there), a soft mode's quasi-RRHO
- *   split, and the hovered atom's share of its kinetic energy: why the stiff
+ *   the ground state, so 1/q_vib of them are there), its heat capacity in
+ *   cal/(mol·K) and in units of R, a soft mode's quasi-RRHO split, and the hovered atom's share of its kinetic energy: why the stiff
  *   modes hold the zero-point energy and the soft ones the entropy, one mode
  *   at a time.
  */
@@ -24,6 +24,7 @@ import * as THREE from 'three';
 import { ATOM_LAYER, type OrbitalTag, type SceneContext } from '../render';
 import { shellPopulations } from '../chem/localized-orbitals/mulliken-populations';
 import { kineticEnergyShares, type NormalMode } from '../chem/gfn2-xtb/normal-modes';
+import { GAS_CONSTANT_HARTREE_PER_K } from '../chem/gfn2-xtb/thermochemistry';
 import { localizedType } from './mo-diagram';
 import { ENERGY_UNIT, KCAL_PER_EV, formatEnergy } from './units';
 
@@ -140,6 +141,8 @@ function vibrationLines(ctx: SceneContext, modes: NormalMode[], index: number, a
     const ground = percent(1 / q);
     lines.push(`q<sub>vib</sub> = ${q.toFixed(2)}: ${ground} of molecules in the ground state`
       + (ground === '100%' ? '' : ', the rest spread over higher levels'));
+    const cp = share.heatCapacity;
+    lines.push(`C<sub>p</sub> ${(cp * KCAL_PER_HARTREE * 1000).toFixed(2)} cal/(mol·K) · ${(cp / GAS_CONSTANT_HARTREE_PER_K).toFixed(2)} R`);
     // a mode soft enough for quasi-RRHO to take part of its entropy from the free rotor
     if (share.harmonicWeight < 0.995) {
       lines.push(`its entropy ${percent(share.harmonicWeight)} oscillator, ${percent(1 - share.harmonicWeight)} free rotor (quasi-RRHO)`);

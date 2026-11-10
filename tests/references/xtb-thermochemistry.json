@@ -1,5 +1,5 @@
 {
- "source": "xtb 6.7.1 (edcfbbe), `xtb mol.xyz --gfn 2 --ohess`, 298.15 K, 1 atm; geometries are xtb's own optimised ones (xtbopt.xyz), started from the app's examples; frequencies from its vibspectrum (rigid motions 0). Run 2026-10-20 on lenovo-h530. Hexane added 2026-11-05: started from PubChem's 3D record (CID 8058), `--ohess vtight`; the first with modes soft enough (68 and 94 cm⁻¹) for xtb's quasi-RRHO entropy to differ from the plain RRHO's.",
+ "source": "xtb 6.7.1 (edcfbbe), `xtb mol.xyz --gfn 2 --ohess`, 298.15 K, 1 atm; geometries are xtb's own optimised ones (xtbopt.xyz), started from the app's examples; frequencies from its vibspectrum (rigid motions 0). Run 2026-10-20 on lenovo-h530. Hexane added 2026-11-05: started from PubChem's 3D record (CID 8058), `--ohess vtight`; the first with modes soft enough (68 and 94 cm⁻¹) for xtb's quasi-RRHO entropy to differ from the plain RRHO's. Heat capacities (C_p, its TOT and VIB rows) added 2026-11-10 from `--hess` on these same geometries: xtb blends a soft mode's C_p toward a free rotor's R/2 as it blends S.",
  "molecules": {
   "water": {
    "rotationalNumber": 2,
@@ -11,6 +11,10 @@
     "total": 45.0379,
     "rotational": 10.435,
     "translational": 34.593
+   },
+   "heatCapacityCalPerMolK": {
+    "total": 8.0144,
+    "vibrational": 0.065
    },
    "atoms": [
     {
@@ -54,6 +58,10 @@
     "total": 44.3982,
     "rotational": 10.074,
     "translational": 34.248
+   },
+   "heatCapacityCalPerMolK": {
+    "total": 8.4063,
+    "vibrational": 0.457
    },
    "atoms": [
     {
@@ -115,6 +123,10 @@
     "total": 64.6663,
     "rotational": 20.676,
     "translational": 38.964
+   },
+   "heatCapacityCalPerMolK": {
+    "total": 19.8618,
+    "vibrational": 11.913
    },
    "atoms": [
     {
@@ -240,6 +252,10 @@
     "rotational": 20.957,
     "translational": 40.829
    },
+   "heatCapacityCalPerMolK": {
+    "total": 26.9361,
+    "vibrational": 18.987
+   },
    "atoms": [
     {
      "element": "S",
@@ -318,6 +334,10 @@
     "total": 87.0783,
     "rotational": 25.867,
     "translational": 39.257
+   },
+   "heatCapacityCalPerMolK": {
+    "total": 30.7547,
+    "vibrational": 22.806
    },
    "atoms": [
     {

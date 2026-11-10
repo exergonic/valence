@@ -5,7 +5,10 @@
  * come out (tests/references/xtb-thermochemistry.json). Hexane is the one
  * with modes soft enough (68 and 94 cm⁻¹) for xtb's quasi-RRHO entropy to
  * differ from the plain RRHO's — by 0.29 cal/(mol K), six times the test's
- * margin. Argon pins the translational part alone.
+ * margin. Argon pins the translational part alone. The heat capacity is held
+ * to xtb's C_p the same way: hexane's soft modes blended toward a free rotor's
+ * R/2 give 22.805 cal/(mol K) of vibration against xtb's 22.806, where plain
+ * Einstein terms would give 23.131.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +24,7 @@ interface OracleMolecule {
   enthalpy: number;
   freeEnergy: number;
   entropyCalPerMolK: { total: number; rotational: number; translational: number };
+  heatCapacityCalPerMolK: { total: number; vibrational: number };
   atoms: Array<{ element: string; x: number; y: number; z: number }>;
   frequencies: number[];
 }
@@ -40,7 +44,7 @@ describe('the translational entropy: Sackur–Tetrode', () => {
 
 describe('against the xtb oracle, on its own geometry and frequencies', () => {
   for (const [name, reference] of Object.entries(oracle.molecules)) {
-    it(`${name}: σ, ZPE, S by part, H and G`, () => {
+    it(`${name}: σ, ZPE, S by part, C_p, H and G`, () => {
       const molecule = { atoms: reference.atoms, bonds: [] };
       const sigma = symmetryNumber(detectPointGroup(molecule));
       expect(sigma).toBe(reference.rotationalNumber);
@@ -54,6 +58,9 @@ describe('against the xtb oracle, on its own geometry and frequencies', () => {
       expect(Math.abs(result.entropyParts.translational * CAL_PER_MOL_K - reference.entropyCalPerMolK.translational)).toBeLessThan(0.03);
       expect(result.entropyParts.rotational * CAL_PER_MOL_K).toBeCloseTo(reference.entropyCalPerMolK.rotational, 2);
       expect(result.entropy * CAL_PER_MOL_K).toBeCloseTo(reference.entropyCalPerMolK.total, 1);
+      // xtb prints C_p to 0.001 (by part) and 0.0001 (total) cal/(mol K)
+      expect(result.heatCapacityParts.vibrational * CAL_PER_MOL_K).toBeCloseTo(reference.heatCapacityCalPerMolK.vibrational, 2);
+      expect(result.heatCapacity * CAL_PER_MOL_K).toBeCloseTo(reference.heatCapacityCalPerMolK.total, 2);
       expect(result.enthalpy).toBeCloseTo(reference.enthalpy, 5);
       // xtb prints no U; for an ideal gas it is H less pV = RT
       const RT = (8.314462618 * 298.15) / (4.3597447222071e-18 * 6.02214076e23);
@@ -127,6 +134,8 @@ describe('the ledger the Thermo view shows adds up', () => {
     expect(result.modes).toHaveLength(3 * 20 - 6);
     expect(sum(result.modes.map((m) => m.zeroPoint))).toBeCloseTo(result.zeroPoint, 12);
     expect(sum(result.modes.map((m) => m.entropy))).toBeCloseTo(result.entropyParts.vibrational, 12);
+    expect(sum(result.modes.map((m) => m.heatCapacity))).toBeCloseTo(result.heatCapacityParts.vibrational, 12);
+    expect(result.heatCapacity).toBeCloseTo(sum(Object.values(result.heatCapacityParts)), 12);
     // indexed like the frequencies: the six rigid motions come first
     expect(result.modes[0].index).toBe(6);
     expect(result.modes[0].wavenumber).toBe(hexane.frequencies[6]);
@@ -168,5 +177,28 @@ describe('an atom’s share of a mode’s kinetic energy', () => {
     });
     expect(shares[0] + shares[1]).toBeCloseTo(1, 12);
     expect(shares[0] / shares[1]).toBeCloseTo(12.011 / 1.008, 2);
+  });
+});
+
+describe('the heat capacity: where it lives, and each vibration’s', () => {
+  const R = 8.314462618 / 4.184; // cal/(mol K)
+  const argon = thermochemistry({ atoms: [{ element: 'Ar', x: 0, y: 0, z: 0 }], frequencies: [], energy: 0, multiplicity: 1, symmetryNumber: 1 });
+
+  it('an atom has translation’s 5/2 R alone: 3/2 R and pV’s R', () => {
+    expect(argon.heatCapacity * CAL_PER_MOL_K).toBeCloseTo(2.5 * R, 6);
+    expect(argon.heatCapacityParts.rotational).toBe(0);
+  });
+
+  it('each mode between 0 (frozen) and R (classical); the stiff ones near 0', () => {
+    const hexane = oracle.molecules.hexane;
+    const { modes } = thermochemistry({
+      atoms: hexane.atoms, frequencies: hexane.frequencies, energy: hexane.energy, multiplicity: 1, symmetryNumber: 2,
+    });
+    for (const mode of modes) {
+      expect(mode.heatCapacity * CAL_PER_MOL_K).toBeGreaterThan(0);
+      expect(mode.heatCapacity * CAL_PER_MOL_K).toBeLessThan(R);
+    }
+    // a C–H stretch near 3000 cm⁻¹ is about 14 kT: frozen
+    expect(modes[modes.length - 1].heatCapacity * CAL_PER_MOL_K).toBeLessThan(0.001 * R);
   });
 });

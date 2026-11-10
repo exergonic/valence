@@ -12,15 +12,19 @@
  *     row opens its statistical-mechanics formula, kept out of sight so a
  *     general-chemistry class is not met with partition functions;
  *   - where the entropy lives: translation, rotation, vibration (and spin);
- *   - the vibrations, each with its share of the ZPE and of TS — the stiff
- *     bonds hold the zero-point energy, the soft motions the entropy — the
- *     softest and stiffest few shown, the rest folded away; a click plays one;
+ *   - where the heat capacity lives, the same way (2026-11-10, the user's
+ *     order in a lesson: the total, where it lives, then each vibration);
+ *   - the vibrations, each with its share of the ZPE and of TS and its heat
+ *     capacity in units of R — the stiff bonds hold the zero-point energy and
+ *     are frozen (C ≈ 0), the soft motions hold the entropy and take up heat
+ *     (C → R) — the softest and stiffest few shown, the rest folded away; a
+ *     click plays one;
  *   - folded away: the absolute energies in hartrees, and the model.
  *
  * What is drawn is what thermochemistry.ts computed; the sums on screen are
  * exact (tests/thermochemistry.test.ts, "the ledger … adds up").
  */
-import type { ModeShare, Thermochemistry } from '../chem/gfn2-xtb/thermochemistry';
+import { GAS_CONSTANT_HARTREE_PER_K, type ModeShare, type Thermochemistry } from '../chem/gfn2-xtb/thermochemistry';
 
 const KCAL_PER_HARTREE = 627.5094740631;
 /** Modes shown at each end of the table before the rest fold away. */
@@ -120,21 +124,40 @@ function ledgerHtml(t: Thermochemistry, modeCount: number): string {
   }).join('');
 }
 
+/** A quantity in cal/(mol·K) split by motion: a bar to scale and its labels.
+ *  The entropy's and the heat capacity's, so the two read alike. */
+function partsHtml(heading: string, kind: 'entropy' | 'heat-capacity', parts: Array<[string, number]>): string {
+  const shown = parts.filter(([, x]) => x > 0);
+  const total = shown.reduce((sum, [, x]) => sum + x, 0);
+  // widths as percentages: the parts are ~10⁻⁵ Eh/K, and flex-grow values
+  // summing below 1 hand out only that fraction of the bar
+  const segments = shown.map(([name, x], i) =>
+    `<span class="motion-part ${kind} part-${i}" style="width:${(x / total) * 100}%" title="${name} ${calPerK(x)} cal/(mol·K)"></span>`).join('');
+  const labels = shown.map(([name, x], i) =>
+    `<span><i class="motion-key ${kind} part-${i}"></i>${name} ${calPerK(x)}</span>`).join('');
+  return `<div class="thermo-subhead">${heading}</div>`
+    + `<div class="motion-bar">${segments}</div><div class="motion-labels">${labels}</div>`;
+}
+
 function entropyHtml(t: Thermochemistry): string {
-  const parts = [
+  return partsHtml(`Where the entropy lives · S = ${calPerK(t.entropy)} cal/(mol·K)`, 'entropy', [
     ['translation', t.entropyParts.translational],
     ['rotation', t.entropyParts.rotational],
     ['vibration', t.entropyParts.vibrational],
     ['spin', t.entropyParts.electronic],
-  ] as const;
-  const shown = parts.filter(([, s]) => s > 0);
-  const segments = shown.map(([name, s], i) =>
-    `<span class="entropy-part part-${i}" style="flex-grow:${s}" title="${name} ${calPerK(s)} cal/(mol·K)"></span>`).join('');
-  const labels = shown.map(([name, s], i) =>
-    `<span><i class="entropy-key part-${i}"></i>${name} ${calPerK(s)}</span>`).join('');
-  return `<div class="thermo-subhead">Where the entropy lives · S = ${calPerK(t.entropy)} cal/(mol·K)</div>`
-    + `<div class="entropy-bar">${segments}</div><div class="entropy-labels">${labels}</div>`;
+  ]);
 }
+
+function heatCapacityHtml(t: Thermochemistry): string {
+  return partsHtml(`Where the heat capacity lives · C<sub>p</sub> = ${calPerK(t.heatCapacity)} cal/(mol·K)`, 'heat-capacity', [
+    ['translation', t.heatCapacityParts.translational],
+    ['rotation', t.heatCapacityParts.rotational],
+    ['vibration', t.heatCapacityParts.vibrational],
+  ]);
+}
+
+/** A heat capacity in units of R: 0 for a frozen mode, 1 for a classical one. */
+const inR = (ehPerK: number) => (ehPerK / GAS_CONSTANT_HARTREE_PER_K).toFixed(2);
 
 function modeRow(share: ModeShare, temperature: number): string {
   const wavenumber = `${share.wavenumber.toFixed(0)}${share.inverted ? 'i' : ''}`;
@@ -142,14 +165,15 @@ function modeRow(share: ModeShare, temperature: number): string {
     ? ' title="An imaginary mode above 20i cm⁻¹ — a methyl rotor not quite settled — counted as real, as xtb counts it."'
     : '';
   return `<button class="mode-row" data-mode="${share.index}"${title}><span>${wavenumber}</span>`
-    + `<span>${kcal(share.zeroPoint)}</span><span>${kcal(temperature * share.entropy)}</span></button>`;
+    + `<span>${kcal(share.zeroPoint)}</span><span>${kcal(temperature * share.entropy)}</span>`
+    + `<span>${inR(share.heatCapacity)}</span></button>`;
 }
 
 function modesHtml(t: Thermochemistry): string {
   const modes = t.modes;
   const row = (share: ModeShare) => modeRow(share, t.temperature);
   const folded = modes.length > SOFTEST_SHOWN + STIFFEST_SHOWN + 1;
-  const head = '<div class="mode-head"><span>ν̃, cm⁻¹</span><span>½hcν̃</span><span>TS</span></div>';
+  const head = '<div class="mode-head"><span>ν̃, cm⁻¹</span><span>½hcν̃</span><span>TS</span><span>C<sub>p</sub>/R</span></div>';
   const body = folded
     ? modes.slice(0, SOFTEST_SHOWN).map(row).join('')
       + `<details class="mode-fold"><summary>${modes.length - SOFTEST_SHOWN - STIFFEST_SHOWN} more vibrations</summary>`
@@ -157,8 +181,10 @@ function modesHtml(t: Thermochemistry): string {
       + modes.slice(-STIFFEST_SHOWN).map(row).join('')
     : modes.map(row).join('');
   const sum = `<div class="mode-sum"><span>Σ, ${modes.length} modes</span><span>${kcal(t.zeroPoint)}</span>`
-    + `<span>${kcal(t.temperature * t.entropyParts.vibrational)}</span></div>`;
-  return `<div class="thermo-subhead">Vibrations · kcal/mol · click one to play it, hover the molecule for more</div>${head}${body}${sum}`;
+    + `<span>${kcal(t.temperature * t.entropyParts.vibrational)}</span><span>${inR(t.heatCapacityParts.vibrational)}</span></div>`;
+  return '<div class="thermo-subhead">Vibrations · ½hcν̃ and TS in kcal/mol; C<sub>p</sub> in units of R, '
+    + '0 frozen to 1 classical · click one to play it, hover the molecule for more</div>'
+    + `${head}${body}${sum}`;
 }
 
 function foldedHtml(t: Thermochemistry): string {
@@ -175,7 +201,8 @@ function foldedHtml(t: Thermochemistry): string {
     + '<p>An absolute energy compares only with another of the same atoms: an isomer, a conformer.</p></details>'
     + '<details class="thermo-fold"><summary>The model</summary>'
     + `<p>${t.temperature} K, 1 atm, a mole of ideal gas. Rigid rotor (σ = ${t.symmetryNumber}${t.linear ? ', linear' : ''}), `
-    + 'harmonic oscillator, a soft mode’s entropy tending to a free rotor’s (quasi-RRHO, 50 cm⁻¹, as xtb). '
+    + 'harmonic oscillator, a soft mode’s entropy and heat capacity tending to a free rotor’s (quasi-RRHO, 50 cm⁻¹, as xtb). '
+    + 'C<sub>p</sub> counts translation’s 3/2 R with the R of pV, as xtb and MolCalc book it. '
     + 'On GFN2-xTB’s frequencies: semiempirical, typically within 5–10 % of experiment.</p>'
     + `${notes}</details>`;
 }
@@ -186,7 +213,7 @@ function foldedHtml(t: Thermochemistry): string {
 export function drawThermoReadout(el: HTMLElement, t: Thermochemistry, onPlay: (index: number) => void): void {
   el.innerHTML = `<div class="thermo-subhead">Building G from E · kcal/mol above E · click a step for its formula</div>`
     + `<div class="ledger">${ledgerHtml(t, t.modes.length)}</div>`
-    + entropyHtml(t) + modesHtml(t) + foldedHtml(t);
+    + entropyHtml(t) + heatCapacityHtml(t) + modesHtml(t) + foldedHtml(t);
   el.querySelectorAll<HTMLButtonElement>('.ledger-row[data-formula]').forEach((row) => {
     row.addEventListener('click', () => {
       const formula = el.querySelector(`[data-formula-of="${row.dataset.formula}"]`);
