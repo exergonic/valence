@@ -99,7 +99,8 @@ function stopVibration(ctx: SceneContext): void {
 export function syncVibration(ctx: SceneContext, properties: Gfn2Properties | null): void {
   const modes = ctx.vibrations && ctx.vibrations.molecule === ctx.currentMolecule ? ctx.vibrations.modes : null;
   if (!modes) ctx.display.vibrationIndex = null;
-  ctx.onVibrations(ctx.currentMolecule ? thermochemistryOf(ctx.currentMolecule, modes, properties) : null, modes);
+  ctx.thermochemistry = ctx.currentMolecule ? thermochemistryOf(ctx.currentMolecule, modes, properties) : null;
+  ctx.onVibrations(ctx.thermochemistry, modes);
   const index = ctx.display.vibrationIndex;
   if (modes && index !== null && modes[index]) startVibration(ctx, modes[index]);
   else stopVibration(ctx);

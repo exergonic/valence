@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { symmetryNumber, thermochemistry } from '../src/chem/gfn2-xtb/thermochemistry';
 import { detectPointGroup } from '../src/geometry/symmetrize';
+import { kineticEnergyShares } from '../src/chem/gfn2-xtb/normal-modes';
 
 interface OracleMolecule {
   rotationalNumber: number;
@@ -129,5 +130,39 @@ describe('the ledger the Thermo view shows adds up', () => {
     // indexed like the frequencies: the six rigid motions come first
     expect(result.modes[0].index).toBe(6);
     expect(result.modes[0].wavenumber).toBe(hexane.frequencies[6]);
+  });
+});
+
+describe('what the Thermo view’s hover says of one mode', () => {
+  const hexane = oracle.molecules.hexane;
+  const run = (frequencies: number[]) => thermochemistry({
+    atoms: hexane.atoms, frequencies, energy: hexane.energy, multiplicity: 1, symmetryNumber: 2,
+  });
+
+  it('one quantum against kT: kT/hc is 207.22 cm⁻¹ at 298.15 K', () => {
+    // CODATA's Boltzmann constant in cm⁻¹/K, 0.6950348
+    const kTInWavenumbers = 0.6950348 * 298.15;
+    for (const mode of run(hexane.frequencies).modes) {
+      expect(mode.quantumOverKT * kTInWavenumbers).toBeCloseTo(mode.wavenumber, 3);
+    }
+  });
+
+  it('quasi-RRHO’s weight is a half at the 50 cm⁻¹ cut-off, and near 1 for a stiff mode', () => {
+    const frequencies = [...hexane.frequencies];
+    frequencies[6] = 50;
+    const modes = run(frequencies).modes;
+    expect(modes[0].harmonicWeight).toBeCloseTo(0.5, 12);
+    expect(modes[modes.length - 1].harmonicWeight).toBeGreaterThan(0.999999);
+  });
+});
+
+describe('an atom’s share of a mode’s kinetic energy', () => {
+  it('weights each swing by the atom’s mass, and the shares sum to 1', () => {
+    // an equal swing on C and H: the carbon carries 12 parts to the hydrogen's 1
+    const shares = kineticEnergyShares([{ element: 'C' }, { element: 'H' }], {
+      frequency: 3000, displacements: [[1, 0, 0], [0, 0, -1]],
+    });
+    expect(shares[0] + shares[1]).toBeCloseTo(1, 12);
+    expect(shares[0] / shares[1]).toBeCloseTo(12.011 / 1.008, 2);
   });
 });

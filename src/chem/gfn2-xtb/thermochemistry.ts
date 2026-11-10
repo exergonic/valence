@@ -102,6 +102,13 @@ export interface ModeShare {
   inverted: boolean;
   zeroPoint: number;
   entropy: number;
+  /** hcν̃/kT: one quantum against the thermal energy. Large, and the mode is
+   *  frozen in its ground state — ZPE and no entropy; small, and it is
+   *  excited, 1/(eˣ − 1) quanta on average, and holds entropy. */
+  quantumOverKT: number;
+  /** Quasi-RRHO's w: the harmonic oscillator's share of the mode's entropy,
+   *  the free rotor's being 1 − w. */
+  harmonicWeight: number;
 }
 
 export interface ThermochemistryInput {
@@ -178,7 +185,10 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     const harmonicWeight = 1 / (1 + (ROTOR_CUTOFF_CM / wavenumber) ** 4);
     const modeEntropy = GAS_CONSTANT * (harmonicWeight * harmonic + (1 - harmonicWeight) * freeRotor);
     sVib += modeEntropy;
-    modes.push({ index, wavenumber, inverted: artifact(input.frequencies[index]), zeroPoint: modeZeroPoint, entropy: modeEntropy });
+    modes.push({
+      index, wavenumber, inverted: artifact(input.frequencies[index]), zeroPoint: modeZeroPoint, entropy: modeEntropy,
+      quantumOverKT: x, harmonicWeight,
+    });
   });
 
   const sElec = GAS_CONSTANT * Math.log(Math.max(1, input.multiplicity));

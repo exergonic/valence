@@ -158,7 +158,7 @@ function modesHtml(t: Thermochemistry): string {
     : modes.map(row).join('');
   const sum = `<div class="mode-sum"><span>Σ, ${modes.length} modes</span><span>${kcal(t.zeroPoint)}</span>`
     + `<span>${kcal(t.temperature * t.entropyParts.vibrational)}</span></div>`;
-  return `<div class="thermo-subhead">Vibrations · kcal/mol · click one to play it</div>${head}${body}${sum}`;
+  return `<div class="thermo-subhead">Vibrations · kcal/mol · click one to play it, hover the molecule for more</div>${head}${body}${sum}`;
 }
 
 function foldedHtml(t: Thermochemistry): string {

@@ -115,3 +115,15 @@ export function normalModes(
   }
   return modes.sort((a, b) => a.frequency - b.frequency);
 }
+
+/**
+ * Each atom's share of a mode's kinetic energy: mᵢ|dᵢ|² over the sum. All
+ * atoms pass their equilibrium at once in a normal mode, so the shares hold
+ * through the whole swing — which atoms the vibration is made of, weighted
+ * by mass, so a hydrogen's wide swing counts for what it carries.
+ */
+export function kineticEnergyShares(atoms: Array<{ element: string }>, mode: NormalMode): number[] {
+  const parts = mode.displacements.map(([x, y, z], i) => (ATOMIC_MASS[atoms[i].element] ?? 0) * (x * x + y * y + z * z));
+  const total = parts.reduce((s, p) => s + p, 0) || 1;
+  return parts.map((p) => p / total);
+}

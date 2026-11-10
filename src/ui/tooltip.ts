@@ -12,12 +12,21 @@
  * - Delocalized orbitals: the MO, and what the lobe under the pointer is made
  *   of — the atom's s, p and d share of it, the LCAO picture made literal — and
  *   its phase.
+ * - Thermo (asked for 2026-11-09): the vibration playing, hovered anywhere on
+ *   the molecule — its share of the ZPE and of TS, how far one quantum stands
+ *   above kT and so how excited it is at 298 K, a soft mode's quasi-RRHO
+ *   split, and the hovered atom's share of its kinetic energy: why the stiff
+ *   modes hold the zero-point energy and the soft ones the entropy, one mode
+ *   at a time.
  */
 import * as THREE from 'three';
 import { ATOM_LAYER, type OrbitalTag, type SceneContext } from '../render';
 import { shellPopulations } from '../chem/localized-orbitals/mulliken-populations';
+import { kineticEnergyShares, type NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { localizedType } from './mo-diagram';
 import { ENERGY_UNIT, KCAL_PER_EV, formatEnergy } from './units';
+
+const KCAL_PER_HARTREE = 627.5094740631;
 
 /** e²/Å in kcal/mol: a potential of 1 e/Å is 332.06 kcal/mol per unit charge. */
 const KCAL_PER_E_PER_ANGSTROM = 332.0637;
@@ -47,6 +56,20 @@ export function setupTooltip(ctx: SceneContext, container: HTMLElement) {
     .flatMap((group) => group.children.filter((child) => child instanceof THREE.Mesh && child.visible
       && (child.userData.lobeType || child.userData.orbital)));
 
+  // while a vibration plays, the moving atoms and bonds are what is hovered
+  const vibrating = () => {
+    const modes = ctx.vibrations?.molecule === ctx.currentMolecule ? ctx.vibrations?.modes : null;
+    const index = ctx.display.vibrationIndex;
+    return modes && index !== null && modes[index] ? { modes, index } : null;
+  };
+  const atomsAndBonds = () => {
+    const meshes: THREE.Object3D[] = [];
+    ctx.moleculeGroup.traverse((o) => {
+      if (o instanceof THREE.Mesh && (o.userData.lobeType === 'atom' || o.userData.lobeType === 'bond')) meshes.push(o);
+    });
+    return meshes;
+  };
+
   const hide = () => {
     tooltip.classList.add('hidden');
     container.style.cursor = '';
@@ -57,12 +80,15 @@ export function setupTooltip(ctx: SceneContext, container: HTMLElement) {
     const rect = container.getBoundingClientRect();
     mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
     mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-    const objects = pickable();
+    const vibration = vibrating();
+    const objects = vibration ? atomsAndBonds() : pickable();
     if (objects.length === 0 || !ctx.currentMolecule) { hide(); return; }
 
     raycaster.setFromCamera(mouse, ctx.camera);
     const hit = raycaster.intersectObjects(objects, false)[0];
-    const lines = hit ? describe(ctx, hit) : [];
+    const lines = !hit ? []
+      : vibration ? vibrationLines(ctx, vibration.modes, vibration.index, hit.object.userData.atomIndex ?? null)
+      : describe(ctx, hit);
     if (lines.length === 0) { hide(); return; }
 
     tooltip.innerHTML = lines.join('<br>');
@@ -86,6 +112,52 @@ function describe(ctx: SceneContext, hit: THREE.Intersection): string[] {
   if (d.lobeType === 'pi') return [`${d.element}${idx} p`];
   if (d.lobeType === 'valence_s' || d.lobeType === 'sigma' || d.lobeType === 'lone_pair') return [`${d.element}${idx} ${d.label}`];
   return [];
+}
+
+/** The vibration playing: what it holds of the ZPE and of TS, and why; with
+ *  an atom hovered, that atom's part in it. */
+function vibrationLines(ctx: SceneContext, modes: NormalMode[], index: number, atom: number | null): string[] {
+  const molecule = ctx.currentMolecule!;
+  const t = ctx.thermochemistry;
+  const share = t?.modes.find((m) => m.index === index);
+  const which = `vibration ${index + 1} of ${modes.length}`;
+  const lines: string[] = [];
+  if (!t || !share) {
+    // GFN2's energy not in yet, or a saddle's downhill mode, which has no
+    // harmonic partition function and is left out of the sums
+    const frequency = modes[index].frequency;
+    lines.push(`ν̃ ${Math.abs(frequency).toFixed(0)}${frequency < 0 ? 'i' : ''} cm⁻¹ · ${which}`);
+    if (frequency < 0 && t) lines.push('imaginary: a way downhill, left out of the thermochemistry');
+  } else {
+    const T = t.temperature;
+    const kcal = (eh: number) => (eh * KCAL_PER_HARTREE).toFixed(2);
+    const x = share.quantumOverKT;
+    lines.push(`ν̃ ${share.wavenumber.toFixed(0)}${share.inverted ? 'i' : ''} cm⁻¹ · ${which}`
+      + (share.inverted ? ' · counted as real' : ''));
+    lines.push(`½hcν̃ ${kcal(share.zeroPoint)} kcal/mol · ${percent(share.zeroPoint / t.zeroPoint)} of the ZPE`);
+    lines.push(`TS ${kcal(T * share.entropy)} kcal/mol · ${percent(share.entropy / t.entropyParts.vibrational)} of the vibrational TS`);
+    lines.push(`one quantum is ${x < 10 ? x.toFixed(1) : x.toFixed(0)} kT: ${quanta(1 / Math.expm1(x))} quanta on average at ${T} K`);
+    // a mode soft enough for quasi-RRHO to take part of its entropy from the free rotor
+    if (share.harmonicWeight < 0.995) {
+      lines.push(`its entropy ${percent(share.harmonicWeight)} oscillator, ${percent(1 - share.harmonicWeight)} free rotor (quasi-RRHO)`);
+    }
+  }
+  if (atom !== null) {
+    lines.push(`${atomName(ctx, atom)} carries ${percent(kineticEnergyShares(molecule.atoms, modes[index])[atom])} of its kinetic energy`);
+  }
+  return lines;
+}
+
+/** A share as a whole percentage; a trace says so rather than "0%". */
+const percent = (x: number) => (x > 0 && x < 0.005 ? '<1%' : `${Math.round(x * 100)}%`);
+
+/** Mean quanta excited: plain down to 0.01, then in powers of ten (a C–H
+ *  stretch at 298 K has about 10⁻⁷). */
+function quanta(n: number): string {
+  if (n >= 0.01) return n.toFixed(2);
+  const power = Math.floor(Math.log10(n));
+  const superscript = String(power).replace('-', '⁻').replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(d)]);
+  return `${(n / 10 ** power).toFixed(1)} × 10${superscript}`;
 }
 
 /** The potential on the ESP surface under the pointer, interpolated across the

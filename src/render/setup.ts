@@ -319,6 +319,8 @@ export interface SceneContext {
    *  their thermochemistry (null until the structure has both vibrations and
    *  GFN2's energy) and the modes — the Thermo view's panel draws them. */
   onVibrations: (thermochemistry: Thermochemistry | null, modes: NormalMode[] | null) => void;
+  /** The same thermochemistry, kept for the Thermo view's hover. */
+  thermochemistry: Thermochemistry | null;
   /** Called on every animation frame (the vibration drives it), or null.
    *  While it is set, frames are drawn continuously. */
   frame: { onFrame: ((now: number) => void) | null };
@@ -520,6 +522,7 @@ export function initScene(container: HTMLElement): SceneContext {
     vibrations: null,
     noMinimum: null,
     onVibrations: () => {},
+    thermochemistry: null,
     frame,
     onSceneBuilt: () => {},
     onGfn2Orbitals: () => {},
