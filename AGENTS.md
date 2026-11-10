@@ -183,11 +183,13 @@ Made with the user; the reasons are in NOTES.md under the date.
   go-ahead, and the run shows its time against the estimate and can be
   cancelled. A saddle is pushed down its imaginary mode and checked again.
   The thermochemistry is xtb's, to be checked against it (decided the same
-  day): a soft mode's entropy by Grimme's quasi-RRHO with xtb's **50 cm⁻¹**
-  cut-off, and an imaginary mode above **−20 cm⁻¹** — a methyl rotor not quite
-  settled — counted as real. The readout builds G from E in kcal/mol, the
-  formulas behind a click; the vibrations are a table of each mode's share
-  of the ZPE and of TS, the softest and stiffest few shown, the rest folded.
+  day): a soft mode's entropy and heat capacity by Grimme's quasi-RRHO with
+  xtb's **50 cm⁻¹** cut-off, and an imaginary mode above **−20 cm⁻¹** — a
+  methyl rotor not quite settled — counted as real. The readout builds G from
+  E in kcal/mol, the formulas behind a click; then where the entropy and the
+  heat capacity C_p live, by motion (2026-11-10); the vibrations are a table of
+  each mode's share of the ZPE and of TS and its C_p in units of R, the softest
+  and stiffest few shown, the rest folded.
 - **Clean at first sight, rigorous all the way down** (2026-11-05, the
   user's philosophy for the app): what a view shows at first is the least a
   general-chemistry student needs; more is there the deeper one digs —
@@ -201,8 +203,8 @@ Made with the user; the reasons are in NOTES.md under the date.
   and its E(2) with the anchor; Delocalized the MO, the lobe's atom by s/p/d
   share, and its phase; Thermo (2026-11-09) the vibration playing — its
   share of the ZPE and of TS, its partition function q_vib, read as Ault reads it
-  (N/n₀, so 1/q_vib of the molecules in the ground state), a soft mode's
-  quasi-RRHO split — and the hovered atom's share of its kinetic energy.
+  (N/n₀, so 1/q_vib of the molecules in the ground state), its C_p, a soft
+  mode's quasi-RRHO split — and the hovered atom's share of its kinetic energy.
 - **The first view** (2026-10-19): longest extent across, broad face toward
   the reader, heavier end up and right; a symmetric top turned and tilted 25°
   so no atom hides.

@@ -5983,3 +5983,37 @@ mode molecular partition function. A bare q read as a Coulomb charge — a
 hover over an atom is where a student expects one — and Q is, by convention,
 the canonical (ensemble) one, though Ault uses it for one molecule's sum. The
 subscript rules out both, and matches the ledger's S_vib.
+
+## The heat capacity, where it lives, and each vibration's (2026-11-10)
+
+The user has used MolCalc for thermochemistry: its benzene table splits H, C_p
+and S into translational, rotational and vibrational parts. What it lacks, and
+what the user always wanted, is the heat capacity per vibration: in a lesson
+the question runs "total heat capacity", then "where all of it lives", then
+mode by mode — a tight mode frozen (C ≈ 0), a loose one taking up heat (C → R,
+equipartition). It is the q_vib lesson again from the other side.
+
+No new calculation: Einstein's C = R x² eˣ/(eˣ − 1)² per mode, from the
+frequencies already there. Translation is booked at 5/2 R (its 3/2 R and pV's
+R), rotation at 3/2 R (R linear), as MolCalc and xtb book them.
+
+**xtb blends C_p for soft modes.** Its `--hess` table on the five reference
+geometries (lenovo, xtb 6.7.1): hexane's VIB C_p is 22.806 cal/(mol K); plain
+Einstein terms give 23.131, and each mode blended as w C_HO + (1 − w) R/2 —
+the free rotor's R/2, the same w as the entropy's — gives 22.805. Benzene,
+water, methane and SF₆ have no mode soft enough to tell the two apart. H stays
+harmonic in xtb (the ledger already matched it), so its C_p is not quite
+dH/dT; Valence follows xtb, to be checked against it. All five totals and
+vibrational parts are pinned in tests/thermochemistry.test.ts; benzene's
+19.86 cal/(mol K) is 83.1 J/(mol K), MolCalc's 81.96 on its own method.
+
+The table's column is C_p/R, 0 to 1, so tight and loose read at a glance
+without a second unit beside kcal/mol; its sum is the vibrations' C_p in R
+(benzene 5.99 over 30 modes). The hover gives cal/(mol K) and R. The SDF
+carries GFN2_HEAT_CAPACITY_CP_HARTREE_PER_K.
+
+**The entropy bar had never drawn.** Its segments' flex-grow was the entropy
+in Eh/K, ~10⁻⁵; flex-grow values summing below 1 hand out only that fraction
+of the free space, so the bar was three 0-px spans and only its labels showed.
+Found when the heat-capacity bar, built the same way, came out empty. Both now
+set percentage widths.
