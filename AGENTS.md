@@ -200,8 +200,8 @@ Made with the user; the reasons are in NOTES.md under the date.
   the ESP under the pointer; Localized the orbital's NBO hybrid on the atom
   and its E(2) with the anchor; Delocalized the MO, the lobe's atom by s/p/d
   share, and its phase; Thermo (2026-11-09) the vibration playing — its
-  share of the ZPE and of TS, its partition function read as Ault reads it
-  (N/n₀, so 1/q of the molecules in the ground state), a soft mode's
+  share of the ZPE and of TS, its partition function q_vib, read as Ault reads it
+  (N/n₀, so 1/q_vib of the molecules in the ground state), a soft mode's
   quasi-RRHO split — and the hovered atom's share of its kinetic energy.
 - **The first view** (2026-10-19): longest extent across, broad face toward
   the reader, heavier end up and right; a symmetric top turned and tilted 25°

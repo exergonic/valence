@@ -5977,3 +5977,9 @@ kT/hc (207.22 cm⁻¹ at 298.15 K); its 1.58198 is pinned in
 tests/thermochemistry.test.ts. q is the harmonic ladder's; for a soft mode
 the next line says how much of its entropy quasi-RRHO takes from the free
 rotor instead.
+
+The symbol is q_vib (same day, the user's call): Atkins' and McQuarrie's one-
+mode molecular partition function. A bare q read as a Coulomb charge — a
+hover over an atom is where a student expects one — and Q is, by convention,
+the canonical (ensemble) one, though Ault uses it for one molecule's sum. The
+subscript rules out both, and matches the ledger's S_vib.
