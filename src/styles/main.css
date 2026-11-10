@@ -623,6 +623,15 @@ button, input, select, textarea { font-family: inherit; }
 #render-btn:active { filter: brightness(0.92); }
 #render-btn:disabled { opacity: 0.5; cursor: default; }
 
+/* where the 3D structure comes from, so it sits under the button that builds it */
+.build-local {
+  flex-shrink: 0;
+  justify-content: center;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-2);
+}
+
 /* ── Collapsible sketcher panel ──
    The sketcher docks to a slim Build rail on the left edge — the mirror of
    the Orbitals rail on the right. JSME sizes to its container, so nothing
@@ -639,6 +648,7 @@ button, input, select, textarea { font-family: inherit; }
 #jsme-panel.collapsed #sketch-elements,
 #jsme-panel.collapsed #jsme_container,
 #jsme-panel.collapsed #render-btn,
+#jsme-panel.collapsed .build-local,
 #jsme-panel.collapsed .sketch-credit {
   display: none;
 }

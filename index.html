@@ -85,6 +85,10 @@
         </div>
         <div id="jsme_container"><div id="jsme-stage"></div></div>
         <button id="render-btn">Build 3D model</button>
+        <label class="ctrl-toggle build-local" title="Ask neither PubChem nor NIH CACTUS for a 3D structure: start from the sketch, laid out in VSEPR shapes, and optimise it with GFN2-xTB in this browser. A metal, a radical or a single atom is always built this way.">
+          <input type="checkbox" id="ctrl-force-fallback" />
+          <span>Build locally with GFN2-xTB</span>
+        </label>
         <div class="sketch-credit">Sketcher: JSME (Bienfait &amp; Ertl) · 3D: GFN2-xTB</div>
       </div>
       <div id="splitter"></div>
@@ -334,10 +338,6 @@
             <button id="ctrl-gfn2-refine" class="refine-btn" title="Re-optimise this structure with GFN2-xTB — a semiempirical extended tight-binding method, and the engine the local pipeline already uses — at the spin above. Useful for re-running on a fetched structure.">
               Refine with GFN2-xTB
             </button>
-            <label class="ctrl-toggle">
-              <input type="checkbox" id="ctrl-force-fallback" />
-              <span>Skip PubChem: build locally</span>
-            </label>
             <label class="ctrl-toggle">
               <input type="checkbox" id="ctrl-symmetrize" checked />
               <span>Snap to point group</span>
