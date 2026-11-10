@@ -100,7 +100,8 @@ function setupExamples(ctx: SceneContext) {
     const parsed = parseMolBlock(ex.mol);
     const notes = loadMolecule(ctx, parsed, ex.multiplicity ?? 1);
     if (ctx.currentMolecule) {
-      // examples are loaded from disk, not PubChem: no record, no warnings
+      // examples are loaded from disk, not PubChem: no record, no warnings;
+      // the example's own note is the card's first
       showMoleculeHeader(ctx.currentMolecule, { source: 'example', name: ex.name, info: ex.note ? [ex.note, ...notes] : notes });
     }
 

@@ -37,8 +37,8 @@ export interface LocalGeometry extends EmbedResult {
   gfn2?: Gfn2Result;
   /** The held structure's own record, when engine is 'held'. */
   held?: Gfn2Held;
-  /** Why the start is shown (engine 'unrefined'), as a sentence for the Info
-   *  log. */
+  /** Why the start is shown (engine 'unrefined'), as a sentence for the
+   *  structure card. */
   unrefinedReason?: string;
   /** A sentence for each drawn bond GFN2 stretched into a partial bond. */
   partialBonds?: string[];

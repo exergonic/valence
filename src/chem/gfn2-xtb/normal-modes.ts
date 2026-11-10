@@ -26,7 +26,7 @@ import { ATOMIC_MASS } from '../assign-mass';
  * spurious curvature. With the rotations projected out, the app's minima have
  * no imaginary mode at all, while the methyl saddles of acetaldehyde,
  * propene, acetone and acetic acid sit at 49i–171i (2026-10-20).
- * The optimiser pushes a saddle off below it, and the Info log calls the
+ * The optimiser pushes a saddle off below it, and the structure card calls the
  * verdict by it.
  */
 export const SADDLE_FREQUENCY_THRESHOLD = -20;

@@ -115,7 +115,7 @@ export function setupThermoPanel(ctx: SceneContext): ThermoPanel {
     }
     const optimisedFirst = 'GFN2-xTB optimises the structure first, and its minimum takes the place of the one on screen.';
     if (tried.has(molecule)) {
-      offer(seconds, `No vibrations for this structure — the Info log says why. ${optimisedFirst}`);
+      offer(seconds, `No vibrations for this structure — the structure card in the header says why. ${optimisedFirst}`);
     } else if (seconds > ASK_ABOVE_SECONDS) {
       offer(seconds, `Over ${ASK_ABOVE_SECONDS} s on this machine, so it waits for you. ${optimisedFirst}`);
     } else {

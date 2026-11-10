@@ -24,7 +24,7 @@ export type { Gfn2Progress, Gfn2Result, Gfn2Held, Gfn2Properties, Gfn2OrbitalSet
 export { SADDLE_FREQUENCY_THRESHOLD } from '../chem/gfn2-xtb/normal-modes';
 
 /**
- * The honest label for a GFN2-optimised geometry, shown in the Info log:
+ * The honest label for a GFN2-optimised geometry, shown in the structure card:
  * semiempirical, not ab initio, and why it is the app's one engine — one
  * parameter set for the whole periodic table through radon, so PCl₅ and a
  * nickel complex get the same physics as ethane. The details are the

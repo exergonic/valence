@@ -70,7 +70,7 @@ export interface BondingVerdict {
   /** Every drawn bond longer than a full bond, by index into `bonds` — the
    *  partial ones, and any that came apart. The renderer dashes them. */
   stretched: number[];
-  /** A sentence for each partial bond, for the Info log. */
+  /** A sentence for each partial bond, for the structure card. */
   partial: string[];
   /** A sentence naming the first drawn bond that came apart, or null. */
   broken: string | null;

@@ -34,7 +34,7 @@
   --accent-text: #cfe0ff;     /* text inside an accent-soft surface */
 
   --hover: rgba(255, 255, 255, 0.05);
-  --note: #d8c69a;            /* the Info log's caveats */
+  --note: #d8c69a;            /* the structure card's attention notes */
   --error-bg: rgba(58, 18, 18, 0.95);
   --error-border: rgba(255, 110, 110, 0.4);
   --error-text: #f3c1c1;
@@ -959,9 +959,11 @@ button.ledger-row:hover { background: var(--hover); }
 
 #render-error-close:hover { opacity: 1; }
 
-/* ── PubChem record dropdown (below the molecule info header) ── */
+/* ── The structure card (opened from the source chip in the header) ──
+   Its top is set beside the header's foot in jsme-panel.ts, since the
+   header grows a line when it has warnings. */
 
-#mol-data {
+#structure-card {
   position: absolute;
   top: 58px;
   left: 50%;
@@ -970,42 +972,45 @@ button.ledger-row:hover { background: var(--hover); }
   border: 1px solid var(--border);
   border-radius: 12px;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 11.5px;
+  line-height: 1.5;
   z-index: 10;
   backdrop-filter: blur(8px);
-  min-width: 240px;
-  max-width: min(520px, calc(100vw - 24px));
+  width: min(460px, calc(100% - 24px));
+  max-height: calc(100% - 140px);
+  overflow-y: auto;
   box-shadow: var(--shadow);
-  overflow: hidden;
+  padding: 10px 14px;
 }
 
-#mol-data.hidden { display: none; }
+#structure-card.hidden { display: none; }
 
-#mol-data summary {
-  cursor: pointer;
-  padding: 8px 14px;
-  font-weight: 600;
-  color: var(--accent);
+#structure-card p { margin: 0 0 6px; }
+#structure-card a { color: var(--accent); text-decoration: none; }
+#structure-card a:hover { text-decoration: underline; }
+
+/* what is wrong comes first, in the caveat colour */
+#structure-attention { color: var(--note); margin-bottom: 8px; }
+#structure-attention.hidden { display: none; }
+
+#structure-facts { margin: 0 0 8px; }
+
+#structure-record {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
+}
+
+#structure-record.hidden { display: none; }
+
+#structure-record dl { margin: 4px 0 0; }
+
+.card-heading {
   font-size: 10px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  user-select: none;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-#mol-data summary::-webkit-details-marker { display: none; }
-
-#mol-data summary::before {
-  content: '▸';
-  color: var(--text-faint);
-  transition: transform 0.12s;
-}
-
-#mol-data[open] summary::before {
-  transform: rotate(90deg);
+  color: var(--accent);
 }
 
 #mol-data-cid {
@@ -1013,11 +1018,6 @@ button.ledger-row:hover { background: var(--hover); }
   font-weight: 400;
   text-transform: none;
   letter-spacing: 0;
-}
-
-#mol-data dl {
-  margin: 0;
-  padding: 0 14px 10px;
 }
 
 .data-row {
@@ -1079,14 +1079,32 @@ button.ledger-row:hover { background: var(--hover); }
 }
 
 #mol-source {
+  font: inherit;
   font-size: 10px;
   font-weight: 600;
   padding: 2px 7px;
+  border: 1px solid transparent;
   border-radius: 6px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   background: var(--hover);
   color: var(--text-muted);
+  cursor: pointer;
+}
+
+#mol-source:hover,
+#mol-source[aria-expanded="true"] { border-color: currentColor; }
+
+/* the card has something wrong to explain */
+#mol-source.attention::after {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--note);
+  vertical-align: 1px;
 }
 
 #mol-source.pubchem,
@@ -1380,38 +1398,36 @@ button.ledger-row:hover { background: var(--hover); }
   padding-bottom: 6px;
 }
 
-/* ── Model Info log (bottom of the controls panel) ──
-   Verbose caveats that do not fit the one-line molecule header
-   (dipole on generic parameters, an ion the type space cannot
-   represent, ...). Hidden until a molecule raises a note. */
+/* ── A view's fine print: two folds at the foot of its inspector section ──
+   "Reading this view" and "How it was computed", closed until asked for. */
 
-#panel-info { font-size: 11.5px; border-bottom: none; }
+.view-notes { margin-top: 8px; }
+.view-notes.hidden { display: none; }
 
-#panel-info.hidden { display: none; }
-
-#panel-info-title {
-  display: block;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--text-faint);
-  margin-bottom: 5px;
+.view-notes summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 11px;
+  color: var(--text-muted);
+  user-select: none;
 }
 
-#panel-info-items {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
+.view-notes summary::-webkit-details-marker { display: none; }
+.view-notes summary::before { content: '▸ '; color: var(--text-faint); }
+.view-notes[open] summary::before { content: '▾ '; }
+.view-notes summary:hover { color: var(--text); }
 
-.panel-info-item {
-  color: var(--note);
+.view-notes-body {
+  margin-top: 4px;
+  font-size: 11px;
   line-height: 1.5;
+  color: var(--text-muted);
 }
 
-.panel-info-item a, #mo-note a { color: var(--accent); text-decoration: none; }
-.panel-info-item a:hover, #mo-note a:hover { text-decoration: underline; }
+.view-notes-body p { margin: 0 0 6px; }
+
+.view-notes-body a, #mo-note a { color: var(--accent); text-decoration: none; }
+.view-notes-body a:hover, #mo-note a:hover { text-decoration: underline; }
 
 .ctrl-label {
   display: block;

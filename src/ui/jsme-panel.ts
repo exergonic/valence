@@ -139,14 +139,15 @@ export function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: 
   return {
     molecule: { ...molecule, atoms: snapped.atoms }, // the spin, if any, rides along
     info: [
-      `Symmetry: ${snapped.symbol} — the geometry was snapped to the point group it nearly has `
-      + `(atoms moved at most ${(snapped.maxShift * 1000).toFixed(2)} mÅ). Turn off "Snap to point group" to see it raw.`,
+      `Point group ${snapped.symbol}: the geometry was snapped to the symmetry it nearly has, its atoms moved at `
+      + `most ${(snapped.maxShift * 1000).toFixed(2)} mÅ. Turn off "Snap to point group" to see it raw.`,
     ],
   };
 }
 
 /**
- * The caveats on a PubChem structure, for the Info log. Only PubChem's
+ * The caveats on a PubChem structure: one-liners for the header, since each
+ * says its geometry is approximate. Only PubChem's
  * structures are MMFF94 conformers, so only they get the MMFF94 caveats: the
  * parameter-gap report ("geometry approximate") and the 3-ring pucker check
  * (ring-pucker.ts: MMFF94's reference-angle artifact, reported, never
@@ -157,7 +158,7 @@ export function snapToSymmetry(molecule: Molecule): { molecule: Molecule; info: 
  * charge model is on screen, so the dipole readout carries them
  * (render/rebuild.ts).
  */
-function mmff94ConformerCaveats(molecule: Molecule): (string | InfoNote)[] {
+function mmff94ConformerCaveats(molecule: Molecule): string[] {
   return [...parameterGapWarnings(molecule), ...ringPuckerWarnings(molecule)];
 }
 
@@ -168,54 +169,67 @@ export function resetGfn2Spin(): void {
   if (spin) spin.value = 'auto';
 }
 
-/** Said whenever a run was not a singlet, so an open-shell structure is
- *  never silently one: which spin, and why that one. */
-function gfn2SpinNote(run: Gfn2Result, molecule: Molecule, chosen: boolean): string[] {
-  if (run.multiplicity === 1) return [];
-  const name = spinName(run.multiplicity);
-  if (chosen) return [`GFN2-xTB ran as a ${name}, the spin chosen under Refine.`];
-  if (run.multiplicity === lowestMultiplicity(molecule.atoms)) {
-    return [`GFN2-xTB ran as a ${name}: the electron count is odd, so a singlet is impossible and a doublet `
-      + 'is the lowest spin it allows. A different spin can be chosen under Refine.'];
-  }
-  return [`GFN2-xTB ran as a ${name}, this structure's own spin.`];
+type Note = string | InfoNote;
+
+/**
+ * What the header and its structure card say about a structure (decided with
+ * the user 2026-11-09). Something wrong with it is said in the header itself,
+ * in one line (`warnings`), and explained first in the card (`attention`);
+ * everything else waits in the card (`info`), so a structure with nothing
+ * wrong shows nothing but its facts until asked.
+ */
+interface StructureNotes {
+  warnings: string[];
+  attention: Note[];
+  info: Note[];
+}
+
+function joinNotes(...parts: Partial<StructureNotes>[]): StructureNotes {
+  return {
+    warnings: parts.flatMap((p) => p.warnings ?? []),
+    attention: parts.flatMap((p) => p.attention ?? []),
+    info: parts.flatMap((p) => p.info ?? []),
+  };
 }
 
 /**
- * What a converged GFN2 run says about itself: the convergence line, and the
- * curvature. A gradient-based stop cannot tell a minimum from a saddle — both
- * have zero gradient — so the Hessian is what lets the app say which one is on
- * screen, and when the run was pushed off a saddle, it says that too.
+ * What a GFN2 run says about itself: the convergence line, and the curvature.
+ * A gradient-based stop cannot tell a minimum from a saddle — both have zero
+ * gradient — so the Hessian is what lets the app say which one is on screen,
+ * and when the run was pushed off a saddle, it says that too. A run that
+ * stopped short, or a saddle it could not leave, is something wrong.
  */
-function gfn2RunNotes(run: Gfn2Result): string[] {
+function gfn2RunNotes(run: Gfn2Result): StructureNotes {
   const seconds = (run.milliseconds / 1000).toFixed(1);
   if (!run.converged) {
     // No curvature verdict either: the Hessian runs only on a converged point.
-    return [
-      `GFN2-xTB stopped after ${run.iterations} steps (${seconds} s) before full convergence. The structure `
-        + `shown is the lowest-energy point it reached (${run.energyHartree.toFixed(6)} Eh): its shape is `
-        + 'reliable, its last few hundredths of an ångström are not.',
-    ];
+    return joinNotes({
+      warnings: ['GFN2-xTB structure, not fully converged.'],
+      attention: [`GFN2-xTB stopped after ${run.iterations} steps (${seconds} s), short of full convergence. The `
+        + `structure shown is the lowest-energy point it reached (${run.energyHartree.toFixed(6)} Eh): its shape `
+        + 'is reliable, its last few hundredths of an ångström are not.'],
+    });
   }
-  const notes = [
-    `GFN2-xTB converged in ${run.iterations} steps to ${run.energyHartree.toFixed(6)} Eh (${seconds} s).`,
-  ];
+  const converged = `GFN2-xTB converged in ${run.iterations} steps to ${run.energyHartree.toFixed(6)} Eh (${seconds} s).`;
   const escapes = run.saddleEscapes === 1 ? 'once' : `${run.saddleEscapes} times`;
   if (run.lowestFrequency === null) {
-    notes.push('GFN2-xTB Hessian check skipped (above 16 atoms, where it costs more than the optimisation): '
-      + 'the structure is a converged stationary point, not verified to be a minimum. The Thermo view computes it.');
-  } else if (run.lowestFrequency < SADDLE_FREQUENCY_THRESHOLD) {
-    notes.push('GFN2-xTB converged to a saddle, not a minimum — the lowest vibration is imaginary '
-      + `(${Math.abs(run.lowestFrequency).toFixed(0)}i cm⁻¹)`
-      + (run.saddleEscapes > 0 ? `, and pushing it down that mode (${escapes}) did not reach a minimum` : '')
-      + ', so the geometry on screen is that stationary point.');
-  } else {
-    notes.push(run.saddleEscapes > 0
-      ? `GFN2-xTB first converged to a saddle point; pushed down its imaginary mode (${escapes}) and `
-        + 're-optimised, it reached a minimum — no imaginary mode.'
-      : 'GFN2-xTB Hessian: minimum — no imaginary mode.');
+    return joinNotes({ info: [converged, 'The Hessian check was skipped above 16 atoms, where it costs more than the '
+      + 'optimisation: a converged stationary point, not verified to be a minimum. The Thermo view computes it.'] });
   }
-  return notes;
+  if (run.lowestFrequency < SADDLE_FREQUENCY_THRESHOLD) {
+    return joinNotes({
+      warnings: ['A saddle point, not a minimum.'],
+      attention: ['GFN2-xTB converged to a saddle, not a minimum: the lowest vibration is imaginary '
+        + `(${Math.abs(run.lowestFrequency).toFixed(0)}i cm⁻¹)`
+        + (run.saddleEscapes > 0 ? `, and pushing it down that mode (${escapes}) did not reach a minimum` : '')
+        + '. The geometry on screen is that stationary point.'],
+      info: [converged],
+    });
+  }
+  return joinNotes({ info: [converged, run.saddleEscapes > 0
+    ? `It first converged to a saddle point; pushed down its imaginary mode (${escapes}) and re-optimised, it `
+      + 'reached a minimum, with no imaginary mode.'
+    : 'Hessian: a minimum, with no imaginary mode.'] });
 }
 
 /** The charges and radicals the sketch holds on X atoms (x-atom-labels.ts):
@@ -239,13 +253,18 @@ function withXAtomLabels(molecule: Molecule, v3000: string): Molecule {
  * VSEPR and experiment say seesaw (NOTES.md, 2026-10-20). Neither side is
  * assumed right.
  */
-function gfn2ShapeNotes(molecule: Molecule): string[] {
-  return vseprShapeMismatches(molecule).map((m) => {
-    const atom = `${molecule.atoms[m.atomIndex].element}${m.atomIndex + 1}`;
-    const found = m.measured ? `${m.measured} (bond angles ${m.measuredAngles})` : `bond angles ${m.measuredAngles}`;
-    return `${atom} is not the shape VSEPR predicts. VSEPR: ${m.formula}, ${m.predicted} (bond angles `
-      + `${m.predictedAngles}). GFN2-xTB: ${found}. Either can be wrong — VSEPR is a counting rule, GFN2-xTB a `
-      + 'semiempirical model — and experiment decides between them.';
+function gfn2ShapeNotes(molecule: Molecule): StructureNotes {
+  const mismatches = vseprShapeMismatches(molecule);
+  const name = (index: number) => `${molecule.atoms[index].element}${index + 1}`;
+  return joinNotes({
+    warnings: mismatches.length === 0 ? []
+      : [`${mismatches.map((m) => name(m.atomIndex)).join(', ')}: not the shape VSEPR predicts.`],
+    attention: mismatches.map((m) => {
+      const found = m.measured ? `${m.measured} (bond angles ${m.measuredAngles})` : `bond angles ${m.measuredAngles}`;
+      return `${name(m.atomIndex)} is not the shape VSEPR predicts. VSEPR: ${m.formula}, ${m.predicted} (bond angles `
+        + `${m.predictedAngles}). GFN2-xTB: ${found}. Either can be wrong (VSEPR is a counting rule, GFN2-xTB a `
+        + 'semiempirical model), and experiment decides between them.';
+    }),
   });
 }
 
@@ -274,43 +293,100 @@ function showMolecule(
   buildScene(ctx);
 }
 
-/**
- * Verbose model caveats go to the Info log at the bottom of the right panel,
- * not the molecule header (one line, white-space nowrap — a long paragraph
- * there is unreadable). The log exists only while a molecule has notes to
- * show, and every new molecule replaces them.
- */
-function showInfoLog(notes: (string | InfoNote)[]) {
-  const infoEl = document.getElementById('panel-info')!;
-  const itemsEl = document.getElementById('panel-info-items')!;
-  itemsEl.replaceChildren();
-  for (const note of notes) {
-    const item = document.createElement('div');
-    item.className = 'panel-info-item';
-    writeNote(item, note);
-    itemsEl.appendChild(item);
-  }
-  infoEl.classList.toggle('hidden', notes.length === 0);
-}
-
 /** What the header shows besides the formula and weight, which are read off
  *  the molecule itself. */
-type HeaderInfo = Omit<PubChemInfo, 'source' | 'formula' | 'weight'> & {
+type HeaderInfo = Omit<PubChemInfo, 'source' | 'formula' | 'weight'> & Partial<StructureNotes> & {
   source: PubChemInfo['source'] | 'example' | 'atom';
-  info?: (string | InfoNote)[];
+  /** The spin was chosen under Refine, not left to the electron count. */
+  spinChosen?: boolean;
 };
 
 const SOURCE_LABEL: Record<HeaderInfo['source'], string> = {
   pubchem: 'PubChem 3D', cir: 'CIR', gfn2: 'GFN2-xTB', local: 'Unoptimised', example: 'Example', atom: 'Single atom',
 };
 
+/** Where the structure came from, as the card's first fact says it. */
+const SOURCE_FACT: Record<HeaderInfo['source'], string> = {
+  pubchem: 'PubChem 3D: an MMFF94 conformer, checked against the sketch',
+  cir: 'CIR (NIH CACTUS): built by rule, checked against the sketch',
+  gfn2: 'GFN2-xTB, optimised in this browser',
+  local: 'the embedder’s start, unoptimised',
+  example: 'an example, stored with the app',
+  atom: 'a single atom: nothing to optimise',
+};
+
+/** The spin GFN2 runs at, and why that one — said for every structure, so an
+ *  open shell is never silently one. The worker's own rule: the structure's
+ *  spin if it has one, else the lowest the electron count allows. */
+function spinFact(molecule: Molecule, source: HeaderInfo['source'], chosen: boolean): string {
+  const lowest = lowestMultiplicity(molecule.atoms);
+  const multiplicity = molecule.multiplicity ?? lowest;
+  const name = spinName(multiplicity);
+  if (chosen) return `${name}, chosen under Refine`;
+  if (multiplicity === lowest) return lowest === 1 ? name : `${name}: the electron count is odd`;
+  return `${name}, ${source === 'example' ? 'the example’s own' : 'this structure’s own'}`;
+}
+
+function signedCharge(charge: number): string {
+  return charge === 0 ? '0' : `${charge > 0 ? '+' : '−'}${Math.abs(charge)}`;
+}
+
+/** The structure card's rows, PubChem's record among them: a term and its value. */
+function writeRows(list: HTMLElement, rows: Array<[string, string | undefined]>) {
+  const populated = rows.filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
+  list.replaceChildren(...populated.map(([key, value]) => {
+    const row = document.createElement('div');
+    row.className = 'data-row';
+    const dt = document.createElement('dt');
+    dt.textContent = key;
+    const dd = document.createElement('dd');
+    dd.textContent = value;
+    row.append(dt, dd);
+    return row;
+  }));
+}
+
+function writeNotes(container: HTMLElement, notes: Note[]) {
+  container.replaceChildren(...notes.map((note) => {
+    const p = document.createElement('p');
+    writeNote(p, note);
+    return p;
+  }));
+}
+
+/** The source chip opens and closes the structure card. It stays as the user
+ *  left it from one molecule to the next. */
+let cardWired = false;
+function wireStructureCard() {
+  if (cardWired) return;
+  cardWired = true;
+  const chip = document.getElementById('mol-source')!;
+  const card = document.getElementById('structure-card')!;
+  chip.addEventListener('click', () => {
+    const open = card.classList.toggle('hidden') === false;
+    chip.setAttribute('aria-expanded', String(open));
+    placeStructureCard();
+  });
+}
+
+/** The card hangs just under the header, which grows a line when it carries
+ *  warnings. */
+function placeStructureCard() {
+  const header = document.getElementById('molecule-info')!;
+  const card = document.getElementById('structure-card')!;
+  if (!card.classList.contains('hidden')) card.style.top = `${header.offsetTop + header.offsetHeight + 6}px`;
+}
+
 /**
  * The molecule header over the scene — formula, name, weight, where the
- * structure came from, its warnings — and the Info log beneath the inspector.
- * Every path that puts a structure on screen (a build, a refinement, an
- * example) comes through here.
+ * structure came from, what is wrong with it if anything — and the structure
+ * card its source chip opens: the attention notes first, then the facts
+ * (source, charge, spin), the other notes, and PubChem's record. Every path
+ * that puts a structure on screen (a build, a refinement, an example) comes
+ * through here.
  */
 export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
+  wireStructureCard();
   const { formula, weight } = computeFormula(molecule.atoms.map((a) => a.element));
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
@@ -318,13 +394,16 @@ export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
   const weightEl = document.getElementById('mol-weight')!;
   const sourceEl = document.getElementById('mol-source')!;
   const linkEl = document.getElementById('mol-link') as HTMLAnchorElement;
+  const warnings = info.warnings ?? [];
+  const attention = info.attention ?? [];
 
   container.classList.remove('hidden');
   formulaEl.textContent = formula;
   nameEl.textContent = info.name ? ` · ${info.name}` : '';
   weightEl.textContent = weight ? ` · MW ${weight}` : '';
   sourceEl.textContent = SOURCE_LABEL[info.source];
-  sourceEl.className = info.source;
+  // the chip is marked when the card has something wrong to explain
+  sourceEl.className = info.source + (warnings.length > 0 || attention.length > 0 ? ' attention' : '');
 
   if (info.cid) {
     linkEl.href = `https://pubchem.ncbi.nlm.nih.gov/compound/${info.cid}`;
@@ -333,18 +412,27 @@ export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
     linkEl.style.display = 'none';
   }
 
-  // Show warnings if present
   const warningsEl = document.getElementById('mol-warnings')!;
-  warningsEl.classList.toggle('hidden', !(info.warnings && info.warnings.length > 0));
-  warningsEl.textContent = info.warnings?.join('\n') ?? '';
+  warningsEl.classList.toggle('hidden', warnings.length === 0);
+  warningsEl.textContent = warnings.join('\n');
 
-  showInfoLog(info.info ?? []);
   document.getElementById('mol-set-aside')!.classList.add('hidden');
   document.getElementById('mol-continue')!.classList.add('hidden');
 
-  // Collapsible PubChem record — only populated on successful PubChem lookups.
-  const dataDetails = document.getElementById('mol-data')!;
-  const rowsEl = document.getElementById('mol-data-rows')!;
+  // the structure card
+  const attentionEl = document.getElementById('structure-attention')!;
+  writeNotes(attentionEl, attention);
+  attentionEl.classList.toggle('hidden', attention.length === 0);
+  const charge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
+  writeRows(document.getElementById('structure-facts')!, [
+    ['Source', SOURCE_FACT[info.source]],
+    ['Charge', signedCharge(charge)],
+    ['Spin', spinFact(molecule, info.source, info.spinChosen ?? false)],
+  ]);
+  writeNotes(document.getElementById('structure-notes')!, info.info ?? []);
+
+  // PubChem's record, on a PubChem structure
+  const recordEl = document.getElementById('structure-record')!;
   if (info.source === 'pubchem' && info.cid && (info.pubchem || info.mmff94)) {
     const rows: Array<[string, string | undefined]> = [];
     if (info.pubchem) {
@@ -365,23 +453,13 @@ export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
         ['MMFF94 partial charges', info.mmff94.partialCharges],
       );
     }
-    const populated = rows.filter((entry): entry is [string, string] => typeof entry[1] === 'string' && entry[1].length > 0);
-
-    rowsEl.replaceChildren(...populated.map(([key, value]) => {
-      const row = document.createElement('div');
-      row.className = 'data-row';
-      const dt = document.createElement('dt');
-      dt.textContent = key;
-      const dd = document.createElement('dd');
-      dd.textContent = value;
-      row.append(dt, dd);
-      return row;
-    }));
+    writeRows(document.getElementById('mol-data-rows')!, rows);
     document.getElementById('mol-data-cid')!.textContent = `#${info.cid}`;
-    dataDetails.classList.remove('hidden');
+    recordEl.classList.remove('hidden');
   } else {
-    dataDetails.classList.add('hidden');
+    recordEl.classList.add('hidden');
   }
+  placeStructureCard();
 }
 
 /** The header's button for a GFN2 result set aside because a drawn bond came
@@ -403,7 +481,7 @@ let refineOnScreen: (hessianSeconds?: number) => Promise<void> = async () => {};
  * The Thermo view's run: the structure on screen optimised with GFN2-xTB (a
  * minimum barely moves), its Hessian computed whatever its size, a saddle
  * escaped — and the result put on screen as any refinement is, the bonding
- * guard and the Info log included. `hessianSeconds` is the estimate the
+ * guard and the structure card included. `hessianSeconds` is the estimate the
  * overlay counts against.
  */
 export function refineForVibrations(hessianSeconds: number): Promise<void> {
@@ -424,7 +502,7 @@ function offerContinue() {
 /** kcal/mol per hartree. */
 const KCAL_PER_HARTREE = 627.509474;
 
-/** What the header and the Info log say of a held structure: GFN2's free
+/** What the header and its structure card say of a held structure: GFN2's free
  *  result (`free`) changed the bonding (`change`, a sentence), so the molecule
  *  drawn is shown, relaxed with its bonds held (geometry/bond-integrity.ts). */
 function heldNotes(held: Gfn2Held, free: Gfn2Result, change: string): { warning: string; info: string } {
@@ -506,7 +584,9 @@ export function mountJsmePanel(ctx: SceneContext) {
         const snapped = snapToSymmetry(molecule);
         molecule = snapped.molecule;
         const caveats = result.info.source === 'pubchem' ? mmff94ConformerCaveats(molecule) : [];
-        showMoleculeHeader(molecule, { ...result.info, info: [...caveats, ...snapped.info] });
+        showMoleculeHeader(molecule, {
+          ...result.info, warnings: [...(result.info.warnings ?? []), ...caveats], info: snapped.info,
+        });
         // a fetched structure brings no GFN2 charges or vibrations
         showMolecule(ctx, molecule, null, null);
       } else {
@@ -525,48 +605,41 @@ export function mountJsmePanel(ctx: SceneContext) {
           );
           return;
         }
-        // One local geometry on screen: the header, the Info log, the scene.
-        // `onRequest` is said first in the header when it is a set-aside
-        // result the user asked to see.
+        // One local geometry on screen: the header, its structure card, the
+        // scene. `onRequest` is said first in the header when it is a
+        // set-aside result the user asked to see.
         const present = (shown: LocalGeometry, onRequest?: string) => {
           const snapped = snapToSymmetry(shown.molecule);
           const next = snapped.molecule;
-          // the header keeps the structural warnings (a drawn wedge the engine
-          // could not keep among them); the verbose caveats go to the Info log
-          const notes: { warnings: string[]; info: (string | InfoNote)[] } = { warnings: [...shown.warnings], info: [] };
+          // the structural warnings (a drawn wedge the engine could not keep
+          // among them) are the header's; how the run went is the card's
+          let run: Partial<StructureNotes> = {};
           if (shown.engine === 'gfn2' && shown.gfn2) {
-            if (!shown.gfn2.converged) notes.warnings.unshift('GFN2-xTB structure, not fully converged.');
-            notes.info.push(GFN2_NOTE, ...gfn2RunNotes(shown.gfn2), ...(shown.partialBonds ?? []),
-              ...gfn2ShapeNotes(next), ...gfn2SpinNote(shown.gfn2, shown.molecule, false));
+            run = joinNotes(gfn2RunNotes(shown.gfn2), { info: shown.partialBonds ?? [] }, gfn2ShapeNotes(next));
           } else if (shown.engine === 'held' && shown.held && shown.gfn2) {
             const held = heldNotes(shown.held, shown.gfn2, shown.bondingChange ?? 'its bonding changed');
-            notes.warnings.unshift(held.warning);
-            notes.info.push(GFN2_NOTE, held.info, ...gfn2ShapeNotes(next),
-              ...gfn2SpinNote(shown.gfn2, shown.molecule, false));
+            run = joinNotes({ warnings: [held.warning], attention: [held.info] }, gfn2ShapeNotes(next));
           } else if (shown.engine === 'atom') {
-            notes.info.push('A single atom is a point: there is no geometry to optimise, and GFN2-xTB is not asked '
-              + 'to. Its charge, spin and orbitals come from GFN2-xTB\'s single point, as for any structure.');
-            // with no run to report it, the spin is said here (a non-singlet always says why)
-            const spin = shown.molecule.multiplicity ?? lowestMultiplicity(shown.molecule.atoms);
-            if (spin > 1) {
-              notes.info.push(`The single point runs as a ${spinName(spin)}: the electron count is odd, so a singlet `
-                + 'is impossible and a doublet is the lowest spin it allows.');
-            }
+            run = { info: ['A single atom is a point: there is no geometry to optimise, and GFN2-xTB is not asked '
+              + 'to. Its charge, spin and orbitals come from GFN2-xTB\'s single point, as for any structure.'] };
           } else {
-            // Said in the header, not just the log: the structure on screen is a
-            // starting guess, and bond lengths and angles read off it mean little.
-            notes.warnings.unshift(`Unoptimised structure — ${shown.unrefinedReason ?? 'GFN2-xTB did not run'}.`);
-            notes.info.push(
-              'The structure shown is the embedder\'s starting guess: ideal VSEPR directions and typical bond '
-              + 'lengths, not an energy minimum. Read its shape, not its numbers.',
-            );
+            // the structure on screen is a starting guess, and bond lengths and
+            // angles read off it mean little: something wrong, said in sight
+            run = {
+              warnings: [`Unoptimised structure — ${shown.unrefinedReason ?? 'GFN2-xTB did not run'}.`],
+              attention: ['The structure shown is the embedder\'s starting guess: ideal VSEPR directions and '
+                + 'typical bond lengths, not an energy minimum. Read its shape, not its numbers.'],
+            };
           }
-          if (onRequest) notes.warnings.unshift(onRequest);
-          if (metal && !forceLocal && shown.engine !== 'atom') {
-            notes.info.push(`Built locally, without asking PubChem or CIR: the sketch contains a metal (${metal}). `
-              + 'PubChem has no 3D structure for most metal compounds, and CIR builds them by rule, roughly.');
-          }
-          notes.info.push(...snapped.info);
+          const builtLocally = metal && !forceLocal && shown.engine !== 'atom'
+            ? [`Built locally, without asking PubChem or CIR: the sketch contains a metal (${metal}). PubChem has `
+              + 'no 3D structure for most metal compounds, and CIR builds them by rule, roughly.']
+            : [];
+          const method = shown.engine === 'gfn2' || shown.engine === 'held' ? [GFN2_NOTE] : [];
+          const notes = joinNotes(
+            { warnings: onRequest ? [onRequest] : [] }, run, { warnings: shown.warnings },
+            { info: [...builtLocally, ...snapped.info, ...method] },
+          );
           const source = shown.engine === 'unrefined' ? 'local' : shown.engine === 'atom' ? 'atom' : 'gfn2';
           showMoleculeHeader(next, { source, ...notes });
           // a held structure has its own charges, and no vibrations (it is not a minimum)
@@ -655,11 +728,9 @@ export function mountJsmePanel(ctx: SceneContext) {
         // The MMFF94 parameter-gap warnings are deliberately NOT repeated here:
         // the geometry no longer comes from MMFF94, so calling it "approximate"
         // would be stale.
-        const info = [GFN2_NOTE, ...gfn2RunNotes(refined), ...verdict.partial, ...gfn2ShapeNotes(next),
-          ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info];
-        const warnings = refined.converged ? [] : ['GFN2-xTB structure, not fully converged.'];
-        if (onRequest) warnings.unshift(onRequest);
-        showMoleculeHeader(next, { source: 'gfn2', warnings, info });
+        const notes = joinNotes({ warnings: onRequest ? [onRequest] : [] }, gfn2RunNotes(refined),
+          { info: verdict.partial }, gfn2ShapeNotes(next), { info: [...snapped.info, GFN2_NOTE] });
+        showMoleculeHeader(next, { source: 'gfn2', ...notes, spinChosen: chosenSpin !== null });
         if (!refined.converged) offerContinue();
       };
       const change = verdict.formed ?? verdict.broken;
@@ -681,8 +752,11 @@ export function mountJsmePanel(ctx: SceneContext) {
         const next = snapped.molecule;
         showMolecule(ctx, next, held.charges, null, HELD_NO_MINIMUM);
         const notes = heldNotes(held, refined, change);
-        showMoleculeHeader(next, { source: 'gfn2', warnings: [notes.warning],
-          info: [GFN2_NOTE, notes.info, ...gfn2ShapeNotes(next), ...gfn2SpinNote(refined, molecule, chosenSpin !== null), ...snapped.info] });
+        showMoleculeHeader(next, {
+          source: 'gfn2', spinChosen: chosenSpin !== null,
+          ...joinNotes({ warnings: [notes.warning], attention: [notes.info] }, gfn2ShapeNotes(next),
+            { info: [...snapped.info, GFN2_NOTE] }),
+        });
         offerSetAside('Show GFN2-xTB\'s result', () => {
           show(freeOnRequest(change));
           offerSetAside('Show the held structure', showHeld);

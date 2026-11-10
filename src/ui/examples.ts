@@ -11,7 +11,7 @@ export interface Example {
    */
   multiplicity?: number;
   /** A fact the structure teaches that a student could mistake for an error,
-   *  with where to read more. Shown first in the Info panel. */
+   *  with where to read more. Shown first among the structure card's notes. */
   note?: InfoNote;
 }
 

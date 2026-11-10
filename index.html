@@ -99,7 +99,7 @@
           <span id="mol-name"></span>
           <span id="mol-weight"></span>
           <span id="mol-dipole"></span>
-          <span id="mol-source"></span>
+          <button id="mol-source" type="button" aria-expanded="false" aria-controls="structure-card" title="About this structure: where it came from, its charge and spin, how the calculation went"></button>
           <!-- before the warnings: a long warning runs past the header's edge -->
           <button id="mol-set-aside" class="hidden"></button>
           <button id="mol-continue" class="hidden">Keep optimising</button>
@@ -107,11 +107,17 @@
           <span id="mol-warnings"></span>
         </div>
 
-        <!-- Collapsible PubChem record, below the header on successful lookups -->
-        <details id="mol-data" class="hidden">
-          <summary>PubChem record <span id="mol-data-cid"></span></summary>
-          <dl id="mol-data-rows"></dl>
-        </details>
+        <!-- The structure card, opened from the source chip: what went wrong
+             (if anything), the facts, the notes, and a PubChem record -->
+        <div id="structure-card" class="hidden" role="region" aria-label="This structure">
+          <div id="structure-attention"></div>
+          <dl id="structure-facts"></dl>
+          <div id="structure-notes"></div>
+          <div id="structure-record" class="hidden">
+            <span class="card-heading">PubChem record <span id="mol-data-cid"></span></span>
+            <dl id="mol-data-rows"></dl>
+          </div>
+        </div>
 
         <!-- Everything that is not one model's: appearance, structure, display, tools, export -->
         <button id="settings-btn" class="canvas-corner-btn" title="Settings" aria-label="Settings" aria-controls="settings-drawer" aria-expanded="false">
@@ -229,14 +235,6 @@
               <option value="gfn2-cm5">GFN2-xTB (CM5)</option>
               <option value="mmff94">MMFF94 (BCI)</option>
             </select>
-            <p class="measure-hint" id="charge-model-about"></p>
-            <p class="measure-hint" id="charge-model-hint">
-              The labels print point charges: one way of dividing the electron
-              density among the atoms, and there are several. Under GFN2-xTB the
-              ESP surface and the dipole come from the full density itself, which
-              a point charge on each nucleus cannot hold — so they are the same
-              whichever charges the labels print, and need not add up from them.
-            </p>
             <label class="ctrl-toggle">
               <input type="checkbox" id="ctrl-show-esp" />
               <span>Electrostatic potential</span>
@@ -251,6 +249,17 @@
               <input type="checkbox" id="ctrl-show-dipole" />
               <span>Dipole moment</span>
             </label>
+            <details class="view-notes" id="charge-reading">
+              <summary>Reading this view</summary>
+              <div class="view-notes-body">
+                <p>The labels print point charges: one way of dividing the electron density among the atoms, and there are several.</p>
+                <p>Under GFN2-xTB the ESP surface and the dipole come from the full density, which no set of point charges can hold. They stay the same whichever charges the labels print, and need not add up from them.</p>
+              </div>
+            </details>
+            <details class="view-notes" id="charge-computed">
+              <summary>How it was computed</summary>
+              <div class="view-notes-body"></div>
+            </details>
           </section>
 
           <!-- the orbital list: the delocalized ladder or the localized bonds and lone pairs -->
@@ -296,12 +305,15 @@
               <div class="export-row">
                 <button id="ctrl-mo-clear" class="export-btn">Clear orbital</button>
               </div>
-              <p class="measure-hint" id="mo-method-hint">
-                Semiempirical: Alvarez parameters, ICON8 for Si–Cl (s, p and d),
-                Wolfsberg–Helmholz K = 1.75, no self-consistency. Blue and orange
-                are the two orbital phases.
-              </p>
               <p id="mo-note" class="measure-hint"></p>
+              <details class="view-notes hidden" id="mo-reading">
+                <summary>Reading this view</summary>
+                <div class="view-notes-body"></div>
+              </details>
+              <details class="view-notes hidden" id="mo-computed">
+                <summary>How it was computed</summary>
+                <div class="view-notes-body"></div>
+              </details>
             </div>
           </section>
 
@@ -342,13 +354,6 @@
               <input type="checkbox" id="ctrl-symmetrize" checked />
               <span>Snap to point group</span>
             </label>
-          </section>
-
-          <!-- Info log — verbose caveats the one-line header cannot fit. It
-               exists only when a molecule raised a note; empty otherwise. -->
-          <section id="panel-info" class="inspector-section hidden">
-            <span id="panel-info-title">Info</span>
-            <div id="panel-info-items"></div>
           </section>
         </div>
       </aside>

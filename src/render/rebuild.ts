@@ -99,19 +99,28 @@ function effectiveChargeModel(ctx: SceneContext): ChargeModel {
   return chosen;
 }
 
-/** What each charge set is, for the line under the control. */
-const CHARGE_MODEL_ABOUT: Record<ChargeModel, string> = {
-  gfn2: 'Mulliken: each basis function’s electrons go to the atom it sits on, and a pair shared between two '
-    + 'atoms is split evenly. The charges GFN2-xTB’s own energy uses.',
-  'gfn2-esp': 'ESP-fitted (Merz–Kollman): the point charges that best reproduce GFN2-xTB’s potential on shells '
-    + 'outside the molecule — the closest any point charges come to the surface and the dipole. An atom buried '
-    + 'inside its neighbours (a CH₂ carbon) is barely seen from outside, so its charge is poorly determined '
-    + 'and swings with the conformation.',
-  'gfn2-cm5': 'CM5: Hirshfeld charges — the density at each point shared among the atoms as their free atoms '
-    + 'would claim it — plus a correction for each bond, fitted to reproduce dipole moments. Real-space, and '
-    + 'steady from one conformation to the next.',
-  mmff94: 'MMFF94 BCI: a force field’s charges, from bond-charge increments by atom type — no electronic '
-    + 'structure. The ESP surface and the dipole are these charges’ own.',
+/** What each charge set is, for the Charge Model view's "How it was
+ *  computed" fold: a paragraph or two each. */
+const CHARGE_MODEL_ABOUT: Record<ChargeModel, string[]> = {
+  gfn2: [
+    'Mulliken: each basis function’s electrons go to the atom it sits on, and a pair shared between two atoms is '
+      + 'split evenly. These are the charges GFN2-xTB’s own energy uses.',
+  ],
+  'gfn2-esp': [
+    'ESP-fitted (Merz–Kollman): the point charges that best reproduce GFN2-xTB’s potential on shells outside the '
+      + 'molecule, the closest any point charges come to the surface and the dipole.',
+    'An atom buried among its neighbours (a CH₂ carbon) is barely seen from outside, so its charge is poorly '
+      + 'determined and swings with the conformation.',
+  ],
+  'gfn2-cm5': [
+    'CM5: Hirshfeld charges (the density at each point shared among the atoms as their free atoms would claim it) '
+      + 'plus a correction for each bond, fitted to reproduce dipole moments. Real-space, and steady from one '
+      + 'conformation to the next.',
+  ],
+  mmff94: [
+    'MMFF94 BCI: a force field’s charges, from bond-charge increments by atom type, with no electronic structure. '
+      + 'Here the ESP surface and the dipole are these charges’ own.',
+  ],
 };
 
 /**
@@ -138,8 +147,12 @@ export function syncChargeModelControl(ctx: SceneContext) {
         ? 'GFN2-xTB could not build that charge set for this molecule, so its Mulliken charges are shown.'
         : 'Which partial charges the charge labels print.';
   select.value = shown;
-  const about = document.getElementById('charge-model-about');
-  if (about) about.textContent = CHARGE_MODEL_ABOUT[shown];
+  const about = document.querySelector('#charge-computed .view-notes-body');
+  if (about) about.replaceChildren(...CHARGE_MODEL_ABOUT[shown].map((text) => {
+    const p = document.createElement('p');
+    p.textContent = text;
+    return p;
+  }));
 }
 
 /**
@@ -486,7 +499,7 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
           + 'for this structure. ') + convention
       : 'The dipole of the MMFF94 BCI partial charges (a charge model, not a quantum-mechanical dipole). '
         // The MMFF94 caveats belong to this model only, so they ride on its
-        // readout rather than in the Info log, which outlives a model switch.
+        // readout rather than in the structure card, which outlives a model switch.
         + (ctx.currentMolecule && parameterGapWarnings(ctx.currentMolecule).length > 0 ? DIPOLE_APPROXIMATE + '. ' : '')
         + (dipole.residualCharge ? DIPOLE_RESIDUAL_CHARGE + ' ' : '')
         + convention;

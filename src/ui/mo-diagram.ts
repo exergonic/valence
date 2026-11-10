@@ -36,31 +36,37 @@ import { spinName } from '../chem/elements';
 import { ENERGY_UNIT, KCAL_PER_EV, formatEnergy } from './units';
 import { rankDonations } from '../chem/localized-orbitals/lewis-orbitals';
 import { GFN2_NOTE } from '../geometry/gfn2-refine';
-import { writeNote } from './info-note';
+import { writeNote, writeViewNotes, type ViewNotes } from './info-note';
 
-/** The Localized view's note, naming the calculation it localized. */
-function pipekMezeyNote(list: LocalizedList) {
-  const source = list.source === 'gfn2'
-    ? `GFN2-xTB orbitals (semiempirical, self-consistent)${list.spin ? ` — the ${list.spin === 'alpha' ? 'α' : 'β'} spin channel, one electron per orbital` : ''}`
-    : 'extended-Hückel orbitals (semiempirical) — GFN2-xTB had none to give for this structure';
+const PIPEK_MEZEY_LINK = {
+  label: 'Pipek & Mezey, J. Chem. Phys. 1989',
+  href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
+};
+
+/** The Pipek–Mezey list's fine print, naming the calculation it localized. */
+function pipekMezeyNotes(list: LocalizedList): ViewNotes {
+  const gfn2 = list.source === 'gfn2';
+  const source = gfn2
+    ? `GFN2-xTB orbitals (semiempirical, self-consistent)${list.spin ? `, the ${list.spin === 'alpha' ? 'α' : 'β'} spin channel: one electron per orbital` : ''}`
+    : 'extended-Hückel orbitals (semiempirical): GFN2-xTB had none to give for this structure';
   return {
-    text: `Pipek–Mezey localization of the ${source}: the delocalized MOs `
-      + 'rearranged into bonds and lone pairs, occupied space and valence-virtual space alike — the empty orbitals are '
-      + 'the σ*, π* and empty p a Lewis structure has room for, without the polarization d a heavier atom’s basis adds '
-      + '(intrinsic atomic orbitals, as avo_ibo builds them) — listed as an energy '
-      + 'ladder — lowest at the bottom. A localized orbital is not an eigenstate, so its energy is the expectation '
-      + `${list.source === 'gfn2' ? '⟨φ|F|φ⟩ of the Fock operator' : '⟨φ|H|φ⟩ of the Hamiltonian'}: the average of the `
-      + 'delocalized energies it is built from, weighted by how much of each it holds. The occupied energies add up to the '
-      + 'delocalized ones, but an orbital’s energy is not an ionization energy — Koopmans’ theorem speaks of the '
-      + 'delocalized orbitals. With an orbital drawn, a tick marks the ones the first one drawn mixes with — the brighter, the stronger; '
-      + 'hover one for the coupling ⟨φᵢ|F|φⱼ⟩, or draw both. These couplings are what turn the localized orbitals back '
-      + 'into the delocalized ones. Filled orbitals mix only with filled '
-      + 'ones and empty with empty — a lone pair’s donation into a σ* is already in the lone pair’s own tail. '
-      + '“Lewis structure” above shows it as a donation, E(2).',
-    link: {
-      label: 'Pipek & Mezey, J. Chem. Phys. 1989',
-      href: 'https://pubs.aip.org/aip/jcp/article-abstract/90/9/4916/791853/A-fast-intrinsic-localization-procedure-applicable',
-    },
+    reading: [
+      'An energy ladder, lowest at the bottom. A localized orbital is not an eigenstate, so its energy is '
+        + `${gfn2 ? '⟨φ|F|φ⟩' : '⟨φ|H|φ⟩'}: the average of the delocalized energies it is built from. The filled ones `
+        + 'add up to the delocalized ones, but none is an ionization energy; Koopmans’ theorem speaks of the '
+        + 'delocalized orbitals.',
+      'With an orbital drawn, a tick marks the ones it mixes with, brighter for stronger; hover one for the '
+        + 'coupling ⟨φᵢ|F|φⱼ⟩. These couplings turn the localized orbitals back into the delocalized ones.',
+      'Filled mixes only with filled, and empty with empty: a lone pair’s donation into a σ* is already in the lone '
+        + 'pair’s own tail. “Lewis structure” shows it as a donation, E(2).',
+    ],
+    computed: [
+      `Pipek–Mezey localization of the ${source}: the delocalized orbitals rearranged into bonds and lone pairs, `
+        + 'filled and empty alike.',
+      'The empty ones are the σ*, π* and empty p a Lewis structure has room for, built from intrinsic atomic '
+        + 'orbitals as avo_ibo builds them, without the polarization d a heavier atom’s basis adds.',
+    ],
+    link: PIPEK_MEZEY_LINK,
   };
 }
 
@@ -69,36 +75,62 @@ const NBO_LINK = {
   href: 'https://doi.org/10.1021/cr00088a005',
 };
 
-/** The Lewis-structure list's note: what the orbitals are, and how to read
- *  E(2), including what it cannot be trusted for. */
-function lewisNote(list: LocalizedList) {
+/** The Lewis-structure list's fine print: how to read the anchor and E(2),
+ *  including what E(2) cannot be trusted for, and how the orbitals were made. */
+function lewisNotes(list: LocalizedList): ViewNotes {
   const share = ((list.lewisShare ?? 0) * 100).toFixed(1);
   return {
-    text: 'The Lewis structure you drew, made into orbitals the NBO way from the GFN2-xTB density (semiempirical): '
-      + 'each lone pair from its own atom, each bond from its two atoms, each antibond its bond’s out-of-phase partner. '
-      + `Without tails they hold ${share}% of the electrons; the rest is delocalization, which E(2) accounts for. `
-      + 'The first orbital you draw is the anchor (outlined): the empty orbitals it donates into show E(2), the '
-      + 'second-order stabilization q·F²/Δε, and an underline as long as its share of the strongest — an empty anchor '
-      + 'shows its donors. The numbers stay with the anchor while you draw its partners beside it; take it away and the '
-      + 'next orbital drawn becomes the anchor. A tick marks mixing within a section, as in Pipek–Mezey. “Donations” '
-      + 'above opens a table of every donation in the molecule, strongest first; an entry draws its pair. E(2) is a '
-      + 'perturbative estimate that overstates strong '
-      + 'resonance, and GFN2’s empty orbitals sit low, so compare the numbers with each other rather than with NBO’s. '
-      + 'Draw another resonance structure to see its Lewis orbitals.'
-      + (list.rydbergs > 0
-        ? ` ${list.rydbergs} Rydberg-like orbitals — beyond the atoms’ valence shells: d, and an alkali metal’s p — `
-          + 'complete the set but are not listed.'
-        : ''),
+    reading: [
+      'The first orbital you draw is the anchor (outlined). The empty orbitals it donates into show E(2), '
+        + 'underlined by their share of the strongest; an empty anchor shows its donors instead.',
+      'Draw more beside it and the numbers stay with the anchor; take it away and the next one drawn takes over. '
+        + 'A tick marks two orbitals of one section that mix.',
+      '“Donations” above lists every donation in the molecule, strongest first; an entry draws its pair.',
+      'Compare E(2) values with each other, not with NBO’s: the estimate overstates strong resonance, and '
+        + 'GFN2-xTB’s empty orbitals sit low. To see another resonance structure, draw it.',
+    ],
+    computed: [
+      'The Lewis structure you drew, made into orbitals the NBO way from the GFN2-xTB density (semiempirical): each '
+        + 'lone pair from its own atom, each bond from its two, each antibond its bond’s out-of-phase partner.',
+      `Without their tails they hold ${share}% of the electrons. The rest is delocalization, which E(2) accounts `
+        + 'for: the second-order stabilization q·F²/Δε of each donation.'
+        + (list.rydbergs > 0
+          ? ` ${list.rydbergs} Rydberg-like orbitals, beyond the atoms’ valence shells (d, and an alkali metal’s p), `
+            + 'complete the set but are not listed.'
+          : ''),
+    ],
     link: NBO_LINK,
   };
 }
 
-const GFN2_ORBITAL_NOTE = {
-  text: 'GFN2-xTB orbitals (semiempirical, self-consistent): each electron feels the charge of the others, which '
-    + 'extended Hückel’s fixed parameters leave out — so where the two ladders disagree on ORDER, GFN2’s is the one '
-    + 'to trust. Its energies are its own: the empty orbitals sit low (formaldehyde’s LUMO near −8 eV), so read the '
-    + 'gaps and the order, not the absolute numbers. The Localized view localizes these orbitals.',
+/** The orbitals' phase colours: said in each orbital view's reading fold. */
+const PHASES = 'Blue and orange are the orbital’s two phases.';
+
+const GFN2_ORBITAL_NOTES: ViewNotes = {
+  reading: [
+    PHASES,
+    'Read the order and the gaps, not the absolute energies: GFN2-xTB’s empty orbitals sit low (formaldehyde’s '
+      + 'LUMO near −8 eV). Where it and extended Hückel disagree on the order, trust GFN2-xTB’s.',
+    'The Localized view localizes these orbitals.',
+  ],
+  computed: [
+    'GFN2-xTB (semiempirical): one self-consistent single point at this geometry. Each electron feels the others’ '
+      + 'charge, which extended Hückel’s fixed parameters leave out. One parameter set covers every element through '
+      + 'radon.',
+  ],
   link: GFN2_NOTE.link,
+};
+
+const EH_ORBITAL_NOTES: ViewNotes = {
+  reading: [
+    PHASES,
+    'The textbook orbital picture: fixed atomic parameters, no self-consistency. Where it and GFN2-xTB disagree on '
+      + 'the order, trust GFN2-xTB’s.',
+  ],
+  computed: [
+    'Extended Hückel (semiempirical): Alvarez’s parameters, ICON8’s for Si–Cl (s, p and d), Wolfsberg–Helmholz '
+      + 'K = 1.75, no self-consistency.',
+  ],
 };
 
 /** One delocalized ladder, from whichever calculation the method row picks:
@@ -111,8 +143,11 @@ interface Ladder {
   labels: (string | null)[];
   basis: BasisFunction[];
   coefficients: number[][];
-  /** The method's own notes, when nothing more pressing is said. */
+  /** Says in the note what is particular to this ladder (an open shell, a
+   *  metal without d), when nothing more pressing is said. */
   notes: () => void;
+  /** How to read the ladder and how it was computed, for the folds. */
+  folds: ViewNotes;
 }
 
 /** How each localized-orbital class reads in the list — avo_ibo's own tokens,
@@ -226,6 +261,12 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   // The open/closed state outlives the redraws that rebuild the table.
   let e2Open = false;
   const clear = document.getElementById('ctrl-mo-clear') as HTMLButtonElement | null;
+  // The note under the list says what is particular to what is on screen now
+  // (still computing, a refusal, an open shell, a degenerate set); how to
+  // read the list and how it was made wait in the two folds beneath it.
+  const readingFold = document.getElementById('mo-reading') as HTMLDetailsElement;
+  const computedFold = document.getElementById('mo-computed') as HTMLDetailsElement;
+  const showFolds = (notes: ViewNotes | null) => writeViewNotes(readingFold, computedFold, notes);
 
   const select = (index: number | null) => {
     ctx.display.moIndex = ctx.display.moIndex === index ? null : index;
@@ -342,8 +383,6 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
   const spinRow = document.getElementById('mo-spin-row');
   const spinButtons = Array.from(document.querySelectorAll<HTMLButtonElement>('#mo-spin-row [data-mo-spin]'));
   const methodRow = document.getElementById('mo-method-row');
-  const methodHint = document.getElementById('mo-method-hint');
-  const ehHint = methodHint?.innerHTML ?? '';
   for (const button of methodButtons) {
     button.addEventListener('click', () => {
       const method = button.dataset.moMethod === 'gfn2' ? 'gfn2' : 'eh';
@@ -392,14 +431,6 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const openShell = readsGfn2 && !!ctx.gfn2Ladders?.ladders?.beta;
     spinRow?.classList.toggle('hidden', !openShell);
     for (const b of spinButtons) b.classList.toggle('active', b.dataset.moSpin === ctx.display.moSpin);
-    if (methodHint) {
-      // the hint describes the calculation the list on screen reads: the
-      // localized list is GFN2's unless GFN2 had none to give
-      methodHint.innerHTML = readsGfn2 || (view === 'localized' && !ctx.localized)
-        ? 'GFN2-xTB: one self-consistent single point at this geometry, its own parameter set through radon. '
-          + 'Blue and orange are the two orbital phases.'
-        : ehHint;
-    }
   }
 
   const setOnStage = (onStage: boolean) => {
@@ -601,9 +632,12 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     } else {
       readout.textContent = `${orbitals.length} localized orbitals · click one to draw it, another to compare`;
     }
-    writeNote(note, shown.refusal
-      ? { text: `No Lewis-structure orbitals: ${shown.refusal}. These are Pipek–Mezey’s localized orbitals instead.`, link: NBO_LINK }
-      : shown.method === 'lewis' ? lewisNote(shown) : pipekMezeyNote(shown));
+    // a refusal is particular to this drawing, so it stays in sight
+    if (shown.refusal) {
+      writeNote(note, { text: `No Lewis-structure orbitals: ${shown.refusal}. These are Pipek–Mezey’s localized `
+        + 'orbitals instead.', link: NBO_LINK });
+    }
+    showFolds(shown.method === 'lewis' ? lewisNotes(shown) : pipekMezeyNotes(shown));
   }
 
   /**
@@ -662,6 +696,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       e2Panel.classList.add('hidden');
     }
     note.textContent = '';
+    showFolds(null);
     readout.textContent = '';
     composition.textContent = '';
     syncMethodRows(view);
@@ -697,6 +732,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
     const ladder = ctx.display.moMethod === 'gfn2' ? gfn2Ladder() : ehLadder();
     syncMethodRows(view); // again: the spin row needs the GFN2 ladder, just built
     if (!ladder) return; // the builder has said why in the note
+    showFolds(ladder.folds);
     const { occupations } = ladder;
     const levels = ladder.energies.map((energy, index) => ({
       index,
@@ -862,6 +898,7 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
               + 'are not shown. GFN2-xTB above treats the spin.';
         }
       },
+      folds: EH_ORBITAL_NOTES,
     };
   }
 
@@ -895,11 +932,13 @@ export function setupMoPanel(ctx: SceneContext): MoPanel {
       basis: ladder.basis,
       coefficients: ladder.coefficients,
       notes: () => {
-        writeNote(note, ladder.spin
-          ? `Open shell: the ${ladder.spin === 'alpha' ? 'α (spin-up)' : 'β (spin-down)'} orbitals, each holding at most `
-            + 'one electron. The two channels differ by the unpaired electrons — switch with the row above.'
-          : GFN2_ORBITAL_NOTE);
+        if (ladder.spin) {
+          note.textContent = `Open shell: the ${ladder.spin === 'alpha' ? 'α (spin-up)' : 'β (spin-down)'} orbitals, `
+            + 'each holding at most one electron. The two channels differ by the unpaired electrons; switch with the '
+            + 'row above.';
+        }
       },
+      folds: GFN2_ORBITAL_NOTES,
     };
   }
   draw();
