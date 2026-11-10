@@ -5932,3 +5932,25 @@ Checked in the app: SeF₄ built locally puts "Se2: not the shape VSEPR
 predicts." in the header, the chip dotted, the AX₄E explanation first in
 the card; the NiCl₄²⁻ example's card reads charge −2, "triplet, the
 example's own", its Jahn–Teller note first.
+
+## The Thermo view's hover: the vibration playing (2026-11-09)
+
+ISSUES.md asked for a hover tip in Thermo, "info on particular vibration
+being displayed". Hovering anywhere on the moving molecule now says, for the
+mode that plays: ν̃ and which of the 3N − 6 it is; its ½hcν̃ and its share of
+the ZPE; its TS and its share of the vibrational TS; one quantum against kT,
+with the mean quanta excited at 298.15 K, 1/(e^x − 1); for a mode soft enough
+that quasi-RRHO blends in the free rotor, the split; and, with an atom under
+the pointer, that atom's share of the mode's kinetic energy, mᵢ|dᵢ|²/Σ. Nothing
+plays, nothing is shown.
+
+The quantum-against-kT line is the reason the ledger's two columns run
+opposite ways: a C–H stretch is about 15 kT, 10⁻⁷ quanta excited, all ZPE and
+no entropy; methyl isocyanate's 70 cm⁻¹ methyl rotor is 0.3 kT, 2.5 quanta,
+half the vibrational TS. The kinetic-energy share is mass-weighted so a
+hydrogen's wide swing counts for what it carries; it is exact for a normal
+mode, the shares holding through the whole swing. The per-mode x and
+quasi-RRHO weight ride on ModeShare (thermochemistry.ts) and are pinned in
+tests/thermochemistry.test.ts — kT/hc against CODATA's 0.6950348 cm⁻¹/K, the
+weight a half at the 50 cm⁻¹ cut-off. The numbers are the ones the readout's
+ledger sums: ctx.thermochemistry is the same object it draws.

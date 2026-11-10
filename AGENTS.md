@@ -196,10 +196,12 @@ Made with the user; the reasons are in NOTES.md under the date.
 - **A carbene is two dots** (2026-11-04): the radical tool's second click,
   "C••". The dots say nothing of the spin: a singlet until a triplet is
   chosen beside Refine.
-- **The hover, per view** (2026-10-21): Structure and Thermo none; VSEPR the lobe's hybrid; Charge Model
+- **The hover, per view** (2026-10-21): Structure none; VSEPR the lobe's hybrid; Charge Model
   the ESP under the pointer; Localized the orbital's NBO hybrid on the atom
   and its E(2) with the anchor; Delocalized the MO, the lobe's atom by s/p/d
-  share, and its phase.
+  share, and its phase; Thermo (2026-11-09) the vibration playing — its
+  share of the ZPE and of TS, one quantum against kT, a soft mode's
+  quasi-RRHO split — and the hovered atom's share of its kinetic energy.
 - **The first view** (2026-10-19): longest extent across, broad face toward
   the reader, heavier end up and right; a symmetric top turned and tilted 25°
   so no atom hides.
