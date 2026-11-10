@@ -197,7 +197,9 @@ Made with the user; the reasons are in NOTES.md under the date.
   frequencies and thermochemistry, every charge set, the VSEPR assignment and the Wiberg orders,
   as data fields after `M  END` in RDKit's `atom.dprop.`/`atom.prop.`
   convention — for the download and the right-click copy alike; it waits for
-  the single point. XYZ is the structure alone.
+  the single point. XYZ is the structure alone, its charge and
+  multiplicity on the comment line (2026-11-09) — the download and the copy
+  alike.
 - **One molecule at a time** (2026-10-06): a second, unconnected molecule
   cannot be sketched; intermolecular phenomena are out of scope.
 

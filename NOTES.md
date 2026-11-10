@@ -5881,3 +5881,14 @@ checkbox under Build 3D, labelled for what it does instead of what it
 leaves out; the tooltip names both services skipped and the cases that go
 local regardless (a metal, a drawn radical, a single atom). Its id,
 `ctrl-force-fallback`, is unchanged, and the smoke test still drives it.
+
+## The XYZ comment line states the charge and spin (2026-11-09)
+
+From ISSUES.md: an XYZ file says nothing of the charge or multiplicity, so
+one taken to ORCA or xtb had to be annotated by hand. The comment line now
+reads `charge=-2 multiplicity=3 Valence export` (NiCl₄²⁻, the triplet
+example), as extended-XYZ key=value pairs a script or ASE reads. The
+multiplicity is the one GFN2 ran at, by the worker's own rule — the
+structure's, else the lowest the electron count allows — so the export
+does not wait for the single point. The download and the right-click copy
+share `moleculeToXYZ` (checked in the app: the copy of the NiCl₄²⁻ example).
