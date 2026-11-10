@@ -5902,3 +5902,33 @@ its summary drawn as a bordered button, "Donations, E(2) · 40"; the
 anchor's own donations still carry their E(2) in the list, so the number is
 never more than one click away. Opened, it stays open while the list is
 redrawn (checked: drawing an entry's pair keeps it open), as it did before.
+
+## The structure card, and the views' fine print folded (2026-11-09)
+
+From ISSUES.md ("Clean up the right hand panel. Info under a button?").
+The panel mixed three kinds of text: results about the structure (the
+run's convergence and Hessian verdict, its spin, the point group snap),
+how to read the view, and how it was computed. For formaldehyde in the
+Localized view the inspector ran the full height of the window, over half
+of it prose: the Lewis note alone was 1,100 characters, and the same Info
+log repeated at the foot of every view.
+
+Decided with the user, from a mockup:
+- The source chip opens a structure card under the header, for every
+  origin (a PubChem structure already had its record there; the user
+  wanted the same "no matter its origin"). It holds what is wrong first,
+  then facts — source, charge, spin — then the run's notes, the method
+  with its reference, and PubChem's record.
+- Something wrong is the only thing in sight without a click: one line in
+  the header, a dot on the chip, the explanation first in the card. The
+  spin is a fact in the card for every structure; the user judged that
+  enough, a non-singlet needing no more notice than that.
+- The orbital and charge views keep in sight only what is particular to
+  the screen now; "Reading this view" and "How it was computed" fold at
+  their foot. The paragraphs were tightened in the move (the Lewis note
+  into four short reading paragraphs and two on the method).
+
+Checked in the app: SeF₄ built locally puts "Se2: not the shape VSEPR
+predicts." in the header, the chip dotted, the AX₄E explanation first in
+the card; the NiCl₄²⁻ example's card reads charge −2, "triplet, the
+example's own", its Jahn–Teller note first.

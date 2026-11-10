@@ -87,8 +87,8 @@ This code is written for **chemists who code**, not software engineers.
      structure gets.
    - **Spin**: the lowest multiplicity the electron count allows (singlet if
      even, doublet if odd), unless the structure has its own (an example) or
-     one is chosen under "Refine with GFN2-xTB". A run that is not a singlet
-     says so, and why.
+     one is chosen under "Refine with GFN2-xTB". The structure card states
+     every structure's spin, and why when it is not a singlet.
    - **A result must still be the molecule drawn** — its drawn bonds, some
      possibly partial, and no new ones (`bond-integrity.ts`; see Decisions).
    - **Every structure on screen**, wherever it came from, gets one background
@@ -114,8 +114,8 @@ Made with the user; the reasons are in NOTES.md under the date.
   under GFN2 the ESP is the exact potential on GFN2's 0.001 au density
   surface (valence plus free-atom cores) and the dipole is the full one, so
   only the labels change with the charge set. A hidden default, with no
-  switch back; the hint under "Charges from" says why the labels need not add
-  up to it.
+  switch back; the Charge Model view's "Reading this view" fold says why the
+  labels need not add up to it.
 - **GFN2's orbitals first** (2026-10-13): the Localized and Delocalized views
   use GFN2's MOs, each spin channel of an open shell on its own. Extended
   Hückel's are the fallback for localization and stay selectable beside
@@ -160,6 +160,17 @@ Made with the user; the reasons are in NOTES.md under the date.
   Refine, Snap to point group — not Settings. Where a structure comes from
   is chosen before it is built: "Build locally with GFN2-xTB", which skips
   PubChem and CIR, sits under Build 3D (2026-11-09).
+- **The structure card; the views' fine print folded** (2026-11-09): what
+  is known of the structure on screen, wherever it came from, is in the card
+  its source chip opens under the header — source, charge, spin, how the run
+  went, the point group, the method, PubChem's record. Something wrong with
+  it (not converged, a saddle, held, unoptimised, a shape VSEPR does not
+  predict, an approximate fetched geometry) is said in the header itself
+  and explained first in the card, and marks the chip; nothing else is in
+  sight until asked. A view's inspector shows its controls and what is
+  particular to the screen now (a refusal, an open shell, a degenerate set);
+  how to read the view and how it was computed are two folds at its foot,
+  closed until opened, staying as the user left them.
 - **The Thermo view** (2026-11-05): the vibrations and the molecule's
   ideal-gas thermochemistry at 298.15 K, 1 atm, on GFN2's harmonic
   frequencies; it opens on the slowest mode, playing. It needs a GFN2
@@ -378,10 +389,10 @@ Deliberate; the evidence is in NOTES.md or the test named.
   exhaust the budget and show its start. Seven electron domains (IF₇, XeF₆)
   start octahedral.
 - GFN2-xTB makes SeF₄ and TeF₄ square pyramids where VSEPR and experiment say
-  seesaw — its parameters; the oracle agrees (NOTES.md, 2026-10-20). The Info
-  log says where any computed centre leaves its VSEPR shape (an angle more
-  than 30° from the AXₘEₙ ideal; small-ring centres skipped), naming neither
-  side right.
+  seesaw — its parameters; the oracle agrees (NOTES.md, 2026-10-20). The
+  header says where any computed centre leaves its VSEPR shape (an angle more
+  than 30° from the AXₘEₙ ideal; small-ring centres skipped), and the
+  structure card explains it, naming neither side right.
 - GFN2-xTB bends NaOH where experiment and GFN1 have it linear: an ionic
   contact's bend is flat, and a semiempirical model tips it; the oracle
   agrees (`tests/gfn2.test.ts`).
