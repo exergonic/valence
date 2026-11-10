@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { moleculeToSDF } from '../src/ui/controls';
+import { moleculeToSDF, moleculeToXYZ } from '../src/ui/controls';
+import { EXAMPLES } from '../src/ui/examples';
 import { parseMolBlock } from '../src/mol-parser';
 import type { Molecule } from '../src/mol-parser';
 import { assignOrbitals } from '../src/chem/vsepr/assign-orbitals';
@@ -151,4 +152,38 @@ describe('SDF export — drawn stereochemistry (2026-09-27)', () => {
       expect(plain.stereo).toBeUndefined();
     });
   }
+});
+
+// The XYZ format has no field for the charge or the spin, and ORCA and xtb
+// must be told both, so the comment line states them (2026-11-09, from
+// ISSUES.md). The download and the right-click copy share moleculeToXYZ.
+describe('XYZ export — charge and multiplicity on the comment line', () => {
+  const example = (name: string) => {
+    const ex = EXAMPLES.find((e) => e.name.startsWith(name))!;
+    const molecule = parseMolBlock(ex.mol);
+    return ex.multiplicity ? { ...molecule, multiplicity: ex.multiplicity } : molecule;
+  };
+  const commentLine = (xyz: string) => xyz.split('\n')[1];
+
+  it('a neutral closed shell: charge 0, a singlet', () => {
+    expect(commentLine(moleculeToXYZ(example('Water')))).toBe('charge=0 multiplicity=1 Valence export');
+  });
+
+  it('a dianion with its own spin: NiCl₄²⁻, the triplet the example carries', () => {
+    expect(commentLine(moleculeToXYZ(example('Tetrachloronickelate')))).toBe('charge=-2 multiplicity=3 Valence export');
+  });
+
+  it('an odd electron count with no spin given: the lowest allowed, a doublet', () => {
+    // hydroxyl: water with one hydrogen taken off
+    const water = example('Water');
+    const h = water.atoms.findIndex((a) => a.element === 'H');
+    const hydroxyl = { ...water, atoms: water.atoms.filter((_, i) => i !== h) };
+    expect(commentLine(moleculeToXYZ(hydroxyl))).toBe('charge=0 multiplicity=2 Valence export');
+  });
+
+  it('keeps the atom count first and one line per atom', () => {
+    const lines = moleculeToXYZ(example('Water')).trimEnd().split('\n');
+    expect(lines[0]).toBe('3');
+    expect(lines).toHaveLength(5);
+  });
 });

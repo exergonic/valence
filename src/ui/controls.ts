@@ -5,6 +5,8 @@ import { asChargeModel } from '../render/setup';
 import { hexToHsv, COLOR_PRESETS } from '../render/color-schemes';
 import { kekulizeSmiles } from '../chem/kekulize-smiles';
 import { espColor } from '../chem/charge-model/esp';
+import { lowestMultiplicity } from '../chem/elements';
+import type { Molecule } from '../mol-parser';
 import { collectSdfData, sdfDataFields, type SdfField } from './sdf-data';
 import { vecSub, vecDot, vecLength, dihedralAngle, type Vec3 } from '../utils/vec3';
 
@@ -468,10 +470,20 @@ export async function sdfWithData(ctx: SceneContext): Promise<string | null> {
   return moleculeToSDF(data.molecule, sdfDataFields(data), data.header.name ?? 'Valence export');
 }
 
-export function moleculeToXYZ(mol: { atoms: any[] }): string {
+/**
+ * The molecule as XYZ. The format has no place for the charge or the spin,
+ * and a program reading it (ORCA, xtb) must be told both, so the comment line
+ * states them, as extended-XYZ key=value pairs that ASE and a script both
+ * read: the net formal charge, and the multiplicity GFN2 ran at — the
+ * structure's own, else the lowest the electron count allows (the worker's
+ * rule).
+ */
+export function moleculeToXYZ(mol: Pick<Molecule, 'atoms' | 'multiplicity'>): string {
+  const charge = mol.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
+  const multiplicity = mol.multiplicity ?? lowestMultiplicity(mol.atoms);
   const lines: string[] = [];
   lines.push(mol.atoms.length.toString());
-  lines.push('Valence export');
+  lines.push(`charge=${charge} multiplicity=${multiplicity} Valence export`);
   for (const a of mol.atoms) {
     lines.push(`${a.element}  ${a.x.toFixed(6)}  ${a.y.toFixed(6)}  ${a.z.toFixed(6)}`);
   }

@@ -1,7 +1,8 @@
 /**
  * What Valence knows about the molecule on screen, as SDF data fields — the
  * `> <NAME>` blocks after `M  END` that any SDF reader keeps. The SDF export
- * and the right-click copy both carry them; XYZ stays the structure alone.
+ * and the right-click copy both carry them; XYZ stays the structure alone
+ * (with its charge and multiplicity on the comment line).
  *
  * Per-atom values follow RDKit's atom-property-list convention: a field named
  * `atom.dprop.<NAME>` (a number per atom) or `atom.prop.<NAME>` (a word per
