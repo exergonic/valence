@@ -5942,7 +5942,8 @@ the ZPE; its TS and its share of the vibrational TS; one quantum against kT,
 with the mean quanta excited at 298.15 K, 1/(e^x − 1); for a mode soft enough
 that quasi-RRHO blends in the free rotor, the split; and, with an atom under
 the pointer, that atom's share of the mode's kinetic energy, mᵢ|dᵢ|²/Σ. Nothing
-plays, nothing is shown.
+plays, nothing is shown. (The quantum-against-kT line was replaced the same
+day by the mode's partition function; see below.)
 
 The quantum-against-kT line is the reason the ledger's two columns run
 opposite ways: a C–H stretch is about 15 kT, 10⁻⁷ quanta excited, all ZPE and
@@ -5954,3 +5955,25 @@ quasi-RRHO weight ride on ModeShare (thermochemistry.ts) and are pinned in
 tests/thermochemistry.test.ts — kT/hc against CODATA's 0.6950348 cm⁻¹/K, the
 weight a half at the 50 cm⁻¹ cut-off. The numbers are the ones the readout's
 ledger sums: ctx.thermochemistry is the same object it draws.
+
+## The hover's q, in Ault's terms (2026-11-09, later)
+
+The user found the line "one quantum is 15 kT: 5.0 × 10⁻⁷ quanta on average"
+hard to puzzle out, PhD and all: a ratio and a mean occupation, neither
+something a student reads directly. They teach entropy through the partition
+function, with Addison Ault's handout ("The Partition Function: If That's What
+It Is Why Don't They Say So!", Cornell College): make the ground state the
+unit, and q = N/n₀, the molecules in all levels per molecule in the ground
+state — 1 when all are there, large when they are spread out.
+
+So the line is now that: "q = 3.47: 29% of molecules in the ground state, the
+rest spread over higher levels" for methyl isocyanate's 70 cm⁻¹ methyl rotor,
+"q = 1.00: 100% of molecules in the ground state" for its 3007 cm⁻¹ C–H
+stretch. The 29% is n₀/N = 1/q. It carries the old line's content exactly —
+for a harmonic ladder the mean quanta n̄ = q − 1, Ault's sum without its
+leading 1 — and says why the ledger's columns run opposite ways: q ≈ 1 is one
+way to be, ZPE without entropy. Ault's Table 1 is a ladder kT apart, a mode at
+kT/hc (207.22 cm⁻¹ at 298.15 K); its 1.58198 is pinned in
+tests/thermochemistry.test.ts. q is the harmonic ladder's; for a soft mode
+the next line says how much of its entropy quasi-RRHO takes from the free
+rotor instead.
