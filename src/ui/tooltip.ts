@@ -14,8 +14,8 @@
  *   its phase.
  * - Thermo (asked for 2026-11-09): the vibration playing, hovered anywhere on
  *   the molecule — its share of the ZPE and of TS, its partition function
- *   read as Ault reads it (the molecules in all its levels per molecule in
- *   the ground state, so 1/q of them are there), a soft mode's quasi-RRHO
+ *   q_vib, read as Ault reads it (the molecules in all its levels per molecule in
+ *   the ground state, so 1/q_vib of them are there), a soft mode's quasi-RRHO
  *   split, and the hovered atom's share of its kinetic energy: why the stiff
  *   modes hold the zero-point energy and the soft ones the entropy, one mode
  *   at a time.
@@ -138,7 +138,7 @@ function vibrationLines(ctx: SceneContext, modes: NormalMode[], index: number, a
     lines.push(`½hcν̃ ${kcal(share.zeroPoint)} kcal/mol · ${percent(share.zeroPoint / t.zeroPoint)} of the ZPE`);
     lines.push(`TS ${kcal(T * share.entropy)} kcal/mol · ${percent(share.entropy / t.entropyParts.vibrational)} of the vibrational TS`);
     const ground = percent(1 / q);
-    lines.push(`q = ${q.toFixed(2)}: ${ground} of molecules in the ground state`
+    lines.push(`q<sub>vib</sub> = ${q.toFixed(2)}: ${ground} of molecules in the ground state`
       + (ground === '100%' ? '' : ', the rest spread over higher levels'));
     // a mode soft enough for quasi-RRHO to take part of its entropy from the free rotor
     if (share.harmonicWeight < 0.995) {
