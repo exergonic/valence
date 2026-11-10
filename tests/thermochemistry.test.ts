@@ -139,12 +139,16 @@ describe('what the Thermo view’s hover says of one mode', () => {
     atoms: hexane.atoms, frequencies, energy: hexane.energy, multiplicity: 1, symmetryNumber: 2,
   });
 
-  it('one quantum against kT: kT/hc is 207.22 cm⁻¹ at 298.15 K', () => {
-    // CODATA's Boltzmann constant in cm⁻¹/K, 0.6950348
-    const kTInWavenumbers = 0.6950348 * 298.15;
-    for (const mode of run(hexane.frequencies).modes) {
-      expect(mode.quantumOverKT * kTInWavenumbers).toBeCloseTo(mode.wavenumber, 3);
-    }
+  it('q = N/n₀: levels kT apart give Ault’s 1.58198, a stiff mode 1, a soft one more', () => {
+    // Ault's Table 1 is a ladder of levels kT apart: a mode at kT/hc,
+    // 207.22 cm⁻¹ at 298.15 K (CODATA's k, 0.6950348 cm⁻¹/K)
+    const frequencies = [...hexane.frequencies];
+    frequencies[6] = 0.6950348 * 298.15;
+    const modes = run(frequencies).modes;
+    expect(modes[0].partitionFunction).toBeCloseTo(1.58198, 5);
+    expect(modes[modes.length - 1].partitionFunction - 1).toBeLessThan(1e-6);
+    // and one quantum less than kT spreads the molecules over several levels
+    expect(run(hexane.frequencies).modes[0].partitionFunction).toBeGreaterThan(3);
   });
 
   it('quasi-RRHO’s weight is a half at the 50 cm⁻¹ cut-off, and near 1 for a stiff mode', () => {

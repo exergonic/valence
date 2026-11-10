@@ -102,10 +102,13 @@ export interface ModeShare {
   inverted: boolean;
   zeroPoint: number;
   entropy: number;
-  /** hcν̃/kT: one quantum against the thermal energy. Large, and the mode is
-   *  frozen in its ground state — ZPE and no entropy; small, and it is
-   *  excited, 1/(eˣ − 1) quanta on average, and holds entropy. */
-  quantumOverKT: number;
+  /** The mode's partition function counted from its ground state,
+   *  q = 1/(1 − e^(−hcν̃/kT)): the molecules in all its levels per molecule in
+   *  the ground state (Ault's N/n₀, in "The Partition Function: If That's What
+   *  It Is Why Don't They Say So!"). Near 1, the mode is all in its ground state —
+   *  ZPE and no entropy; larger, it is spread over its levels, and that
+   *  spread is its entropy. */
+  partitionFunction: number;
   /** Quasi-RRHO's w: the harmonic oscillator's share of the mode's entropy,
    *  the free rotor's being 1 − w. */
   harmonicWeight: number;
@@ -187,7 +190,7 @@ export function thermochemistry(input: ThermochemistryInput): Thermochemistry {
     sVib += modeEntropy;
     modes.push({
       index, wavenumber, inverted: artifact(input.frequencies[index]), zeroPoint: modeZeroPoint, entropy: modeEntropy,
-      quantumOverKT: x, harmonicWeight,
+      partitionFunction: -1 / Math.expm1(-x), harmonicWeight,
     });
   });
 

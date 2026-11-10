@@ -13,8 +13,9 @@
  *   of — the atom's s, p and d share of it, the LCAO picture made literal — and
  *   its phase.
  * - Thermo (asked for 2026-11-09): the vibration playing, hovered anywhere on
- *   the molecule — its share of the ZPE and of TS, how far one quantum stands
- *   above kT and so how excited it is at 298 K, a soft mode's quasi-RRHO
+ *   the molecule — its share of the ZPE and of TS, its partition function
+ *   read as Ault reads it (the molecules in all its levels per molecule in
+ *   the ground state, so 1/q of them are there), a soft mode's quasi-RRHO
  *   split, and the hovered atom's share of its kinetic energy: why the stiff
  *   modes hold the zero-point energy and the soft ones the entropy, one mode
  *   at a time.
@@ -131,12 +132,14 @@ function vibrationLines(ctx: SceneContext, modes: NormalMode[], index: number, a
   } else {
     const T = t.temperature;
     const kcal = (eh: number) => (eh * KCAL_PER_HARTREE).toFixed(2);
-    const x = share.quantumOverKT;
+    const q = share.partitionFunction;
     lines.push(`ν̃ ${share.wavenumber.toFixed(0)}${share.inverted ? 'i' : ''} cm⁻¹ · ${which}`
       + (share.inverted ? ' · counted as real' : ''));
     lines.push(`½hcν̃ ${kcal(share.zeroPoint)} kcal/mol · ${percent(share.zeroPoint / t.zeroPoint)} of the ZPE`);
     lines.push(`TS ${kcal(T * share.entropy)} kcal/mol · ${percent(share.entropy / t.entropyParts.vibrational)} of the vibrational TS`);
-    lines.push(`one quantum is ${x < 10 ? x.toFixed(1) : x.toFixed(0)} kT: ${quanta(1 / Math.expm1(x))} quanta on average at ${T} K`);
+    const ground = percent(1 / q);
+    lines.push(`q = ${q.toFixed(2)}: ${ground} of molecules in the ground state`
+      + (ground === '100%' ? '' : ', the rest spread over higher levels'));
     // a mode soft enough for quasi-RRHO to take part of its entropy from the free rotor
     if (share.harmonicWeight < 0.995) {
       lines.push(`its entropy ${percent(share.harmonicWeight)} oscillator, ${percent(1 - share.harmonicWeight)} free rotor (quasi-RRHO)`);
@@ -150,15 +153,6 @@ function vibrationLines(ctx: SceneContext, modes: NormalMode[], index: number, a
 
 /** A share as a whole percentage; a trace says so rather than "0%". */
 const percent = (x: number) => (x > 0 && x < 0.005 ? '<1%' : `${Math.round(x * 100)}%`);
-
-/** Mean quanta excited: plain down to 0.01, then in powers of ten (a C–H
- *  stretch at 298 K has about 10⁻⁷). */
-function quanta(n: number): string {
-  if (n >= 0.01) return n.toFixed(2);
-  const power = Math.floor(Math.log10(n));
-  const superscript = String(power).replace('-', '⁻').replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(d)]);
-  return `${(n / 10 ** power).toFixed(1)} × 10${superscript}`;
-}
 
 /** The potential on the ESP surface under the pointer, interpolated across the
  *  face it falls in, and the atom nearest. */
