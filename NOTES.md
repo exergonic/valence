@@ -5892,3 +5892,13 @@ multiplicity is the one GFN2 ran at, by the worker's own rule — the
 structure's, else the lowest the electron count allows — so the export
 does not wait for the single point. The download and the right-click copy
 share `moleculeToXYZ` (checked in the app: the copy of the NiCl₄²⁻ example).
+
+## The E(2) table closed at first sight (2026-11-09)
+
+From ISSUES.md ("E(2) under a button in Lewis Structure view?"). The
+table opened by default, and for phenol its forty donations filled the top
+of the inspector above the orbitals they are made of. It now starts closed,
+its summary drawn as a bordered button, "Donations, E(2) · 40"; the
+anchor's own donations still carry their E(2) in the list, so the number is
+never more than one click away. Opened, it stays open while the list is
+redrawn (checked: drawing an entry's pair keeps it open), as it did before.
