@@ -639,6 +639,28 @@ describe('the claims AGENTS.md makes of GFN2-xTB', () => {
     expect(Math.abs(angle - 154.6)).toBeLessThan(2);
     expect(result.energyHartree).toBeCloseTo(-4.7806745, 4);
   }, 180_000);
+
+  // Br₂ as the app builds it (CIR, 2.26 Å, copied from "Copy as XYZ"): GFN2's
+  // quadrupole along the bond is negative — negative ends, a positive belt —
+  // where DFT's is positive, the σ-holes at both ends (ωB97X-D3/def2-TZVP,
+  // +3.69 e·bohr² in the same convention; NOTES.md, 2026-11-10). The oracle,
+  // xtb 6.7.1 on this geometry, prints "full" −4.503, 2.252, 2.252.
+  it('reverses Br₂’s quadrupole: no σ-holes, against the oracle', async () => {
+    const { propertiesAt } = await import('../src/geometry/gfn2-refine.worker');
+    const br2: Molecule = { atoms: [atom('Br', -1.13, 0, 0), atom('Br', 1.13, 0, 0)], bonds: [bond(0, 1)] };
+    const p = (await propertiesAt(br2, vendorFile))!;
+    const order: Array<[number, number]> = [[0, 0], [0, 1], [1, 1], [0, 2], [1, 2], [2, 2]];
+    const toBohr2 = 1 / 0.529177210903 ** 2;
+    const total = order.map(([i, j], c) => br2.atoms.reduce((sum, a, n) => {
+      const r = [a.x, a.y, a.z];
+      const mu = p.atomicDipoles![n];
+      const r2 = r[0] ** 2 + r[1] ** 2 + r[2] ** 2;
+      const charge = p.charges[n] * (1.5 * r[i] * r[j] - (i === j ? 0.5 * r2 : 0));
+      const dipole = 1.5 * (r[i] * mu[j] + r[j] * mu[i]) - (i === j ? r[0] * mu[0] + r[1] * mu[1] + r[2] * mu[2] : 0);
+      return sum + charge + dipole + p.atomicQuadrupoles![n][c];
+    }, 0) * toBohr2);
+    [-4.503, 0, 2.252, 0, 0, 2.252].forEach((oracle, c) => expect(Math.abs(total[c] - oracle)).toBeLessThan(0.02));
+  }, 180_000);
 });
 
 // A single atom is a point (a bare Li, Xe, Cl⁻): nothing to optimise, and
