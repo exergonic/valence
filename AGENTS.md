@@ -401,6 +401,11 @@ Deliberate; the evidence is in NOTES.md or the test named.
 - GFN2-xTB bends NaOH where experiment and GFN1 have it linear: an ionic
   contact's bend is flat, and a semiempirical model tips it; the oracle
   agrees (`tests/gfn2.test.ts`).
+- GFN2-xTB reverses Br₂'s quadrupole along the bond, so its ESP has no
+  σ-holes — negative tips, a positive belt, where DFT has the reverse; the
+  oracle agrees (`tests/gfn2.test.ts`; NOTES.md, 2026-11-10). On the methyl
+  halides it keeps a weakened hole the colour scale masks and the hover reads.
+  The Br₂ + alkene lesson can still be taught from its σ* LUMO.
 - The implicit-H filler covers the common ±1 charge states only.
 - Aromatic bond order 4 from a pasted or imported molfile is not understood.
 - GFN2-xTB is semiempirical, and labelled as such everywhere it appears. It is
