@@ -6044,3 +6044,13 @@ Br₂'s LUMO is σ*, its lobes out along the axis, and the Delocalized view draw
 it so — the π → σ* donation end on is the orbital face of the same story.
 This is the strongest case yet for bringing a higher level's ESP back into
 Valence (the ORCA round trip, discussed the same day).
+
+How much theory does Br₂'s sign need? ORCA on the same geometry, axial
+quadrupole in Buckingham's convention (e·bohr², as xtb prints): HF/STO-3G
++0.67, HF/def2-SVP +3.74, B3LYP/def2-SVP +3.65, ωB97X-D3/def2-TZVP +3.69;
+GFN2 −4.50. A minimal-basis ab initio density already has the right sign, so
+the reversal is GFN2's parametrisation, not the minimal basis as such; and the
+cheapest split-valence HF is as good as the triple-ζ hybrid for this. OCC
+itself does HF and DFT (its qm/dft bindings, pruned from our build for size:
+vendor/occ-wasm/README.md, step 3b), so an on-demand local HF/def2-SVP single
+point for the ESP is a real option beside the ORCA round trip.
