@@ -11,13 +11,14 @@
  * without freezing the page for the length of the load, so a browser without
  * Workers gets null rather than a stall.
  *
- * Reentrant: one long-lived worker, one id per request, so concurrent callers
- * each resolve only their own result. A run can take tens of seconds on a
- * larger molecule, so it reports progress as it goes and can be cancelled —
- * which terminates the worker; the next call starts a fresh one.
+ * Reentrant (worker-client.ts): one long-lived worker, one id per request. A
+ * run can take tens of seconds on a larger molecule, so it reports progress
+ * as it goes and can be cancelled — which terminates the worker; the next
+ * call starts a fresh one.
  */
 import type { Molecule } from '../mol-parser';
 import { breakSymmetry } from './embed';
+import { workerClient } from './worker-client';
 import type { Gfn2Progress, Gfn2Result, Gfn2Held, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets } from './gfn2-refine.worker';
 
 export type { Gfn2Progress, Gfn2Result, Gfn2Held, Gfn2Properties, Gfn2OrbitalSet, OrbitalSurface, OrbitalSurfaceRequest, Gfn2EspSurface, Gfn2ChargeSets };
@@ -55,66 +56,12 @@ export class Gfn2Unavailable extends Error {
   }
 }
 
-let worker: Worker | null = null;
-let nextId = 1;
-interface PendingRun {
-  // each task resolves its own type (see `ask`)
-  resolvers: PromiseWithResolvers<any>;
-  onProgress?: (progress: Gfn2Progress) => void;
-}
-const pending = new Map<number, PendingRun>();
-
-/** Reject every run in flight and forget the worker — it is dying, or being
- *  killed; the next call spins up a fresh one. */
-function dropWorker(reason: () => Error): void {
-  for (const [, run] of pending) run.resolvers.reject(reason());
-  pending.clear();
-  worker?.terminate();
-  worker = null;
-}
-
-function ensureWorker(): Worker | null {
-  if (typeof Worker === 'undefined') return null;
-  if (worker) return worker;
-  try {
-    worker = new Worker(new URL('./gfn2-refine.worker.ts', import.meta.url), {
-      type: 'module',
-    });
-    worker.onmessage = (e: MessageEvent) => {
-      const { id, result, error, progress } = e.data as {
-        id: number;
-        result?: unknown;
-        error?: string;
-        progress?: Gfn2Progress;
-      };
-      const run = pending.get(id);
-      if (!run) return;
-      if (progress) {
-        run.onProgress?.(progress);
-        return;
-      }
-      pending.delete(id);
-      if (error) run.resolvers.reject(new Error(error));
-      else run.resolvers.resolve(result ?? null);
-    };
-    worker.onerror = () => dropWorker(() => new Error('GFN2-xTB worker failed'));
-  } catch {
-    worker = null;
-  }
-  return worker;
-}
-
-/** Send the worker one task; the promise settles with its answer. Rejects with
- *  Gfn2Unavailable when there is no Worker. */
-function ask<T>(message: object, onProgress?: (progress: Gfn2Progress) => void): Promise<T> {
-  const w = ensureWorker();
-  if (!w) return Promise.reject(new Gfn2Unavailable());
-  const resolvers = Promise.withResolvers<T>();
-  const id = nextId++;
-  pending.set(id, { resolvers, onProgress });
-  w.postMessage({ id, ...message });
-  return resolvers.promise;
-}
+const engine = workerClient<Gfn2Progress>(
+  () => new Worker(new URL('./gfn2-refine.worker.ts', import.meta.url), { type: 'module' }),
+  () => new Gfn2Unavailable(),
+  'GFN2-xTB worker failed',
+);
+const ask = engine.ask;
 
 /**
  * Optimise a structure with GFN2-xTB. Resolves with the result, or null when
@@ -199,7 +146,7 @@ export function preloadGfn2(): void {
  *  so the only way to stop it is to terminate the worker — and a fresh one is
  *  warmed at once, so the next run does not pay for the cancel. */
 export function cancelGfn2(): void {
-  if (pending.size === 0) return;
-  dropWorker(() => new Gfn2Cancelled());
+  if (!engine.busy()) return;
+  engine.drop(() => new Gfn2Cancelled());
   preloadGfn2();
 }
