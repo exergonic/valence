@@ -31,6 +31,7 @@ import { normalModes, SADDLE_FREQUENCY_THRESHOLD, type NormalMode } from '../che
 import { alignToPrincipalAxes, type PrincipalFrame } from '../chem/extended-huckel/align-principal-axes';
 import { levelForFraction } from '../chem/extended-huckel/mo-surface';
 import { marchSignedField } from '../utils/march-tetrahedra';
+import { densitySurface, gridAround, occGridPoints, occPoints, windAlongNormals } from './esp-surface';
 import type { Vec3 } from '../utils/vec3';
 import { fitChargesToPotential, mkFitPoints, fibonacciSphere } from '../chem/charge-model/esp-fit';
 import { cm5Corrections, cm5Covers, hirshfeldCharges, type RadialDensity } from '../chem/charge-model/cm5';
@@ -315,23 +316,8 @@ function evaluate(M: any, calc: any, flatAngstrom: number[]): { energy: number; 
  * bohr: the step as fine as `maxPoints` allows, between 0.15 and 0.25 Å.
  */
 function boxGrid(M: any, lo: number[], hi: number[], maxPoints: number) {
-  const volume = (hi[0] - lo[0]) * (hi[1] - lo[1]) * (hi[2] - lo[2]);
-  const spacing = Math.max(0.15, Math.min(0.25, Math.cbrt(volume / maxPoints)));
-  const dimensions = [0, 1, 2].map((c) => Math.ceil((hi[c] - lo[c]) / spacing) + 1) as Vec3;
-  const count = dimensions[0] * dimensions[1] * dimensions[2];
-  const points = M.Mat3N.create(count);
-  let index = 0;
-  for (let gz = 0; gz < dimensions[2]; gz++) {
-    for (let gy = 0; gy < dimensions[1]; gy++) {
-      for (let gx = 0; gx < dimensions[0]; gx++) {
-        points.set(0, index, (lo[0] + gx * spacing) / ANGSTROM_PER_BOHR);
-        points.set(1, index, (lo[1] + gy * spacing) / ANGSTROM_PER_BOHR);
-        points.set(2, index, (lo[2] + gz * spacing) / ANGSTROM_PER_BOHR);
-        index++;
-      }
-    }
-  }
-  return { points, origin: lo as Vec3, dimensions, spacing, count };
+  const grid = gridAround(lo, hi, maxPoints);
+  return { points: occGridPoints(M, grid), origin: grid.origin, dimensions: grid.dimensions, spacing: grid.spacing, count: grid.count };
 }
 
 /** The library's energy container. Only `total` is meaningful here: OCC's
@@ -1302,28 +1288,6 @@ async function orbitalSurface(request: OrbitalSurfaceRequest): Promise<OrbitalSu
   return { positions, normals: worldNormals, phases: new Float32Array(sheets.phases), vertexCount, isovalue: level };
 }
 
-/** The marcher winds each triangle by the normal it is handed, and here it is
- *  handed none (the gradients come in one batch, afterwards): wind each
- *  triangle so its face points the way its vertices' normals do. In place. */
-function windAlongNormals(p: number[], normals: Float32Array, phases: number[]): void {
-  for (let t = 0; t < p.length / 3; t += 3) {
-    const i = 3 * t, j = i + 3, k = i + 6;
-    const ux = p[j] - p[i], uy = p[j + 1] - p[i + 1], uz = p[j + 2] - p[i + 2];
-    const vx = p[k] - p[i], vy = p[k + 1] - p[i + 1], vz = p[k + 2] - p[i + 2];
-    const fx = uy * vz - uz * vy, fy = uz * vx - ux * vz, fz = ux * vy - uy * vx;
-    const nx = normals[i] + normals[j] + normals[k];
-    const ny = normals[i + 1] + normals[j + 1] + normals[k + 1];
-    const nz = normals[i + 2] + normals[j + 2] + normals[k + 2];
-    if (fx * nx + fy * ny + fz * nz < 0) {
-      for (let c = 0; c < 3; c++) {
-        [p[j + c], p[k + c]] = [p[k + c], p[j + c]];
-        [normals[j + c], normals[k + c]] = [normals[k + c], normals[j + c]];
-      }
-      [phases[t + 1], phases[t + 2]] = [phases[t + 2], phases[t + 1]];
-    }
-  }
-}
-
 /** Positions and normals from the principal-axis frame back to the molecule's
  *  coordinates: undo the rotation, and the shift to the centre of mass. */
 function frameToMolecule(frame: PrincipalFrame, framed: number[], normals: Float32Array) {
@@ -1349,16 +1313,6 @@ export interface Gfn2EspSurface {
   potentials: Float32Array;
   vertexCount: number;
 }
-
-/** The density the ESP is drawn on (e/bohr³): Bader's 0.001 au, the
- *  convention of the textbook ESP map. */
-const ESP_DENSITY_LEVEL = 0.001;
-/** How far past the nuclei the density grid reaches (Å): the 0.001 au contour
- *  lies 1.5–2.5 Å out on a neutral molecule, further on an anion. */
-const ESP_DENSITY_PAD = 4.0;
-/** Grid points at most for the density, and the step for its gradient. */
-const ESP_GRID_POINTS = 400_000;
-const DENSITY_GRADIENT_STEP_BOHR = 0.02;
 
 type FramedAtom = { element: string; x: number; y: number; z: number };
 
@@ -1414,83 +1368,40 @@ function coreDensityAt(atoms: FramedAtom[], x: number, y: number, z: number): nu
 export async function espSurface(key: number): Promise<Gfn2EspSurface | null> {
   const M = await loadGfn2();
   if (!kept || kept.key !== key || typeof kept.calc.densityValues !== 'function') return null;
-  const atoms = kept.frame.atoms;
-  const lo = [0, 1, 2].map((c) => Math.min(...atoms.map((a) => [a.x, a.y, a.z][c])) - ESP_DENSITY_PAD);
-  const hi = [0, 1, 2].map((c) => Math.max(...atoms.map((a) => [a.x, a.y, a.z][c])) + ESP_DENSITY_PAD);
-  const { points: grid, origin, dimensions, spacing, count } = boxGrid(M, lo, hi, ESP_GRID_POINTS);
-  const rho = kept.calc.densityValues(grid);
-  const values = new Float32Array(count);
-  for (let i = 0; i < count; i++) values[i] = rho.get(i);
-  grid.delete?.();
-  rho.delete?.();
-  addCoreDensity(values, origin, dimensions, spacing, atoms);
-
-  // a density has one sign, so only the positive sheet comes back
-  const sheets = marchSignedField({ values, origin, dimensions, spacing }, ESP_DENSITY_LEVEL, () => [0, 0, 0]);
-  const vertexCount = sheets.positions.length / 3;
-  if (vertexCount === 0) return null;
-
-  // the soup repeats each point in every triangle that shares it
-  const unique = new Map<string, number>();
-  const which = new Int32Array(vertexCount);
-  const points: number[] = [];
-  for (let v = 0; v < vertexCount; v++) {
-    const p = sheets.positions.slice(3 * v, 3 * v + 3);
-    const id = p.map((x) => x.toFixed(5)).join(',');
-    let u = unique.get(id);
-    if (u === undefined) {
-      u = points.length / 3;
-      unique.set(id, u);
-      points.push(...p);
-    }
-    which[v] = u;
-  }
-  const n = points.length / 3;
-
-  // outward normals: down the density's gradient, by central differences
-  const h = DENSITY_GRADIENT_STEP_BOHR;
-  const probes = M.Mat3N.create(6 * n);
-  for (let u = 0; u < n; u++) {
-    for (let axis = 0; axis < 3; axis++) {
-      for (const [slot, sign] of [[0, 1], [1, -1]] as const) {
-        const col = 6 * u + 2 * axis + slot;
-        for (let c = 0; c < 3; c++) probes.set(c, col, points[3 * u + c] / ANGSTROM_PER_BOHR + (c === axis ? sign * h : 0));
-      }
-    }
-  }
-  const around = kept.calc.densityValues(probes);
-  const uniqueNormals: number[] = [];
-  const total = (col: number) => {
-    const p = [0, 1, 2].map((c) => probes.get(c, col));
-    return around.get(col) + coreDensityAt(atoms, p[0], p[1], p[2]);
+  const { calc, frame } = kept;
+  const atoms = frame.atoms;
+  const read = (values: any, n: number) => {
+    const out = Array.from({ length: n }, (_, i) => values.get(i) as number);
+    values.delete?.();
+    return out;
   };
-  for (let u = 0; u < n; u++) {
-    const g = [0, 1, 2].map((axis) => total(6 * u + 2 * axis) - total(6 * u + 2 * axis + 1));
-    const length = Math.hypot(g[0], g[1], g[2]) || 1;
-    uniqueNormals.push(-g[0] / length, -g[1] / length, -g[2] / length);
-  }
-  around.delete?.();
-  probes.delete?.();
-
-  // the exact potential, once per point; Eh/e to the app's e/Å
-  const at = bohrPoints(M, points);
-  const phi = kept.calc.electrostaticPotential(at);
-  at.delete?.();
-  const uniquePotentials = Array.from({ length: n }, (_, u) => (phi.get(u) as number) / ANGSTROM_PER_BOHR);
-  phi.delete?.();
-
-  const normals = new Float32Array(3 * vertexCount);
-  const potentials = new Float32Array(vertexCount);
-  for (let v = 0; v < vertexCount; v++) {
-    for (let c = 0; c < 3; c++) normals[3 * v + c] = uniqueNormals[3 * which[v] + c];
-    potentials[v] = uniquePotentials[which[v]];
-  }
-  // winding swaps whole vertices, so the potentials must follow: carry them
-  // in the phases slot the helper already swaps
-  const carried = Array.from(potentials);
-  windAlongNormals(sheets.positions, normals, carried);
-  const { positions, normals: turned } = frameToMolecule(kept.frame, sheets.positions, normals);
-  return { positions, normals: turned, potentials: Float32Array.from(carried), vertexCount };
+  const soup = densitySurface(atoms, {
+    densityOnGrid(grid) {
+      const points = occGridPoints(M, grid);
+      const rho = calc.densityValues(points);
+      points.delete?.();
+      const values = new Float32Array(grid.count);
+      for (let i = 0; i < grid.count; i++) values[i] = rho.get(i);
+      rho.delete?.();
+      addCoreDensity(values, grid.origin, grid.dimensions, grid.spacing, atoms);
+      return values;
+    },
+    densityAt(pointsBohr) {
+      const at = occPoints(M, pointsBohr);
+      const valence = read(calc.densityValues(at), pointsBohr.length / 3);
+      at.delete?.();
+      return valence.map((rho, i) => rho + coreDensityAt(atoms, pointsBohr[3 * i], pointsBohr[3 * i + 1], pointsBohr[3 * i + 2]));
+    },
+    potentialAt(pointsBohr) {
+      const at = occPoints(M, pointsBohr);
+      const phi = read(calc.electrostaticPotential(at), pointsBohr.length / 3);
+      at.delete?.();
+      return phi;
+    },
+  });
+  if (!soup) return null;
+  const { positions, normals } = frameToMolecule(frame, soup.positions, soup.normals);
+  return { positions, normals, potentials: Float32Array.from(soup.potentials), vertexCount: soup.vertexCount };
 }
 
 /** The charge sets beyond Mulliken, for the properties run `key` names, in
