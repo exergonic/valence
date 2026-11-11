@@ -6054,3 +6054,49 @@ cheapest split-valence HF is as good as the triple-ζ hybrid for this. OCC
 itself does HF and DFT (its qm/dft bindings, pruned from our build for size:
 vendor/occ-wasm/README.md, step 3b), so an on-demand local HF/def2-SVP single
 point for the ESP is a real option beside the ORCA round trip.
+
+## A second, on-demand OCC build with HF and DFT: its size and speed (2026-11-10)
+
+Asked: how large does OCC get with HF, or DFT, left in — to load beside the
+small GFN2 engine only when asked for. Built in a copy of the patched tree
+(`C:/Users/mccan/Code/occ-096-qm`, the vendored tree untouched; its base
+variant reproduces the vendored `occjs.wasm` byte for byte, md5 2650b3a5…),
+registering the qm, dft and correlation bindings on top of core/xtb/opt:
+
+| build | wasm raw | gzip | brotli |
+|---|---|---|---|
+| GFN2 + Berny (vendored) | 2.96 MB | 0.92 MB | 0.67 MB |
+| + HF (qm bindings) | 6.11 MB | 1.58 MB | 1.10 MB |
+| + DFT (libxc) | 14.59 MB | 4.68 MB | 3.44 MB |
+| + MP2 (correlation) | 15.39 MB | 4.89 MB | 3.56 MB |
+
+The `.js` glue (~125 KB) and `.data` (326 KB) are unchanged. GitHub Pages
+serves gzip, so gzip is the download. Basis sets ship apart, per request:
+def2-SVP for every element is 35 KB gzip (STO-3G 6, def2-TZVP 38); iodine's
+def2 ECP is handled (OCC carries libecpint). HF costs ~0.7 MB more than today;
+DFT's libxc ~3 MB more again.
+
+Two things the build needs: the SCF's initial guess (superposed atomic
+densities) reads basis sets from OCC's data directory (`/basis` in the wasm
+filesystem) — without them the SCF runs on NaN — and the nuclear part of the
+potential is not bound (ΣZ/r in JavaScript; the electronic part is).
+
+Timed under Node on this machine (i5-14400F), single-threaded as in a browser,
+restricted, def2-SVP unless noted:
+
+| molecule | basis functions | SCF | ESP at 20 000 points |
+|---|---|---|---|
+| water, HF | 25 | <0.1 s | 0.1 s |
+| Br₂, HF | 70 | 1.7 s | 0.9 s |
+| Br₂, HF/STO-3G | 38 | 0.4 s | 0.4 s |
+| benzene, HF | 120 | 6.3 s | 1.6 s |
+| hexane, HF | 160 | 14.9 s | 2.5 s |
+| Br₂, B3LYP | 70 | 2.1 s | — |
+| benzene, B3LYP | 120 | 9.9 s | — |
+
+Against ORCA on Br₂: HF/def2-SVP −5144.1912 vs −5144.1845 Eh (ORCA's default
+RIJCOSX); B3LYP/def2-SVP −5147.7396 vs −5147.4479, too far apart to wave away
+— probably the two programs' B3LYP (libxc's VWN flavour against ORCA's), not
+checked. STO-3G differs by 1.7 Eh: the two programs' STO-3G for Br are not the
+same basis. The local HF/def2-SVP Br₂ has its σ-holes: +29.7 kcal/mol 2 Å
+past a Br along the bond, −4.4 in the belt 2 Å out, +3.0 at the waist.
