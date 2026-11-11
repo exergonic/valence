@@ -6100,3 +6100,36 @@ RIJCOSX); B3LYP/def2-SVP −5147.7396 vs −5147.4479, too far apart to wave awa
 checked. STO-3G differs by 1.7 Eh: the two programs' STO-3G for Br are not the
 same basis. The local HF/def2-SVP Br₂ has its σ-holes: +29.7 kcal/mol 2 Å
 past a Br along the bond, −4.4 in the belt 2 Å out, +3.0 at the waist.
+
+## What DFT would buy over HF for the ESP: dipoles measured (2026-11-11)
+
+The user leans to an HF-only on-demand engine (DFT is 3 MB more and ~25–60 %
+slower per single point) unless DFT is compelling. Dipoles, as the ESP's
+summary, on the test references' DFT minima (runs and README in
+~/orca_calcs/hf-vs-dft-dipoles/), Debye:
+
+| molecule | exp. | HF/def2-SVP | B3LYP/def2-SVP | ωB97X-D3/def2-TZVP | GFN2-xTB |
+|---|---|---|---|---|---|
+| water | 1.85 | 2.12 | 1.97 | 2.09 | 2.25 |
+| ammonia | 1.47 | 1.74 | 1.64 | 1.70 | 1.79 |
+| hydrogen fluoride | 1.83 | 1.99 | 1.84 | 1.93 | 2.52 |
+| formaldehyde | 2.33 | 2.73 | 2.12 | 2.38 | 2.35 |
+| methanol | 1.70 | 1.88 | 1.63 | 1.71 | 1.93 |
+| pyridine | 2.22 | 2.30 | 2.14 | 2.26 | 2.14 |
+| ozone | 0.53 | 0.84 | 0.66 | 0.74 | 1.22 |
+
+- HF/def2-SVP overshoots every one, 4–18 % for the six closed-shell
+  organics — systematic over-polarisation — and keeps experiment's order
+  exactly.
+- B3LYP/def2-SVP is closer on average (1–12 %, both signs) but misorders two
+  pairs at this basis: formaldehyde below pyridine, methanol below ammonia.
+- The triple-ζ hybrid is best (1–15 %); its cost is the basis as much as the
+  functional.
+- GFN2 overshoots unevenly (HF +38 %, formaldehyde +1 %) and misorders: HF the
+  most polar of the six, pyridine below water.
+- Ozone defeats all of them (+24 to +129 %): its multireference character.
+
+For a teaching comparison — which is more polar, where the potential is
+negative — a uniform overshoot that keeps the order beats a smaller error that
+scrambles it. The qualitative case for DFT is where HF itself fails: ozone-like
+multireference cases and transition-metal complexes.
