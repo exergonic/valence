@@ -6017,3 +6017,30 @@ in Eh/K, ~10⁻⁵; flex-grow values summing below 1 hand out only that fraction
 of the free space, so the bar was three 0-px spans and only its labels showed.
 Found when the heat-capacity bar, built the same way, came out empty. Both now
 set percentage widths.
+
+## Br₂ has no σ-holes under GFN2: its quadrupole is reversed (2026-11-10)
+
+ISSUES.md asked why the halogens' σ-hole does not show on the GFN2 ESP. The
+lesson behind it: a student asked why an alkene attacks Br₂ when both look
+electron-rich. On the methyl halides the user found GFN2 does dip the potential
+along the C–X axis (most for iodine, a return toward green): the colour scale
+masks it, the hover shows it. Br₂ is different.
+
+Valence's Br₂ (CIR, 2.26 Å), Charge Model view, by the hover: the tips along
+the bond −9.6 kcal/mol, the belt beside each Br +6.6, the waist +32.8. DFT has
+the reverse — positive caps at both ends (the σ-holes the alkene's π meets end
+on), a negative belt. Not ours: the surface is OCC's own density and potential,
+and the Fortran oracle agrees.
+
+- xtb 6.7.1 `--gfn 2` on the same geometry: traceless quadrupole xx −4.503,
+  yy = zz +2.252 a.u. — negative along the bond.
+- ORCA 6.1.1, ωB97X-D3/def2-TZVP, `%elprop Quadrupole`: Cartesian XX −23.799,
+  YY = ZZ −27.488 a.u.; less its trace/3, xx +2.46 — positive along the bond.
+
+So GFN2's minimal-basis density gives Br₂'s quadrupole the wrong sign: the
+σ-hole is not masked there, it is absent. The runs and a README are in
+~/orca_calcs/br2-quadrupole/. GFN2's orbitals are not at fault for the lesson:
+Br₂'s LUMO is σ*, its lobes out along the axis, and the Delocalized view draws
+it so — the π → σ* donation end on is the orbital face of the same story.
+This is the strongest case yet for bringing a higher level's ESP back into
+Valence (the ORCA round trip, discussed the same day).
