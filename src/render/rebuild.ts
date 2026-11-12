@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { activeIsoValue, isGfn2ChargeModel, type ChargeModel, type LocalizedList, type OrbitalTag, type SceneContext } from './setup';
+import { activeIsoValue, isGfn2ChargeModel, isHfChargeModel, type ChargeModel, type LocalizedList, type OrbitalTag, type SceneContext } from './setup';
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
@@ -66,6 +66,17 @@ function gfn2ChargesFailed(ctx: SceneContext): boolean {
   return request !== null && request.molecule === ctx.currentMolecule && request.status === 'failed';
 }
 
+/** True when the Hartree–Fock single point could not be had for this molecule. */
+function hfFailed(ctx: SceneContext): boolean {
+  return ctx.hfFailed !== null && ctx.hfFailed.molecule === ctx.currentMolecule;
+}
+
+/** The Hartree–Fock single point of the molecule on screen, or null until it
+ *  has run (ui/hf-panel.ts runs it). */
+function hfOnScreen(ctx: SceneContext): NonNullable<SceneContext['hf']> | null {
+  return ctx.hf && ctx.hf.molecule === ctx.currentMolecule ? ctx.hf : null;
+}
+
 /** The charges each GFN2 option beyond Mulliken reads from its charge sets. */
 const CHARGE_SET: Partial<Record<ChargeModel, 'espFitted' | 'cm5'>> = {
   'gfn2-esp': 'espFitted',
@@ -93,6 +104,8 @@ function chargeSetMissing(ctx: SceneContext, model: ChargeModel): boolean {
  */
 function effectiveChargeModel(ctx: SceneContext): ChargeModel {
   let chosen = ctx.display.chargeModel;
+  // HF's sets wait on their run; when it could not be had, GFN2's default
+  if (isHfChargeModel(chosen)) return hfFailed(ctx) ? 'gfn2-esp' : chosen;
   if (isGfn2ChargeModel(chosen) && gfn2ChargesFailed(ctx) && ctx.charges) return 'mmff94';
   if (chosen === 'mmff94' && !ctx.charges && ctx.currentMolecule && !gfn2ChargesFailed(ctx)) chosen = 'gfn2-esp';
   if (chargeSetMissing(ctx, chosen)) return 'gfn2';
@@ -117,6 +130,19 @@ const CHARGE_MODEL_ABOUT: Record<ChargeModel, string[]> = {
       + 'plus a correction for each bond, fitted to reproduce dipole moments. Real-space, and steady from one '
       + 'conformation to the next.',
   ],
+  'hf-esp': [
+    'ESP-fitted (Merz–Kollman) on Hartree–Fock/def2-SVP: the same fit as GFN2-xTB’s, to an ab initio density. '
+      + 'The ESP surface and the dipole are that density’s own.',
+    'Hartree–Fock leaves out electron correlation, and so over-polarises: dipoles come out too large, by a '
+      + 'similar margin from one molecule to the next, so their order holds. The single point runs at the geometry '
+      + 'on screen, which stays GFN2-xTB’s (or PubChem’s).',
+  ],
+  'hf-chelpg': [
+    'CHELPG on Hartree–Fock/def2-SVP: point charges fitted to the potential on a regular grid of points around '
+      + 'the molecule, rather than on shells. A cousin of the ESP-fitted set; the two differ most on buried atoms.',
+    'The ESP surface and the dipole are the Hartree–Fock density’s own, whichever of its charge sets the labels '
+      + 'print.',
+  ],
   mmff94: [
     'MMFF94 BCI: a force field’s charges, from bond-charge increments by atom type, with no electronic structure. '
       + 'Here the ESP surface and the dipole are these charges’ own.',
@@ -136,10 +162,14 @@ export function syncChargeModelControl(ctx: SceneContext) {
   const mmff94Missing = ctx.currentMolecule !== null && !ctx.charges;
   for (const option of Array.from(select.options)) {
     const model = option.value as ChargeModel;
-    option.disabled = model === 'mmff94' ? mmff94Missing : gfn2Failed || chargeSetMissing(ctx, model);
+    option.disabled = model === 'mmff94' ? mmff94Missing
+      : isHfChargeModel(model) ? false
+      : gfn2Failed || chargeSetMissing(ctx, model);
   }
   const shown = effectiveChargeModel(ctx);
-  select.title = gfn2Failed
+  select.title = isHfChargeModel(ctx.display.chargeModel) && hfFailed(ctx)
+    ? `Hartree–Fock could not be run for this molecule (${ctx.hfFailed!.reason}), so GFN2-xTB's ESP-fitted charges are shown.`
+    : gfn2Failed
     ? `GFN2-xTB could not give charges for this molecule (${ctx.gfn2PropertiesRequest?.reason ?? 'the engine failed'}).`
     : mmff94Missing
       ? 'This molecule is outside the MMFF94 type space, so it has no MMFF94 charges.'
@@ -205,6 +235,10 @@ export function gfn2PropertiesOnScreen(ctx: SceneContext): Gfn2Properties | null
  */
 function displayedCharges(ctx: SceneContext): { charges: number[] | null; model: ChargeModel; residual: boolean } {
   const model = effectiveChargeModel(ctx);
+  if (isHfChargeModel(model)) {
+    const hf = hfOnScreen(ctx);
+    return { charges: hf ? (model === 'hf-esp' ? hf.result.espFitted : hf.result.chelpg) : null, model, residual: false };
+  }
   if (model === 'mmff94') {
     return { charges: ctx.charges?.charges ?? null, model: 'mmff94', residual: ctx.charges?.residualCharge ?? false };
   }
@@ -485,7 +519,12 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
   element.classList.toggle('unsupported', !dipole && !pending);
   const convention = 'The arrow points from the positive end (δ+) toward the negative end (δ−) — the chemistry '
     + 'convention; the physics convention draws it the other way.';
-  if (dipole) {
+  if (dipole && isHfChargeModel(model)) {
+    element.textContent = `Dipole: ${dipole.debye.toFixed(2)} D`;
+    element.title = 'The Hartree–Fock/def2-SVP dipole, from its electron density — the same whichever of its charge '
+      + 'sets the labels print. Hartree–Fock over-polarises: water reads 2.12 D against experiment’s 1.85 D. '
+      + convention;
+  } else if (dipole) {
     element.textContent = `Dipole: ${dipole.debye.toFixed(2)} D`;
     element.title = isGfn2ChargeModel(model)
       ? (full
@@ -505,7 +544,9 @@ function showDipoleReadout(ctx: SceneContext, dipole: DipoleResult | null, model
         + convention;
   } else if (pending) {
     element.textContent = 'Dipole: …';
-    element.title = 'Computing GFN2-xTB charges (the first molecule loads the engine).';
+    element.title = isHfChargeModel(model)
+      ? 'Waiting on the Hartree–Fock single point (the Charge Model view says how it is going).'
+      : 'Computing GFN2-xTB charges (the first molecule loads the engine).';
   } else {
     element.textContent = ctx.currentMolecule ? 'Dipole: n/a' : '';
     element.title = '';
@@ -633,17 +674,22 @@ function redrawScene(ctx: SceneContext) {
   // charges' own, and nothing when the molecule is untypeable. Visibility
   // belongs to the #ctrl-show-dipole checkbox, so a rebuild never flips the
   // user's choice.
+  // Under Hartree–Fock it is its density's, nothing until the run lands.
   const gfn2Dipole = isGfn2ChargeModel(shown.model);
-  const fullDipole = gfn2Dipole ? properties?.dipole ?? null : null;
+  const hfDipole = isHfChargeModel(shown.model);
+  const hf = hfDipole ? hfOnScreen(ctx) : null;
+  const fullDipole = gfn2Dipole ? properties?.dipole ?? null : hf ? hf.result.dipole : null;
   ctx.dipole = fullDipole
+    // the density's dipole about the origin, whichever engine's
     ? dipoleFromFullGfn2(ctx.currentMolecule, fullDipole)
-    : gfn2Dipole && !properties && !gfn2ChargesFailed(ctx)
+    : (gfn2Dipole && !properties && !gfn2ChargesFailed(ctx)) || hfDipole
       ? null
       : charges ? dipoleFromCharges(ctx.currentMolecule, charges, shown.residual) : null;
   if (ctx.dipole) {
     renderDipole(ctx.dipoleGroup, ctx.dipole);
   }
-  showDipoleReadout(ctx, ctx.dipole, shown.model, ctx.dipole === null && gfn2Dipole && !gfn2ChargesFailed(ctx), fullDipole !== null);
+  showDipoleReadout(ctx, ctx.dipole, shown.model,
+    ctx.dipole === null && ((gfn2Dipole && !gfn2ChargesFailed(ctx)) || hfDipole), fullDipole !== null);
 
   // The ESP. Under GFN2: its own 0.001 au density surface, built in the
   // worker, coloured by the exact potential of its charge distribution — the
@@ -656,7 +702,14 @@ function redrawScene(ctx: SceneContext) {
     const gfn2 = isGfn2ChargeModel(shown.model) && properties;
     const esp = gfn2 ? gfn2EspOnScreen(ctx, properties) : null;
     const building = gfn2 && !esp && !ctx.gfn2EspRequest?.failed;
-    if (esp) {
+    // Hartree–Fock's own density surface, nothing while the run is on
+    const hfEsp = isHfChargeModel(shown.model) ? hfOnScreen(ctx)?.esp ?? null : null;
+    if (hfEsp) {
+      renderEsp(ctx.espGroup, hfEsp, ctx.display.espOpacity);
+      ctx.espGroup.visible = true;
+    } else if (isHfChargeModel(shown.model)) {
+      ctx.espGroup.visible = false;
+    } else if (esp) {
       renderEsp(ctx.espGroup, esp.exact, ctx.display.espOpacity);
       ctx.espGroup.visible = true;
     } else if (building || !charges) {
@@ -808,6 +861,8 @@ export function buildScene(ctx: SceneContext) {
   ctx.gfn2EspRequest = null;
   ctx.gfn2ChargeSets = null;
   ctx.gfn2ChargeSetsRequest = null;
+  if (ctx.hf && ctx.hf.molecule !== ctx.currentMolecule) ctx.hf = null;
+  if (ctx.hfFailed && ctx.hfFailed.molecule !== ctx.currentMolecule) ctx.hfFailed = null;
   ctx.moSurfaces.clear();
   ctx.moFields.clear();
   // Extended Hückel is geometry-dependent (unlike the BCI charges), so it is

@@ -233,8 +233,13 @@
               <option value="gfn2-esp">GFN2-xTB (ESP-fitted)</option>
               <option value="gfn2">GFN2-xTB (Mulliken)</option>
               <option value="gfn2-cm5">GFN2-xTB (CM5)</option>
+              <option value="hf-esp">HF/def2-SVP (ESP-fitted)</option>
+              <option value="hf-chelpg">HF/def2-SVP (CHELPG)</option>
               <option value="mmff94">MMFF94 (BCI)</option>
             </select>
+            <p id="hf-status" class="measure-hint hidden"></p>
+            <button id="hf-compute" class="refine-btn hidden"></button>
+            <p id="hf-note" class="measure-hint hidden"></p>
             <label class="ctrl-toggle">
               <input type="checkbox" id="ctrl-show-esp" />
               <span>Electrostatic potential</span>
@@ -253,7 +258,8 @@
               <summary>Reading this view</summary>
               <div class="view-notes-body">
                 <p>The labels print point charges: one way of dividing the electron density among the atoms, and there are several.</p>
-                <p>Under GFN2-xTB the ESP surface and the dipole come from the full density, which no set of point charges can hold. They stay the same whichever charges the labels print, and need not add up from them.</p>
+                <p>Under GFN2-xTB or Hartree–Fock the ESP surface and the dipole come from that method’s full density, which no set of point charges can hold. They stay the same whichever of its charges the labels print, and need not add up from them.</p>
+                <p>Hartree–Fock/def2-SVP is an ab initio single point at the geometry on screen, run when one of its charge sets is chosen. Where GFN2-xTB’s semiempirical density misleads — Br₂’s σ-holes are missing from it — Hartree–Fock’s shows them.</p>
               </div>
             </details>
             <details class="view-notes" id="charge-computed">

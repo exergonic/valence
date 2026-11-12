@@ -22,6 +22,7 @@ import { gfn2ChargeSets } from '../geometry/gfn2-refine';
 import type { Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
+import type { HfSinglePoint } from '../geometry/hf-single-point';
 import { thermochemistryOf } from '../render/vibration';
 
 export interface SdfField {
@@ -42,6 +43,8 @@ export interface SdfDataInput {
   mmff94Charges: number[] | null;
   atomOrbitals: AtomOrbitals[] | null;
   vibrations: NormalMode[] | null;
+  /** The Hartree–Fock single point, when one was run for this structure. */
+  hf?: HfSinglePoint | null;
 }
 
 const HARTREE_PER_EV = 1 / 27.211386245988;
@@ -74,6 +77,13 @@ export function sdfDataFields(input: SdfDataInput): SdfField[] {
       const [x, y, z] = properties.dipole;
       add('GFN2_DIPOLE_DEBYE', `${[x, y, z].map(fixed(4)).join(' ')}  |μ| ${fixed(4)(Math.hypot(x, y, z))}`);
     }
+  }
+  if (input.hf) {
+    const hf = input.hf;
+    add('HF_METHOD', `Hartree-Fock/def2-SVP single point at this geometry (${hf.restricted ? 'RHF' : 'UHF'}; OCC, in the browser)`);
+    add('HF_TOTAL_ENERGY_HARTREE', fixed(8)(hf.energy));
+    const [x, y, z] = hf.dipole;
+    add('HF_DIPOLE_DEBYE', `${[x, y, z].map(fixed(4)).join(' ')}  |μ| ${fixed(4)(Math.hypot(x, y, z))}`);
   }
   if (ladders) {
     // the frontier per channel: a closed shell has one ladder, an open shell two
@@ -110,6 +120,10 @@ export function sdfDataFields(input: SdfDataInput): SdfField[] {
   if (chargeSets) {
     add('atom.dprop.GFN2_CM5_CHARGE', perAtom(chargeSets.cm5, charge));
     add('atom.dprop.GFN2_HIRSHFELD_CHARGE', perAtom(chargeSets.hirshfeld, charge));
+  }
+  if (input.hf) {
+    add('atom.dprop.HF_ESP_FITTED_CHARGE', perAtom(input.hf.espFitted, charge));
+    add('atom.dprop.HF_CHELPG_CHARGE', perAtom(input.hf.chelpg, charge));
   }
   add('atom.dprop.MMFF94_BCI_CHARGE', perAtom(input.mmff94Charges, charge));
   if (properties?.spin) add('atom.dprop.GFN2_SPIN_POPULATION', perAtom(properties.spin, charge));
@@ -164,5 +178,6 @@ export async function collectSdfData(ctx: SceneContext): Promise<SdfDataInput | 
     mmff94Charges: ctx.charges?.charges ?? null,
     atomOrbitals: ctx.atomOrbitals,
     vibrations: ctx.vibrations?.molecule === molecule ? ctx.vibrations.modes : null,
+    hf: ctx.hf?.molecule === molecule ? ctx.hf.result : null,
   };
 }

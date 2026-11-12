@@ -5,6 +5,7 @@ import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
 import type { DipoleResult } from '../chem/charge-model/dipole';
 import type { ResolvedCharges } from '../chem/charge-model/bci-charges';
 import type { Gfn2Properties, Gfn2ChargeSets } from '../geometry/gfn2-refine';
+import type { HfSinglePoint } from '../geometry/hf-single-point';
 import type { Gfn2Ladder } from '../chem/gfn2-xtb/orbital-ladder';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import type { Thermochemistry } from '../chem/gfn2-xtb/thermochemistry';
@@ -24,8 +25,9 @@ export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complement
 
 /**
  * Which partial charges the charge labels print. Under MMFF94 the ESP surface
- * and the dipole arrow come from the same array; under GFN2-xTB they come from
- * its full electron density, whichever division of it the labels show.
+ * and the dipole arrow come from the same array; under GFN2-xTB or
+ * Hartree–Fock they come from that method's full electron density, whichever
+ * division of it the labels show.
  *
  * GFN2-xTB's ESP-fitted charges are the default — of the point charges, the
  * ones that match the ESP surface most closely (decided with the user
@@ -36,20 +38,29 @@ export type ColorScheme = 'element' | 'monochrome' | 'pedagogical' | 'complement
  * user picks them — fitting for PubChem's MMFF94 geometries — and as the
  * fallback when the engine cannot treat the molecule.
  */
-export type ChargeModel = 'gfn2' | 'gfn2-esp' | 'gfn2-cm5' | 'mmff94';
+export type ChargeModel = 'gfn2' | 'gfn2-esp' | 'gfn2-cm5' | 'hf-esp' | 'hf-chelpg' | 'mmff94';
 
 /** The first three divide GFN2-xTB's one electron density into atoms, three
  *  ways: Mulliken by basis function (`gfn2`), by the point charges that best
  *  reproduce its potential (`gfn2-esp`, the default), by real-space shares
  *  plus a dipole correction (`gfn2-cm5`). MMFF94 is a charge model of its own. */
 export function isGfn2ChargeModel(model: ChargeModel): boolean {
-  return model !== 'mmff94';
+  return model.startsWith('gfn2');
+}
+
+/** The two that divide Hartree–Fock/def2-SVP's density, from the single point
+ *  run when one of them is chosen (decided with the user 2026-11-11): fitted
+ *  to its potential as GFN2's ESP-fitted set is (`hf-esp`), or CHELPG on its
+ *  own grid (`hf-chelpg`). */
+export function isHfChargeModel(model: ChargeModel): boolean {
+  return model.startsWith('hf');
 }
 
 /** A control's or a saved view's value as a charge model; anything else
  *  (a view saved before the selector existed) is the default. */
 export function asChargeModel(value: string | undefined): ChargeModel {
-  return value === 'gfn2' || value === 'gfn2-cm5' || value === 'mmff94' ? value : 'gfn2-esp';
+  return value === 'gfn2' || value === 'gfn2-cm5' || value === 'hf-esp' || value === 'hf-chelpg' || value === 'mmff94'
+    ? value : 'gfn2-esp';
 }
 
 /** GFN2-xTB per-atom charges, paired with the molecule they belong to — a
@@ -280,6 +291,13 @@ export interface SceneContext {
   gfn2ChargeSets: { key: number; sets: Gfn2ChargeSets } | null;
   /** Those charges, asked of the worker, and whether that failed. */
   gfn2ChargeSetsRequest: { key: number; failed: boolean } | null;
+  /** The Hartree–Fock single point of the structure on screen, paired with
+   *  its molecule, its ESP surface ready to draw. Run on request
+   *  (ui/hf-panel.ts) and kept for the structure's life. */
+  hf: { molecule: Molecule; result: HfSinglePoint; esp: EspSurfaceData | null } | null;
+  /** Why the single point could not be had for this molecule; GFN2's
+   *  ESP-fitted charges stand in. */
+  hfFailed: { molecule: Molecule; reason: string } | null;
   /** Extracted isosurfaces, keyed by orbital and level (`mo:<index>@…`,
    *  `localized:<index>@…`, `gfn2:<run>:<orbital>@…`). Each costs ~50 ms to
    *  extract, and the same orbital can be picked, dropped and
@@ -511,6 +529,8 @@ export function initScene(container: HTMLElement): SceneContext {
     gfn2Esp: null,
     gfn2EspRequest: null,
     gfn2ChargeSets: null,
+    hf: null,
+    hfFailed: null,
     gfn2ChargeSetsRequest: null,
     moSurfaces: new Map(),
     moFields: new Map(),

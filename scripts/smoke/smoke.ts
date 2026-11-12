@@ -687,6 +687,30 @@ async function thermoView(b: Browser) {
     await b.run(`return document.getElementById('thermo-readout').offsetParent === null;`));
 }
 
+/** The on-demand Hartree–Fock single point: its own worker and engine load in
+ *  the browser, a quick one runs unasked, and the charges, the ESP surface and
+ *  the dipole follow to its density. */
+async function hartreeFockCharges(b: Browser) {
+  await b.open(url);
+  await pickExample(b, 'Water (H₂O)');
+  await view(b, 'charge');
+  await b.run(`const s = document.getElementById('ctrl-charge-model'); s.value = 'hf-esp'; s.dispatchEvent(new Event('change'));`);
+  let status = 'pending';
+  for (let waited = 0; waited < 60_000; waited += 500) {
+    await sleep(500);
+    status = await b.run(`const s = document.getElementById('hf-status'); return s.classList.contains('hidden') ? '' : s.textContent;`);
+    if (!status || /could not/.test(status)) break;
+  }
+  await settle(b, 600);
+  const dipole = await b.run(`const d = document.getElementById('mol-dipole'); return { text: d.textContent, title: d.title };`);
+  check('Hartree–Fock: water’s single point runs unasked, its dipole on screen',
+    status === '' && /Dipole: \d/.test(dipole.text) && /Hartree–Fock/.test(dipole.title), status || dipole.text);
+  const coverage = await sceneCoverage(b);
+  check('Hartree–Fock: its ESP surface is drawn', coverage > 0.05, `${(coverage * 100).toFixed(1)}% of the scene`);
+  const card = await b.run(`return [...document.querySelectorAll('#structure-facts .data-row')].map((r) => r.textContent).join(' | ');`);
+  check('Hartree–Fock: the structure card lists the run', /HF\/def2-SVP single point/.test(card), card.slice(0, 120));
+}
+
 async function loadsCleanWhenNarrow() {
   const narrow = await launchBrowser(800, 870, 1);
   try {
@@ -711,7 +735,7 @@ try {
 // first atom where it is clicked, and the CH4 bug of 2026-10-06 did not show.
 const b = await launchBrowser(1600, 1000, 1.5);
 try {
-  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, sketcherRadicalKeepsYlide, sketcherCarbene, orbitalListStaysPut, lewisStructureDonation, thermoView]) {
+  for (const part of [examplesInEveryView, sketchedBuilds, sketcherFirstAtom, sketcherDragAndDrop, sketcherMoveAndClean, sketcherFunctionalGroup, sketcherRefusedCharges, sketcherRadicalKeepsYlide, sketcherCarbene, orbitalListStaysPut, lewisStructureDonation, thermoView, hartreeFockCharges]) {
     if (only && part.name !== only) continue;
     try {
       await part(b);

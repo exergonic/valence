@@ -1854,6 +1854,9 @@ button.ledger-row:hover { background: var(--hover); }
 .measure-clear.hidden,
 #thermo-status.hidden,
 #thermo-compute.hidden,
+#hf-status.hidden,
+#hf-compute.hidden,
+#hf-note.hidden,
 #measure-points:empty,
 #measure-result:empty { display: none; }
 

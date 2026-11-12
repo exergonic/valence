@@ -26,10 +26,8 @@ import { gfn2HessianSeconds } from '../geometry/gfn2-refine';
 import type { NormalMode } from '../chem/gfn2-xtb/normal-modes';
 import { refineForVibrations } from './jsme-panel';
 import { drawThermoReadout, markPlayingMode } from './thermo-readout';
+import { ASK_ABOVE_SECONDS } from './long-runs';
 
-/** Above this estimate (seconds) the Hessian waits for a go-ahead: half the
- *  optimiser's budget, and as long as a lesson can wait unasked. */
-const ASK_ABOVE_SECONDS = 15;
 
 export interface ThermoPanel {
   /** The view was chosen: show what the structure has, or go and get it. */
