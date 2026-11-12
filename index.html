@@ -323,16 +323,53 @@
             </div>
           </section>
 
-          <!-- the structure's own tools: what bears on the geometry itself -->
+          <!-- the structure's own tools: what bears on the geometry itself. A
+               click on the molecule goes to the tool that is on, if any -->
           <section class="inspector-section for-structure">
-            <span class="ctrl-label">Measure</span>
-            <div class="export-row">
-              <button id="ctrl-measure-toggle" class="export-btn">Enable</button>
+            <span class="ctrl-label">Tools</span>
+            <div class="preset-row" role="group" aria-label="What a click on the molecule does">
+              <button class="view-preset-btn" data-structure-tool="turn" aria-pressed="false" title="Turn a bond: click a bond, then turn it with the slider, by a click on the energy curve, or by dragging any atom beside it across the scene. One side turns rigidly about the bond, as in a Newman projection; nothing else moves.">Turn a bond</button>
+              <button class="view-preset-btn" data-structure-tool="measure" aria-pressed="false" title="Measure: click 2 atoms for a distance, 3 for an angle, 4 for a dihedral.">Measure</button>
             </div>
-            <p class="measure-hint">Click 2 atoms for distance, 3 for angle, 4 for dihedral.</p>
-            <div id="measure-points"></div>
-            <div id="measure-result"></div>
-            <button id="ctrl-measure-clear" class="export-btn measure-clear hidden">Clear</button>
+
+            <div id="turn-tool" class="hidden">
+              <p id="turn-hint" class="measure-hint">Click a bond to turn it. Then drag any atom beside it, or use the slider.</p>
+              <div id="turn-bond" class="hidden">
+                <div class="turn-head">
+                  <span id="turn-name" class="turn-name"></span>
+                  <span id="turn-energy" class="turn-energy"></span>
+                </div>
+                <div class="turn-angle-row">
+                  <input type="range" id="turn-angle" min="-180" max="180" step="1" aria-label="Dihedral angle, degrees" />
+                  <input type="number" id="turn-angle-value" min="-180" max="180" step="1" aria-label="Dihedral angle, degrees" />
+                  <span class="turn-unit">°</span>
+                </div>
+                <div id="turn-curve" class="turn-curve"></div>
+                <p id="turn-scan-status" class="measure-hint hidden"></p>
+                <button id="turn-scan" class="refine-btn hidden"></button>
+                <p id="turn-note" class="measure-hint turn-note hidden"></p>
+                <div class="export-row">
+                  <button id="turn-optimise" class="export-btn" title="Relax every coordinate with GFN2-xTB, starting here: the nearest conformer (a minimum on this side of the barriers around it).">Optimise from here</button>
+                  <button id="turn-back" class="export-btn hidden" title="Put back the structure this one was turned from, every turn undone.">Undo turns</button>
+                </div>
+                <details class="view-notes" id="turn-computed">
+                  <summary>How it was computed</summary>
+                  <div class="view-notes-body">
+                    <p>The side of the bond with fewer atoms turns rigidly about the bond’s axis. Every bond length and angle stays as it was, and so does the rest of the molecule. The dihedral is named by the heaviest neighbour at each end.</p>
+                    <p>Each point is a GFN2-xTB single point at that geometry, started afresh, so the energy at an angle never depends on the angles visited before it. The curve is a rigid scan in 5° steps. Nothing else relaxes as the bond turns, so its barriers stand a little above the relaxed ones; “Optimise from here” relaxes everything.</p>
+                    <p>ΔE is measured from the structure the turning began from, whatever its source.</p>
+                  </div>
+                </details>
+              </div>
+              <p id="turn-refusal" class="measure-hint hidden"></p>
+            </div>
+
+            <div id="measure-tool" class="hidden">
+              <p class="measure-hint">Click 2 atoms for distance, 3 for angle, 4 for dihedral.</p>
+              <div id="measure-points"></div>
+              <div id="measure-result"></div>
+              <button id="ctrl-measure-clear" class="export-btn measure-clear hidden">Clear</button>
+            </div>
           </section>
 
           <!-- the Thermo view: the molecule moving, and what its motion is worth -->

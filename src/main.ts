@@ -18,6 +18,7 @@ import { setupMoPanel } from './ui/mo-diagram';
 import { setupModelViews } from './ui/model-views';
 import { setupThermoPanel } from './ui/thermo-panel';
 import { setupHfPanel } from './ui/hf-panel';
+import { setupTurnPanel } from './ui/turn-panel';
 import { setupAnnotations } from './ui/annotations';
 import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, applyViewState } from './ui/view-state';
 import { parseMolBlock, type Molecule } from './mol-parser';
@@ -250,6 +251,8 @@ async function main() {
   const moPanel = setupMoPanel(ctx);
   setupModelViews(ctx, moPanel, setupThermoPanel(ctx));
   setupHfPanel(ctx);
+  // after the orbital panel: it chains that panel's hooks for the single point
+  setupTurnPanel(ctx);
   setupKeyboardShortcuts();
   setupMeasureMode(ctx, measure);
   setupViewStateUI(ctx, annotations);

@@ -10,6 +10,9 @@ import type { Molecule } from '../mol-parser';
 import { collectSdfData, sdfDataFields, type SdfField } from './sdf-data';
 import { vecSub, vecDot, vecLength, dihedralAngle, type Vec3 } from '../utils/vec3';
 
+/** The Structure view's tools; a click on the molecule goes to the one on. */
+export type StructureTool = 'turn' | 'measure';
+
 /** The measuring tool's state, which the canvas click handler (main.ts) adds
  *  picked atoms to. */
 export interface MeasureTool {
@@ -268,35 +271,43 @@ export function setupControls(ctx: SceneContext): { measure: MeasureTool } {
     setTimeout(() => clipboardFeedback.classList.add('hidden'), 2000);
   });
 
+  // ── The Structure view's tools: one at a time, so a click on the molecule
+  // has one meaning. Pressing the tool that is on turns it off.
+  const toolButtons = [...document.querySelectorAll<HTMLButtonElement>('[data-structure-tool]')];
+  const setTool = (tool: StructureTool | null) => {
+    for (const button of toolButtons) {
+      const on = button.dataset.structureTool === tool;
+      button.classList.toggle('active', on);
+      button.setAttribute('aria-pressed', String(on));
+    }
+    document.getElementById('turn-tool')!.classList.toggle('hidden', tool !== 'turn');
+    document.getElementById('measure-tool')!.classList.toggle('hidden', tool !== 'measure');
+    if (tool !== 'measure') clearMeasure();
+    document.dispatchEvent(new CustomEvent<StructureTool | null>('structure-tool', { detail: tool }));
+  };
+  for (const button of toolButtons) {
+    button.addEventListener('click', () => {
+      const tool = button.dataset.structureTool as StructureTool;
+      setTool(button.classList.contains('active') ? null : tool);
+    });
+  }
+
   // ── Measure ──
-  const measureToggle = document.getElementById('ctrl-measure-toggle')!;
   const measurePoints = document.getElementById('measure-points')!;
   const measureResult = document.getElementById('measure-result')!;
   const measureClear = document.getElementById('ctrl-measure-clear')!;
-  let measureMode = false;
   let measureAtomIndices: number[] = [];
-
-  measureToggle.addEventListener('click', () => {
-    measureMode = !measureMode;
-    measureToggle.classList.toggle('active', measureMode);
-    measureToggle.textContent = measureMode ? 'Disable' : 'Enable';
-    if (!measureMode) {
-      measureAtomIndices = [];
-      measurePoints.innerHTML = '';
-      measureResult.innerHTML = '';
-      measureClear.classList.add('hidden');
-    }
-  });
-
-  measureClear.addEventListener('click', () => {
+  function clearMeasure() {
     measureAtomIndices = [];
     measurePoints.innerHTML = '';
     measureResult.innerHTML = '';
     measureClear.classList.add('hidden');
-  });
+  }
+
+  measureClear.addEventListener('click', clearMeasure);
 
   const measure: MeasureTool = {
-    get active() { return measureMode; },
+    get active() { return toolButtons.some((b) => b.dataset.structureTool === 'measure' && b.classList.contains('active')); },
     addAtom(index: number) {
       measureAtomIndices.push(index);
       updateMeasureDisplay();
@@ -350,6 +361,19 @@ export function setupControls(ctx: SceneContext): { measure: MeasureTool } {
   document.getElementById('help-close')!.addEventListener('click', () => helpDialog.classList.add('hidden'));
   document.getElementById('help-ok')!.addEventListener('click', () => helpDialog.classList.add('hidden'));
   helpDialog.addEventListener('click', (e) => { if (e.target === helpDialog) helpDialog.classList.add('hidden'); });
+
+  // leaving the Structure view turns its tool off, and coming back turns it
+  // on again (model-views.ts asks)
+  let suspended: StructureTool | null = null;
+  document.addEventListener('structure-tool-off', () => {
+    const on = toolButtons.find((b) => b.classList.contains('active'))?.dataset.structureTool as StructureTool | undefined;
+    if (on) suspended = on;
+    setTool(null);
+  });
+  document.addEventListener('structure-tool-resume', () => {
+    if (suspended) setTool(suspended);
+    suspended = null;
+  });
 
   // ── Reset view ──
   const resetBtn = document.getElementById('reset-view-btn')!;

@@ -1112,7 +1112,8 @@ button.ledger-row:hover { background: var(--hover); }
 
 #mol-source.pubchem,
 #mol-source.example,
-#mol-source.gfn2 { background: var(--accent-soft); color: var(--accent); }
+#mol-source.gfn2,
+#mol-source.turned { background: var(--accent-soft); color: var(--accent); }
 #mol-source.cir { background: rgba(255, 136, 68, 0.18); color: #e8823f; }
 #mol-source.local { background: rgba(100, 200, 100, 0.18); color: #4fae4f; }
 
@@ -1851,6 +1852,82 @@ button.ledger-row:hover { background: var(--hover); }
   margin-top: 8px;
   padding: 4px 0;
 }
+/* ── Turn a bond: the dihedral, its energy, the rigid scan ── */
+
+.turn-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.turn-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.turn-energy {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.turn-angle-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.turn-angle-row input[type="range"] { flex: 1; min-width: 0; }
+
+.turn-angle-row input[type="number"] {
+  width: 58px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+
+.turn-unit { font-size: 11px; color: var(--text-muted); }
+
+.turn-curve { margin-top: 8px; }
+
+.turn-curve-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  cursor: crosshair;
+}
+
+.turn-curve-svg .turn-grid { stroke: var(--divider); stroke-width: 1; }
+.turn-curve-svg .turn-axis { stroke: var(--border-strong); stroke-width: 1; }
+.turn-curve-svg .turn-tick { fill: var(--text-faint); font-size: 8px; font-family: var(--font-mono); }
+.turn-curve-svg .turn-line { fill: none; stroke: var(--accent); stroke-width: 1.6; stroke-linejoin: round; }
+.turn-curve-svg .turn-now { stroke: var(--text-muted); stroke-width: 1; stroke-dasharray: 2 2; }
+.turn-curve-svg .turn-dot { fill: var(--accent); stroke: var(--panel-solid); stroke-width: 1; }
+.turn-curve-svg .turn-start { fill: var(--text-muted); }
+
+.turn-note { color: var(--note); }
+
+#turn-tool.hidden,
+#measure-tool.hidden,
+#turn-hint.hidden,
+#turn-refusal.hidden,
+#turn-bond.hidden,
+#turn-curve.hidden,
+#turn-scan-status.hidden,
+#turn-scan.hidden,
+#turn-note.hidden,
+#turn-back.hidden,
 .measure-clear.hidden,
 #thermo-status.hidden,
 #thermo-compute.hidden,

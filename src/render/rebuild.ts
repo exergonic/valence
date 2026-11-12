@@ -191,7 +191,14 @@ export function syncChargeModelControl(ctx: SceneContext) {
  * structure gets one, a GFN2-optimised one included — its charges came with
  * the run, but the bond orders, the spin and the orbitals did not, and one SCC
  * costs milliseconds at these sizes.
+ *
+ * One at a time: a request waits for the one before it, and when its turn
+ * comes for a structure no longer on screen it is skipped. A bond turned by
+ * hand puts a new structure on screen at every step of the slider, and only
+ * the step it rests on needs the engine.
  */
+let lastPropertiesRun: Promise<void> = Promise.resolve();
+
 function requestGfn2Properties(ctx: SceneContext): void {
   const molecule = ctx.currentMolecule;
   if (!molecule || ctx.gfn2Properties?.molecule === molecule) return;
@@ -211,10 +218,14 @@ function requestGfn2Properties(ctx: SceneContext): void {
     // that extended Hückel's must stand in
     ctx.onGfn2Orbitals();
   };
-  request.done = gfn2PropertiesAt(molecule).then(
-    (properties) => settle(properties),
-    (error) => settle(null, (error as Error)?.message),
-  );
+  request.done = lastPropertiesRun.then(() => {
+    if (ctx.currentMolecule !== molecule) return undefined; // passed by before its turn
+    return gfn2PropertiesAt(molecule).then(
+      (properties) => settle(properties),
+      (error) => settle(null, (error as Error)?.message),
+    );
+  });
+  lastPropertiesRun = request.done;
 }
 
 /** GFN2's single point for the molecule on screen, or null while it runs (or
@@ -836,8 +847,10 @@ function filterOrbitalsByPreset(group: THREE.Group, preset: string) {
   }
 }
 
-// Full build: rebuildDisplay plus frame the camera on the new molecule.
-export function buildScene(ctx: SceneContext) {
+// Full build: rebuildDisplay plus frame the camera on the new molecule —
+// unless `keepCamera`: a bond turned by hand is the same molecule seen from
+// where the user was looking, and re-framing at every step would swing it away.
+export function buildScene(ctx: SceneContext, keepCamera = false) {
   // A GFN2 charge bundle belongs to one geometry: drop it when it does not
   // describe the molecule now on screen — a new sketch, a loaded view, an
   // example, none of which carry the engine's charges. This is what makes the
@@ -875,7 +888,7 @@ export function buildScene(ctx: SceneContext) {
   ctx.display.moIndex = null;
   ctx.display.localizedSelection = [];
   rebuildDisplay(ctx);
-  frameCamera(ctx);
+  if (!keepCamera) frameCamera(ctx);
   ctx.onSceneBuilt();
 }
 

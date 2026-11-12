@@ -125,11 +125,12 @@ export function setupModelViews(ctx: SceneContext, moPanel: MoPanel, thermoPanel
     setSelected('ctrl-label-mode', preset.labels === 'atom' && numberedLabels ? 'atom-id' : preset.labels);
     setChecked('ctrl-show-esp', preset.esp);
     setChecked('ctrl-show-dipole', preset.dipole);
-    // The measure tool is the Structure view's and the vibrations the Thermo
-    // view's: their controls go with the view, so they do not keep running
+    // The Structure view's tools (Turn a bond, Measure) and the Thermo view's
+    // vibrations: their controls go with the view, so they do not keep running
     // where they cannot be stopped (Thermo's panel stops its own on leaving).
-    const measureToggle = document.getElementById('ctrl-measure-toggle');
-    if (view !== 'structure' && measureToggle?.classList.contains('active')) measureToggle.click();
+    // A structure turned by hand stays on screen; only the tool goes off, and
+    // comes back with the view.
+    document.dispatchEvent(new Event(view === 'structure' ? 'structure-tool-resume' : 'structure-tool-off'));
     if (view === 'thermo') thermoPanel.enter();
     else thermoPanel.leave();
     if (preset.orbitals === 'none') {

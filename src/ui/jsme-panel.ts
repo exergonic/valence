@@ -275,9 +275,9 @@ function gfn2ShapeNotes(molecule: Molecule): StructureNotes {
  * optimising this structure would not give a minimum of the molecule drawn
  * (the Thermo view reads it).
  */
-function showMolecule(
+export function showMolecule(
   ctx: SceneContext, molecule: Molecule, gfn2Charges: number[] | null, vibrations: NormalMode[] | null = null,
-  noMinimum: string | null = null,
+  noMinimum: string | null = null, keepCamera = false,
 ) {
   ctx.currentMolecule = molecule;
   ctx.gfn2Charges =
@@ -290,19 +290,24 @@ function showMolecule(
   ctx.vibrations = vibrations && vibrations.length > 0 && !noMinimum ? { molecule, modes: vibrations } : null;
   ctx.noMinimum = noMinimum ? { molecule, reason: noMinimum } : null;
   ctx.display.vibrationIndex = null;
-  buildScene(ctx);
+  buildScene(ctx, keepCamera);
 }
 
 /** What the header shows besides the formula and weight, which are read off
  *  the molecule itself. */
-type HeaderInfo = Omit<PubChemInfo, 'source' | 'formula' | 'weight'> & Partial<StructureNotes> & {
-  source: PubChemInfo['source'] | 'example' | 'atom';
+type BuiltSource = PubChemInfo['source'] | 'example' | 'atom';
+
+export type HeaderInfo = Omit<PubChemInfo, 'source' | 'formula' | 'weight'> & Partial<StructureNotes> & {
+  source: BuiltSource | 'turned';
   /** The spin was chosen under Refine, not left to the electron count. */
   spinChosen?: boolean;
+  /** A structure turned by hand: where the structure it was turned from came from. */
+  turnedFrom?: BuiltSource;
 };
 
 const SOURCE_LABEL: Record<HeaderInfo['source'], string> = {
   pubchem: 'PubChem 3D', cir: 'CIR', gfn2: 'GFN2-xTB', local: 'Unoptimised', example: 'Example', atom: 'Single atom',
+  turned: 'Turned by hand',
 };
 
 /** Where the structure came from, as the card's first fact says it. */
@@ -313,7 +318,22 @@ const SOURCE_FACT: Record<HeaderInfo['source'], string> = {
   local: 'the embedder’s start, unoptimised',
   example: 'an example, stored with the app',
   atom: 'a single atom: nothing to optimise',
+  turned: 'turned by hand',
 };
+
+/** The structure a turned one was turned from, as a sentence names it. */
+export const TURNED_FROM: Record<BuiltSource, string> = {
+  pubchem: 'PubChem’s structure', cir: 'CIR’s structure', gfn2: 'the GFN2-xTB structure',
+  local: 'the unoptimised start', example: 'the example', atom: 'the atom',
+};
+
+/** The structure on screen and what its header said — the dihedral drive
+ *  keeps it, to say where a turned structure came from and to put it back. */
+let headerOnScreen: { molecule: Molecule; info: HeaderInfo } | null = null;
+
+export function shownHeader(): { molecule: Molecule; info: HeaderInfo } | null {
+  return headerOnScreen;
+}
 
 /** The spin GFN2 runs at, and why that one — said for every structure, so an
  *  open shell is never silently one. The worker's own rule: the structure's
@@ -387,6 +407,7 @@ function placeStructureCard() {
  */
 export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
   wireStructureCard();
+  headerOnScreen = { molecule, info };
   const { formula, weight } = computeFormula(molecule.atoms.map((a) => a.element));
   const container = document.getElementById('molecule-info')!;
   const formulaEl = document.getElementById('mol-formula')!;
@@ -425,7 +446,8 @@ export function showMoleculeHeader(molecule: Molecule, info: HeaderInfo) {
   attentionEl.classList.toggle('hidden', attention.length === 0);
   const charge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
   writeRows(document.getElementById('structure-facts')!, [
-    ['Source', SOURCE_FACT[info.source]],
+    ['Source', info.source === 'turned' && info.turnedFrom
+      ? `turned by hand, from ${SOURCE_FACT[info.turnedFrom]}` : SOURCE_FACT[info.source]],
     ['Charge', signedCharge(charge)],
     ['Spin', spinFact(molecule, info.source, info.spinChosen ?? false)],
   ]);
@@ -486,6 +508,12 @@ let refineOnScreen: (hessianSeconds?: number) => Promise<void> = async () => {};
  */
 export function refineForVibrations(hessianSeconds: number): Promise<void> {
   return refineOnScreen(hessianSeconds);
+}
+
+/** The same refinement, as the dihedral drive's "Optimise from here" asks for
+ *  it: a turned structure relaxed to the nearest conformer. */
+export function optimiseOnScreen(): Promise<void> {
+  return refineOnScreen();
 }
 
 /** The header's "Keep optimising", offered when a free GFN2 run stopped short
