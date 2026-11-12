@@ -94,6 +94,14 @@ This code is written for **chemists who code**, not software engineers.
    - **Every structure on screen**, wherever it came from, gets one background
      GFN2 single point in its principal-axis frame — charges, Wiberg orders,
      spin, the full dipole, the MOs — which the views read.
+   - **Hartree–Fock/def2-SVP, on request** (2026-11-11): a second OCC
+     engine, HF and nothing else, fetched the first time an HF charge set is
+     chosen — never at startup, never a geometry engine. One single point at
+     the structure on screen, kept for its life: the ESP surface, the
+     ESP-fitted and CHELPG charges, the dipole. RHF for a singlet, UHF
+     otherwise. Thermo's rule for its time: estimated on this machine, run
+     unasked at **15 s** or less, otherwise the button; cancellable. A
+     transition-metal complex gets a plain note, not a refusal.
    - **MMFF94 is not a geometry engine** (NOTES.md: it inverts PCl₅'s axial
      and equatorial bonds); mmff94-ts stays as the optimiser's stepping and as
      a charge model. A *PubChem* structure is an MMFF94 conformer, so the
@@ -108,12 +116,15 @@ Made with the user; the reasons are in NOTES.md under the date.
   charges, fitted to the background single point; Mulliken stands in when the
   fit cannot be built. The Charge Model control offers ESP-fitted, Mulliken
   and CM5 — three divisions of one density; a set that cannot be built gives
-  way to Mulliken, and the control says so — and MMFF94's BCI, used only when
-  chosen or when GFN2 cannot give charges (under MMFF94, all three are BCI's).
-- **The ESP and the dipole are the density's** (2026-10-09, 2026-10-12):
-  under GFN2 the ESP is the exact potential on GFN2's 0.001 au density
-  surface (valence plus free-atom cores) and the dipole is the full one, so
-  only the labels change with the charge set. A hidden default, with no
+  way to Mulliken, and the control says so — HF/def2-SVP's ESP-fitted and
+  CHELPG (2026-11-11; when its run fails, GFN2's ESP-fitted stands in, and
+  the control says why), and MMFF94's BCI, used only when chosen or when GFN2
+  cannot give charges (under MMFF94, all three are BCI's).
+- **The ESP and the dipole are the density's** (2026-10-09, 2026-10-12,
+  2026-11-11): under GFN2 or Hartree–Fock the ESP is the exact potential on
+  that method's 0.001 au density surface (GFN2's valence plus free-atom cores;
+  HF's all-electron density, less any ECP core) and the dipole is its full
+  one, so only the labels change with the charge set within a method. A hidden default, with no
   switch back; the Charge Model view's "Reading this view" fold says why the
   labels need not add up to it.
 - **GFN2's orbitals first** (2026-10-13): the Localized and Delocalized views
@@ -210,7 +221,8 @@ Made with the user; the reasons are in NOTES.md under the date.
   so no atom hides.
 - **Export** (2026-10-13): one format, SDF, carrying what Valence computed —
   the structure's source, GFN2's energy, spin, dipole, frontier orbitals,
-  frequencies and thermochemistry, every charge set, the VSEPR assignment and the Wiberg orders,
+  frequencies and thermochemistry, every charge set (HF's too, when it was
+  run: its energy and dipole with them), the VSEPR assignment and the Wiberg orders,
   as data fields after `M  END` in RDKit's `atom.dprop.`/`atom.prop.`
   convention — for the download and the right-click copy alike; it waits for
   the single point. XYZ is the structure alone, its charge and
@@ -247,6 +259,9 @@ Each module's header comment says what it does and why; this list says where.
   sits above `chem/`): `resolve3d.ts` + `validate-structure.ts`, `place3d.ts`
   (the embedder), `embed.ts`, `local-geometry.ts`, `gfn2-refine.ts` +
   `.worker.ts` (the engine and the background single point),
+  `hf-single-point.ts` + `.worker.ts` (the on-demand Hartree–Fock engine),
+  `esp-surface.ts` (the 0.001 au surface either engine's density gives),
+  `worker-client.ts` (the two engines' worker plumbing),
   `mmff94-molecule.ts`, `parameter-warnings.ts`, `stereo-wedge.ts`,
   `bond-integrity.ts`, `ring-pucker.ts`, `symmetrize.ts`
 - `src/render/` — the Three.js layer, files named for what they draw:
@@ -258,7 +273,8 @@ Each module's header comment says what it does and why; this list says where.
   the active view's controls); everything global in the settings drawer.
   `model-views.ts`, `controls.ts`, `jsme-panel.ts`, `sketcher-toolbar.ts`,
   `x-atom-labels.ts`, `periodic-table.ts`, `functional-groups.ts`,
-  `mo-diagram.ts`, `thermo-panel.ts`, `thermo-readout.ts`, `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
+  `mo-diagram.ts`, `thermo-panel.ts`, `thermo-readout.ts`, `hf-panel.ts`,
+  `long-runs.ts` (the 15 s gate both share), `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
   (`sdf-data.ts`, `mo-data.ts`), `theme.ts` (the three looks)
 - `src/utils/` — generic math, no chemistry: `vec3.ts`, `eigen.ts`,
   `march-tetrahedra.ts`
@@ -267,6 +283,9 @@ Each module's header comment says what it does and why; this list says where.
 - `vendor/occ-wasm/` — the GFN2-xTB engine (OCC 5644eaf, LGPL-3); its
   `README.md` is the build recipe, `occ-valence.patch` the complete source
   modification. Vite emits the wasm and data as hashed assets.
+- `vendor/occ-hf-wasm/` — the Hartree–Fock engine (the same commit, its
+  `occ-hf.patch` on top; def2-SVP its only data); its `README.md` is the
+  recipe.
 
 ## JSME integration
 - `jsme-editor` from npm: `index.html` loads `jsme.nocache.js` from
@@ -405,7 +424,14 @@ Deliberate; the evidence is in NOTES.md or the test named.
   σ-holes — negative tips, a positive belt, where DFT has the reverse; the
   oracle agrees (`tests/gfn2.test.ts`; NOTES.md, 2026-11-10). On the methyl
   halides it keeps a weakened hole the colour scale masks and the hover reads.
-  The Br₂ + alkene lesson can still be taught from its σ* LUMO.
+  The Br₂ + alkene lesson can still be taught from its σ* LUMO, and the
+  HF/def2-SVP charge sets show the σ-holes (`tests/hartree-fock.test.ts`).
+- Hartree–Fock over-polarises: its dipoles run above experiment by a similar
+  margin from one molecule to the next, keeping their order (NOTES.md,
+  2026-11-11); its CHELPG grid is OCC's, so its charges differ from another
+  program's by a few hundredths. It is a rougher guide for transition-metal
+  complexes, whose SCF also runs several times longer than the estimate's
+  main-group scale.
 - The implicit-H filler covers the common ±1 charge states only.
 - Aromatic bond order 4 from a pasted or imported molfile is not understood.
 - GFN2-xTB is semiempirical, and labelled as such everywhere it appears. It is

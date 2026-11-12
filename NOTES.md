@@ -6133,3 +6133,47 @@ For a teaching comparison — which is more polar, where the potential is
 negative — a uniform overshoot that keeps the order beats a smaller error that
 scrambles it. The qualitative case for DFT is where HF itself fails: ozone-like
 multireference cases and transition-metal complexes.
+
+## Hartree–Fock/def2-SVP on request: built, checked, timed (2026-11-11)
+
+Decided with the user the same day: HF only, in the Charge Model view first,
+a transition-metal complex noted rather than refused, and AGENTS.md's ESP rule
+widened to "the chosen method's density".
+
+**The engine** (`vendor/occ-hf-wasm/`, its README the recipe): OCC at the
+pinned commit, `core` + `qm` bindings only, def2-SVP its only data; 1.45 MB
+gzip. Two bindings patched in: the wavefunction's potential, and a dipole that
+counts each ECP atom at Z less its core (OCC's `compute_multipoles<1>` counts
+the full Z). Two traps found on the way: `AOBasis.load` gives Cartesian d
+shells unless `setPure(true)` — water had 25 functions, not 24, and every
+energy sat millihartrees below ORCA's — and the SCF's starting guess reads
+basis files from the data directory, so without them it runs on NaN. An open
+shell's density comes back α rows then β rows.
+
+**Against ORCA** (`tests/references/orca-hf.json`, NoRIJCOSX): water,
+formaldehyde, HI (iodine's ECP), Br₂ and triplet O₂ (UHF) to 10⁻⁶ Eh and
+10⁻³ e·bohr. The density integrates to 10, 16 and 26 (HI less its 28 core)
+electrons. CHELPG differs from ORCA's by up to 0.05 e (formaldehyde's C 0.459
+against 0.413): the two programs' grids and radii.
+
+**The surface** is the GFN2 path's own, moved to `esp-surface.ts` (GFN2's
+output identical to nine decimals for water, formaldehyde and SF₆ before and
+after), fed HF's all-electron density, analytic density gradient and potential.
+
+**Time.** Benzene in Node, single-threaded: SCF 6.7 s, ESP-fitted charges
+1.1 s, density grid 1.9 s, normals 0.17 s, surface potential 1.9 s — 12.1 s
+in all; the SCF grows as the basis cubed. The estimate times one
+Coulomb-and-exchange build of the molecule's own basis (its overlap matrix as
+the density) and scales it: the whole run took 10–16 such builds for every
+main-group molecule above 100 basis functions, in Node and in the browser, so
+14. In the browser pane: Br₂ 5 s estimated / ~8 s with the engine's first
+load; benzene 24 / 25 s; phenol 34 / 41 s (before the move from 13 to 14).
+NiCl₄²⁻ (UHF, 103 functions) ran 114 s against 35 estimated: a
+transition-metal SCF takes far more iterations, so such a complex's estimate
+is tripled — one measurement, provisional. The browser ran about twice
+Node's time, but the estimate is measured in the same place, so it tracks.
+
+**In the app**: Br₂'s HF surface shows the σ-holes as blue caps, about
++15 kcal/mol by the hover near the tip and −4.8 in the belt (GFN2: −9.6 and
++6.6); water's HF dipole reads 2.12 D, ORCA's at this basis. The smoke test
+runs water's single point end to end.
