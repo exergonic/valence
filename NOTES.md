@@ -6177,3 +6177,47 @@ Node's time, but the estimate is measured in the same place, so it tracks.
 +15 kcal/mol by the hover near the tip and −4.8 in the belt (GFN2: −9.6 and
 +6.6); water's HF dipole reads 2.12 D, ORCA's at this basis. The smoke test
 runs water's single point end to end.
+
+## Turn a bond: the dihedral drive, and what a rigid twist shows (2026-11-11)
+
+Decided with the user the same day: in the Structure view; a rigid scan first
+(the relaxed one later, against xtb's `$scan`); double bonds turn freely; the
+turned structure is the one on screen in every view, labelled in the header,
+explained in the card.
+
+**The energies are xtb's** (`tests/references/xtb-torsion.json`): PubChem
+hexane turned rigidly about C1–C3 to 180, 120, 60 and 0°, and the ethene
+example about C=C to 0, 45 and 90°, agree with `xtb --gfn 2 --sp` to under
+1 µEh at every angle (the same sub-µEh offset as water's single point). One
+energy is a fresh calculator, about 12 ms for hexane in Node, so the 72-point
+scan takes about a second for molecules this size.
+
+**Ethene at 90°.** GFN2's rigid twist costs 88.3 kcal/mol, and the oracle
+agrees. Its HOMO–LUMO gap is zero there (xtb: 5 × 10⁻¹⁰ eV): the two carbon p
+orbitals are a degenerate e pair, and GFN2's Fermi smearing puts one electron
+in each. The triplet at the same geometry (`--uhf 2 --tblite --spinpol`) is
+78.1 kcal/mol above the planar singlet. Experiment's cis–trans barrier is
+about 65. So one determinant overstates the twisted π bond, and the panel says
+"the energy here runs high" whenever the single point on screen holds a
+fractional occupation. The scan's peaks at ±90° are cusps: the closed-shell
+solution meets its partner there. In the Delocalized view the 90° structure
+shows the e pair, both marked HOMO; the Localized view refuses it with its
+existing reason (a frontier level partly filled).
+
+**Ethane, staggered against eclipsed** (GFN2-optimised staggered start, in the
+app): eclipsed is 2.73 kcal/mol above (experiment about 2.9). The Lewis view's
+E(2) reads hyperconjugation off the screen: staggered has six anti-periplanar
+σ(C–H)→σ*(C–H) donations at 2.0 kcal/mol each, eclipsed twelve at 0.7.
+
+**Butane**: from GFN2's anti structure, dragged to about 100° and optimised from
+there, it settles at gauche, 67.7°, C₂, a Hessian-verified minimum; the bond
+stays chosen and the scan is redone from the new start.
+
+**The panel**: Measure and Turn a bond became one tool row, one tool at a time,
+off outside the Structure view and back with it. A drag on any atom beside the
+bond turns it (the side that stays turns the other way, the same relative
+turn); a first version took only the turning side, and a drag on the other side
+turned the view instead, which a user cannot know to avoid. The background
+single point now runs one at a time, and a request whose structure has left
+the screen before its turn is skipped, so a slider drag costs the engine only
+the angle it rests on.

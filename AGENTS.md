@@ -167,10 +167,25 @@ Made with the user; the reasons are in NOTES.md under the date.
   budget, as often as the user likes; no unlimited mode.
 - **The app opens on Structure** (2026-11-04): the atoms and bonds alone,
   element labels; VSEPR and the bonding models are views a click away. Its
-  panel holds what bears on the geometry itself — Measure, the spin and
-  Refine, Snap to point group — not Settings. Where a structure comes from
+  panel holds what bears on the geometry itself — its tools (Turn a bond,
+  Measure: one at a time, off outside the view and back with it), the spin
+  and Refine, Snap to point group — not Settings. Where a structure comes from
   is chosen before it is built: "Build locally with GFN2-xTB", which skips
   PubChem and CIR, sits under Build 3D (2026-11-09).
+- **Turn a bond** (2026-11-11): the Structure view's dihedral drive. A
+  clicked acyclic bond turns one side rigidly about its axis — the smaller
+  side; a ring bond, a bond to a terminal atom, or one whose neighbours are
+  in line is refused with the reason — by the slider, a click on the curve,
+  or a drag of any atom beside it. Double bonds turn too: the right result,
+  with what it means said. The turned structure is *the* structure on screen
+  in every view, never re-framed; the header says "Turned by hand — not a
+  minimum", and the card names each dihedral, from and to, and ΔE from the
+  structure the turning began from (GFN2 single points). "Optimise from
+  here" relaxes it; "Undo turns" puts the start back. The curve is a rigid
+  scan, 5° steps, each a fresh single point, run unasked at 15 s or less and
+  otherwise behind the button. A relaxed scan is for later, against xtb's
+  `$scan`. Where GFN2 shares electrons between frontier orbitals that have
+  met (a twisted π bond), the panel says the energy there runs high.
 - **The structure card; the views' fine print folded** (2026-11-09): what
   is known of the structure on screen, wherever it came from, is in the card
   its source chip opens under the header — source, charge, spin, how the run
@@ -263,7 +278,8 @@ Each module's header comment says what it does and why; this list says where.
   `esp-surface.ts` (the 0.001 au surface either engine's density gives),
   `worker-client.ts` (the two engines' worker plumbing),
   `mmff94-molecule.ts`, `parameter-warnings.ts`, `stereo-wedge.ts`,
-  `bond-integrity.ts`, `ring-pucker.ts`, `symmetrize.ts`
+  `bond-integrity.ts`, `ring-pucker.ts`, `symmetrize.ts`, `torsion.ts` (a
+  bond turned by hand)
 - `src/render/` — the Three.js layer, files named for what they draw:
   `bonds.ts`, `lobes.ts`, `hybrid-orbitals.ts` (VSEPR), `mo-lobes.ts` (MOs),
   `pi-systems.ts`, `atom-styles.ts`, `labels.ts`, `label-colors.ts`,
@@ -274,7 +290,7 @@ Each module's header comment says what it does and why; this list says where.
   `model-views.ts`, `controls.ts`, `jsme-panel.ts`, `sketcher-toolbar.ts`,
   `x-atom-labels.ts`, `periodic-table.ts`, `functional-groups.ts`,
   `mo-diagram.ts`, `thermo-panel.ts`, `thermo-readout.ts`, `hf-panel.ts`,
-  `long-runs.ts` (the 15 s gate both share), `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
+  `turn-panel.ts`, `long-runs.ts` (the 15 s gate they share), `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
   (`sdf-data.ts`, `mo-data.ts`), `theme.ts` (the three looks)
 - `src/utils/` — generic math, no chemistry: `vec3.ts`, `eigen.ts`,
   `march-tetrahedra.ts`
@@ -417,6 +433,11 @@ Deliberate; the evidence is in NOTES.md or the test named.
   header says where any computed centre leaves its VSEPR shape (an angle more
   than 30° from the AXₘEₙ ideal; small-ring centres skipped), and the
   structure card explains it, naming neither side right.
+- GFN2-xTB overstates a π bond twisted to 90°: its frontier orbitals meet
+  there, and one determinant cannot hold the two radicals; its triplet lies
+  lower, and experiment's barrier lower still; the oracle agrees
+  (`tests/torsion.test.ts`; NOTES.md, 2026-11-11). The turn panel says so
+  where it happens.
 - GFN2-xTB bends NaOH where experiment and GFN1 have it linear: an ionic
   contact's bend is flat, and a semiempirical model tips it; the oracle
   agrees (`tests/gfn2.test.ts`).
