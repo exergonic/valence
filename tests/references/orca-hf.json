@@ -1,0 +1,10 @@
+{
+ "source": "ORCA 6.1.1, HF/def2-SVP single points with NoRIJCOSX TightSCF (RHF; UHF for triplet O2), on the geometries named (tests/references/dft/<name>.xyz; Br2 as Valence builds it, CIR, 2.26 A along x). Dipoles are ORCA's 'Total Dipole Moment' in atomic units (e bohr) about the coordinate origin. Run 2026-11-11 on this machine; inputs and outputs in ~/orca_calcs/hf-oracle/.",
+ "molecules": {
+  "water": { "geometry": "water.xyz", "charge": 0, "multiplicity": 1, "energy": -75.960959346687, "dipole": [0.481350586, -0.350671029, 0.583427169] },
+  "formaldehyde": { "geometry": "formaldehyde.xyz", "charge": 0, "multiplicity": 1, "energy": -113.779148962809, "dipole": [1.074683727, 0.000000041, 0.000910213] },
+  "hydrogen-iodide": { "geometry": "hydrogen-iodide.xyz", "charge": 0, "multiplicity": 1, "energy": -297.231544573913, "dipole": [0.263364032, 0, 0] },
+  "br2": { "geometry": null, "charge": 0, "multiplicity": 1, "energy": -5144.184503023759, "dipole": [0, 0, 0] },
+  "dioxygen": { "geometry": "dioxygen.xyz", "charge": 0, "multiplicity": 3, "energy": -149.492945825042, "dipole": [0, 0, 0] }
+ }
+}

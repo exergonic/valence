@@ -50,6 +50,10 @@ export interface ChargeDistribution {
   densityOnGrid(grid: DensityGrid): Float32Array;
   densityAt(pointsBohr: number[]): number[];
   potentialAt(pointsBohr: number[]): number[];
+  /** The density's gradient at points, x, y, z per point (e/bohr⁴), when
+   *  the engine has it analytically: one evaluation per point in place of
+   *  six for the normals' central differences. */
+  densityGradientAt?(pointsBohr: number[]): number[];
 }
 
 export interface EspSoup {
@@ -92,21 +96,13 @@ export function densitySurface(atoms: Array<{ x: number; y: number; z: number }>
   }
   const n = points.length / 3;
 
-  // outward normals: down the density's gradient, by central differences
-  const h = DENSITY_GRADIENT_STEP_BOHR;
-  const probes: number[] = new Array(18 * n);
-  for (let u = 0; u < n; u++) {
-    for (let axis = 0; axis < 3; axis++) {
-      for (const [slot, sign] of [[0, 1], [1, -1]] as const) {
-        const col = 6 * u + 2 * axis + slot;
-        for (let c = 0; c < 3; c++) probes[3 * col + c] = points[3 * u + c] / ANGSTROM_PER_BOHR + (c === axis ? sign * h : 0);
-      }
-    }
-  }
-  const around = source.densityAt(probes);
+  // outward normals: down the density's gradient — the engine's own, or by
+  // central differences
+  const gradient = source.densityGradientAt ? source.densityGradientAt(points.map((x) => x / ANGSTROM_PER_BOHR))
+    : centralDifferences(points, source);
   const uniqueNormals: number[] = [];
   for (let u = 0; u < n; u++) {
-    const g = [0, 1, 2].map((axis) => around[6 * u + 2 * axis] - around[6 * u + 2 * axis + 1]);
+    const g = [0, 1, 2].map((axis) => gradient[3 * u + axis]);
     const length = Math.hypot(g[0], g[1], g[2]) || 1;
     uniqueNormals.push(-g[0] / length, -g[1] / length, -g[2] / length);
   }
@@ -123,6 +119,28 @@ export function densitySurface(atoms: Array<{ x: number; y: number; z: number }>
   }
   windAlongNormals(sheets.positions, normals, potentials);
   return { positions: sheets.positions, normals, potentials, vertexCount };
+}
+
+/** The density's gradient at points (Å) by central differences, x, y, z per
+ *  point — up to a common factor, which the normals do not see. */
+function centralDifferences(points: number[], source: ChargeDistribution): number[] {
+  const n = points.length / 3;
+  const h = DENSITY_GRADIENT_STEP_BOHR;
+  const probes: number[] = new Array(18 * n);
+  for (let u = 0; u < n; u++) {
+    for (let axis = 0; axis < 3; axis++) {
+      for (const [slot, sign] of [[0, 1], [1, -1]] as const) {
+        const col = 6 * u + 2 * axis + slot;
+        for (let c = 0; c < 3; c++) probes[3 * col + c] = points[3 * u + c] / ANGSTROM_PER_BOHR + (c === axis ? sign * h : 0);
+      }
+    }
+  }
+  const around = source.densityAt(probes);
+  const gradient: number[] = new Array(3 * n);
+  for (let u = 0; u < n; u++) {
+    for (let axis = 0; axis < 3; axis++) gradient[3 * u + axis] = around[6 * u + 2 * axis] - around[6 * u + 2 * axis + 1];
+  }
+  return gradient;
 }
 
 /** The marcher winds each triangle by the normal it is handed, and here it is

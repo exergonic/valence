@@ -1,0 +1,66 @@
+--- a/src/occjs.cpp	2026-10-23 20:02:22.706411700 -0400
++++ b/src/occjs.cpp	2026-11-11 18:30:15.645436100 -0500
+@@ -34,12 +34,12 @@
+     // 4.5 MB) for code this app never calls. Uncomment a line to bring that
+     // capability back; nothing else needs to change.
+     register_core_bindings();      // Molecule, Mat3N, IVec, logging, threading
+-    register_xtb_bindings();       // GFN2-xTB — the geometry engine
++    // register_xtb_bindings();       // GFN2-xTB — the geometry engine
+     // register_solvent_bindings(); // R2 DROPPED - COSMO-RS driver anchors ~12MB, see README
+-    // register_qm_bindings();
++    register_qm_bindings();
+     // register_correlation_bindings();
+     // register_dft_bindings();
+-    register_opt_bindings();       // Berny internal-coordinate optimiser (measured for Valence)
++    // register_opt_bindings();       // Berny internal-coordinate optimiser (measured for Valence)
+     // register_isosurface_bindings();
+     // register_cube_bindings();
+     // register_crystal_bindings();
+--- a/src/CMakeLists.txt	2026-10-23 20:02:22.702199000 -0400
++++ b/src/CMakeLists.txt	2026-11-11 18:30:15.694009900 -0500
+@@ -88,8 +88,7 @@
+ 
+ set(JS_BINDING_SOURCES
+     "${CMAKE_CURRENT_SOURCE_DIR}/js/core_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/xtb_bindings.cpp"
+-    "${CMAKE_CURRENT_SOURCE_DIR}/js/opt_bindings.cpp"
++    "${CMAKE_CURRENT_SOURCE_DIR}/js/qm_bindings.cpp"
+     "${CMAKE_CURRENT_SOURCE_DIR}/occjs.cpp"
+ )
+ 
+--- a/src/js/qm_bindings.cpp	2026-10-23 20:02:14.263532800 -0400
++++ b/src/js/qm_bindings.cpp	2026-11-11 18:30:14.583584300 -0500
+@@ -243,6 +243,33 @@
+             return occ::density::evaluate_density_on_grid(wfn, points,
+                                                           derivatives);
+           }))
++      // Valence: the exact potential of the wavefunction's charge
++      // distribution at points (bohr), in e/bohr -- each nucleus less any
++      // ECP core, plus the electrons.
++      .function("electricPotential",
++                optional_override([](const Wavefunction &wfn,
++                                     const occ::Mat3N &points) {
++                  return wfn.electric_potential(points);
++                }))
++      // Valence: the dipole of the density about the origin (e bohr). Each
++      // nucleus counts at Z less its ECP core electrons, which the density
++      // lacks; compute_multipoles<1> would count the full Z.
++      .function("dipoleMoment", optional_override([](const Wavefunction &wfn) {
++                  HartreeFock hf(wfn.basis);
++                  auto electrons = hf.compute_electronic_multipoles<1>(wfn.mo);
++                  Vec dipole(3);
++                  for (int c = 0; c < 3; c++)
++                    dipole(c) = electrons.components[1 + c];
++                  const auto &ecp = wfn.basis.ecp_electrons();
++                  for (size_t i = 0; i < wfn.atoms.size(); i++) {
++                    const auto &a = wfn.atoms[i];
++                    double z = a.atomic_number - ecp[i];
++                    dipole(0) += z * a.x;
++                    dipole(1) += z * a.y;
++                    dipole(2) += z * a.z;
++                  }
++                  return dipole;
++                }))
+       .function("chelpgCharges", optional_override([](const Wavefunction &wfn) {
+                   return chelpg_charges(wfn);
+                 }))
