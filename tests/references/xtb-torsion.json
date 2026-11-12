@@ -1,0 +1,7 @@
+{
+  "about": "xtb 6.7.1 (lenovo), `xtb <file> --gfn 2 --sp`, at rigidly turned geometries made by src/geometry/torsion.ts: PubChem hexane (CID 8058) turned about C1–C3 (the C2–C1–C3–C5 dihedral), the app's ethene example about C=C (the cis H–C=C–H dihedral). Total energies, hartree. ethene_90_triplet: `--uhf 2 --tblite --spinpol`. 2026-11-11.",
+  "hexane": { "180": -19.993385008358, "120": -19.989186264963, "60": -19.991123699650, "0": -19.980092244255 },
+  "ethene": { "0": -6.271099156118, "45": -6.233909170342, "90": -6.130331352082 },
+  "ethene_90_triplet": -6.146619209044,
+  "ethene_90_gap_eV": 0.000000000471
+}

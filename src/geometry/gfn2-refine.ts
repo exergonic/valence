@@ -102,6 +102,13 @@ export function gfn2PropertiesAt(molecule: Molecule): Promise<Gfn2Properties | n
   return ask({ task: 'properties', molecule });
 }
 
+/** GFN2-xTB's energy at a structure exactly as displayed, hartree — a single
+ *  point and nothing else (the worker's `energyAt`); null when its SCC does not
+ *  converge. */
+export function gfn2EnergyAt(molecule: Molecule): Promise<number | null> {
+  return ask({ task: 'energy', molecule });
+}
+
 /**
  * One GFN2 orbital's isosurface, built in the worker from the calculator of
  * the properties run `request.key` names — the field and its gradient need the

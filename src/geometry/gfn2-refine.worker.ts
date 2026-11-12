@@ -885,6 +885,29 @@ export async function hessianSeconds(
   }
 }
 
+/**
+ * GFN2-xTB's energy at a structure exactly as given, hartree, and nothing
+ * else: the dihedral drive's rigid scan asks for one per angle. A fresh
+ * calculator each time, so the energy at an angle never depends on the angles
+ * visited before it (a twisted π bond has more than one SCC solution, and a
+ * reused density could follow the wrong one). Null when the SCC does not
+ * converge.
+ */
+export async function energyAt(molecule: Molecule, locateFile?: (path: string) => string): Promise<number | null> {
+  if (molecule.atoms.length === 0) return null;
+  const M = await (locateFile ? loadGfn2(locateFile) : loadGfn2());
+  const calc = M.XtbCalculator.fromMolecule(occMolecule(M, molecule.atoms, molecule.atoms.flatMap((a) => [a.x, a.y, a.z])));
+  try {
+    const multiplicity = molecule.multiplicity ?? lowestMultiplicity(molecule.atoms);
+    calc.charge = molecule.atoms.reduce((sum, a) => sum + (a.charge ?? 0), 0);
+    calc.numUnpairedElectrons = multiplicity - 1;
+    const energy = calc.singlePointEnergy();
+    return Number.isFinite(energy) && calc.lastResult()?.converged !== false ? energy : null;
+  } finally {
+    release(calc);
+  }
+}
+
 /** Releasing an engine handle is best-effort. */
 function release(calc: { delete?: () => void }): void {
   try {
@@ -1526,7 +1549,7 @@ function freeAtomDensity(M: any, element: string): RadialDensity | null {
   return result;
 }
 
-type Task = 'optimise' | 'vibrations' | 'hessian-seconds' | 'properties' | 'surface' | 'esp' | 'charges' | 'load';
+type Task = 'optimise' | 'vibrations' | 'hessian-seconds' | 'properties' | 'energy' | 'surface' | 'esp' | 'charges' | 'load';
 
 async function run(task: Task, id: number, molecule?: Molecule, surface?: OrbitalSurfaceRequest, key?: number) {
   switch (task) {
@@ -1534,6 +1557,7 @@ async function run(task: Task, id: number, molecule?: Molecule, surface?: Orbita
     // the first optimisation does not wait on the download
     case 'load': await loadGfn2(); return true;
     case 'properties': return propertiesAt(molecule!);
+    case 'energy': return energyAt(molecule!);
     case 'surface': return orbitalSurface(surface!);
     case 'esp': return espSurface(key!);
     case 'charges': return chargeSets(key!);
