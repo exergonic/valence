@@ -45,6 +45,20 @@ export function setupControls(ctx: SceneContext): { measure: MeasureTool } {
   settingsBtn.addEventListener('click', () => setSettingsOpen(settingsDrawer.classList.contains('hidden')));
   document.getElementById('settings-close')!.addEventListener('click', () => setSettingsOpen(false));
 
+  // ── Projector mode ── one click 140%, the next back; remembered, and
+  // applied before the first paint by index.html's head script.
+  const projectorBtn = document.getElementById('projector-btn')!;
+  projectorBtn.setAttribute('aria-pressed', String(document.documentElement.classList.contains('projector')));
+  projectorBtn.addEventListener('click', () => {
+    const on = document.documentElement.classList.toggle('projector');
+    projectorBtn.setAttribute('aria-pressed', String(on));
+    try {
+      localStorage.setItem('valence-projector', on ? '1' : '0');
+    } catch {
+      // private mode or no storage: the mode just won't be remembered
+    }
+  });
+
   // Show Atoms & Bonds
   const molToggle = document.querySelector<HTMLInputElement>('#ctrl-show-mol')!;
   ctx.moleculeGroup.visible = molToggle.checked;

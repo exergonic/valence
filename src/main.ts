@@ -142,6 +142,9 @@ function setupKeyboardShortcuts() {
     } else if (e.key === 'b' || e.key === 'B') {
       // Dock/undock the sketcher panel
       toggleJsmeCollapsed();
+    } else if (e.key === 'p' || e.key === 'P') {
+      // Projector mode on/off
+      document.getElementById('projector-btn')?.click();
     } else if (e.key === 'Escape') {
       // Close any open dialogs
       document.getElementById('cite-dialog')?.classList.add('hidden');

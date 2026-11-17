@@ -1331,7 +1331,27 @@ button.ledger-row:hover { background: var(--hover); }
   backdrop-filter: blur(6px);
 }
 .canvas-corner-btn:hover,
-.canvas-corner-btn.active { color: var(--accent); border-color: var(--accent-soft-border); }
+.canvas-corner-btn.active,
+.canvas-corner-btn[aria-pressed="true"] { color: var(--accent); border-color: var(--accent-soft-border); }
+
+/* the projector toggle, just under the settings button */
+#projector-btn {
+  top: 58px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Projector mode: what a class reads from across a room — the inspector, the
+   molecule header and its card, the view tabs, the tooltip — at 140%, the
+   browser zoom it replaces. The sketcher and the scene keep their size. The
+   stylesheet is in px, so `zoom` scales each panel whole rather than a root
+   font size. The tooltip is placed at the pointer in px, which a zoom would
+   scale too, so it grows by its font instead. */
+html.projector #inspector,
+html.projector #molecule-info,
+html.projector #structure-card,
+html.projector .model-views-bar { zoom: 1.4; }
+html.projector #tooltip { font-size: 17px; padding: 6px 12px; }
 
 /* Examples, at the top of the sketcher where a newcomer looks first */
 .brand-examples {
