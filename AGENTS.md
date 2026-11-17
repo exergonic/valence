@@ -221,6 +221,11 @@ Made with the user; the reasons are in NOTES.md under the date.
   general-chemistry student needs; more is there the deeper one digs —
   behind a click, a fold, a hover — and every layer is exact, never a
   simplification that the next layer contradicts.
+- **Projector mode** (2026-11-16): the A+ button under Settings (or P), a
+  toggle, remembered — the one global setting outside the drawer, so a
+  lesson needs no detour. It enlarges what a class reads (the inspector, the
+  molecule header and its card, the view tabs, the tooltip) to **140%**; the
+  sketcher and the scene keep their size.
 - **A carbene is two dots** (2026-11-04): the radical tool's second click,
   "C••". The dots say nothing of the spin: a singlet until a triplet is
   chosen beside Refine.

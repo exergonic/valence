@@ -6221,3 +6221,19 @@ turned the view instead, which a user cannot know to avoid. The background
 single point now runs one at a time, and a request whose structure has left
 the screen before its turn is skipped, so a slider drag costs the engine only
 the angle it rests on.
+## Projector mode: the panels a class reads, at 140% (2026-11-16)
+
+With a student across the table, the Thermo view's C_p partition was too small
+to read. Browser zoom at 140% fixed that but enlarged the sketcher too and took
+room from the scene. molar-mass solved the same problem with one root
+`font-size` rule, which works only because its stylesheet is in `rem`;
+Valence's is in px throughout (631 px lengths, no rem at the time), so a root
+font size does nothing here and a conversion would touch every rule. CSS
+`zoom` scales each chosen panel whole instead: the inspector, the molecule
+header, the structure card and the view-tab bar (not its full-width strip, whose
+px offsets would scale too). The tooltip is `position: fixed` at the pointer in
+px, and a zoom would scale those offsets, so it grows by its font. Checked in
+the app: the inspector is 420 px on and 300 off; clicks in the zoomed ledger,
+the card's placement under the header and the tooltip at the pointer all land
+where they should. The button sits under Settings rather than in the drawer,
+the user's choice: a lesson should not need a detour to see better.
