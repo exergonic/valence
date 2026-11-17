@@ -45,7 +45,6 @@ function setupSplitter() {
     if (!dragging) return;
     const w = Math.max(280, Math.min(e.clientX, window.innerWidth - 200));
     jsmePanel.style.width = w + 'px';
-    window.dispatchEvent(new Event('resize'));
     if (window.jsmeApplet) window.jsmeApplet.repaint();
   });
 

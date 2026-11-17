@@ -151,10 +151,9 @@ export function setupModelViews(ctx: SceneContext, moPanel: MoPanel, thermoPanel
   }
 
   // The inspector folds to a rail on the right edge (the O key), the mirror of
-  // the sketcher's Build rail; the scene takes the room, so it is told.
+  // the sketcher's Build rail; the scene takes the room on its own.
   const setFolded = (folded: boolean) => {
     inspector.classList.toggle('collapsed', folded);
-    window.dispatchEvent(new Event('resize'));
   };
   document.getElementById('inspector-collapse')!.addEventListener('click', () => setFolded(true));
   document.getElementById('inspector-rail')!.addEventListener('click', () => setFolded(false));

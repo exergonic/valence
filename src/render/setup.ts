@@ -472,19 +472,25 @@ export function initScene(container: HTMLElement): SceneContext {
   for (const type of INPUT_EVENTS) document.addEventListener(type, requestRender, { capture: true, passive: true });
   document.addEventListener('visibilitychange', requestRender);
 
+  // The canvas follows its container's box, not the window: docking the
+  // sketcher or the inspector, or dragging the splitter, resizes the scene
+  // with the window unchanged, and a canvas left at its old size leaves a
+  // dead strip that the picking (sized to the container) no longer matches.
   const handleResize = () => {
     const w = container.clientWidth;
     const h = container.clientHeight;
+    if (w === 0 || h === 0) return;
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
     // resizing clears the canvas, so the picture must be drawn again
     renderer.setSize(w, h);
     requestRender();
   };
-  window.addEventListener('resize', handleResize);
+  const containerResize = new ResizeObserver(handleResize);
+  containerResize.observe(container);
 
   const teardown = () => {
-    window.removeEventListener('resize', handleResize);
+    containerResize.disconnect();
     for (const type of INPUT_EVENTS) document.removeEventListener(type, requestRender, { capture: true });
     document.removeEventListener('visibilitychange', requestRender);
   };
