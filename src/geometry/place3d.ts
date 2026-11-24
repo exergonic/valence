@@ -6,6 +6,8 @@ import { electronDomainCounts } from '../chem/vsepr/assign-orbitals';
 import { dElectronCount } from '../chem/d-electron-count';
 import { getCovalentRadius } from '../chem/radii';
 import { newBondLimit } from './bond-integrity';
+import { ringSystems, drawingFits, placeFromBondGraph } from './bridged-rings';
+import { getLonePairDirections } from '../chem/vsepr/orient-lone-pairs';
 
 /**
  * The starting length of a bond (Å): the sum of the two atoms' single-bond
@@ -332,6 +334,20 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     placed.add(i);
   });
 
+  // A bridged ring system has no flat drawing — one bridge crosses the ring
+  // the others make — so a system whose drawing is not a shape it can have
+  // is placed from its bond graph instead (bridged-rings.ts).
+  const ringBondList = [...rings].map((key) => key.split('-').map(Number) as [number, number]);
+  const fromBondGraph = new Set<number>();
+  for (const system of ringSystems(n, ringBondList)) {
+    if (drawingFits(molecule, system, ringBondList, ringScale)) continue;
+    const cage = placeFromBondGraph(molecule, system, ringBondList, bondLength, ringScale);
+    system.forEach((atom, k) => {
+      pos[atom] = cage[k];
+      fromBondGraph.add(atom);
+    });
+  }
+
   // Ring H placement: the vector matching cannot know the ring plane,
   // so a flat ring's leftover "equatorial" vectors point INTO the ring
   // and adjacent H's collide (0.62 Å on cyclooctane). Place ring H's
@@ -346,6 +362,7 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   // then tore to 1.85 Å from its neighbour (2026-10-23).
   if (ringAtoms.size > 0) {
     for (const i of ringAtoms) {
+      if (fromBondGraph.has(i)) continue;
       const ringNbs = adj[i].filter((nb) => ringAtoms.has(nb));
       if (ringNbs.length !== 2) continue;
       const hNbs = adj[i].filter((nb) => molecule.atoms[nb].element === 'H' && !placed.has(nb));
@@ -389,6 +406,28 @@ export function place3D(molecule: Molecule): [number, number, number][] {
     }
   }
 
+  // A bridged system's atoms already sit where their bonds put them in 3D,
+  // so what each carries goes in the directions its ring bonds leave open —
+  // the slots a lone pair would take — heavy atoms first. The flat ring's
+  // rule above (one axial, one outward) assumes a ring plane, and a cage
+  // atom has none. An atom with more to carry than open slots is left to the
+  // walk.
+  const grownFromBondGraph: number[] = [];
+  for (const i of fromBondGraph) {
+    const unplaced = adj[i].filter((nb) => !placed.has(nb));
+    if (unplaced.length === 0) continue;
+    const bonds = adj[i].filter((nb) => placed.has(nb)).map((nb) => vecSub(pos[nb], pos[i]));
+    const open = getLonePairDirections(bonds, Math.max(domains[i], adj[i].length));
+    if (open.length < unplaced.length) continue;
+    const heavy = unplaced.filter((nb) => molecule.atoms[nb].element !== 'H');
+    [...heavy, ...unplaced.filter((nb) => molecule.atoms[nb].element === 'H')].forEach((nb, k) => {
+      const length = bondLength(i, nb);
+      pos[nb] = [pos[i][0] + length * open[k][0], pos[i][1] + length * open[k][1], pos[i][2] + length * open[k][2]];
+      placed.add(nb);
+    });
+    grownFromBondGraph.push(...heavy);
+  }
+
   // Root the walk on a ring atom when the molecule has a ring: the ring was
   // just seeded from the drawn coordinates, and rooting inside it keeps the
   // rest of the walk in that same frame. Rooting on a substituent instead
@@ -414,7 +453,7 @@ export function place3D(molecule: Molecule): [number, number, number][] {
 
   placed.add(root);
 
-  const queue = [root, ...ringAtoms];
+  const queue = [root, ...ringAtoms, ...grownFromBondGraph];
   while (queue.length > 0) {
     const curr = queue.shift()!;
     const coordinationNumber = adj[curr].length;
