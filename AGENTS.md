@@ -165,15 +165,17 @@ Made with the user; the reasons are in NOTES.md under the date.
   **Rings are the exception** (2026-11-24): a ring's bonds cannot turn
   freely, and a flat or twisted ring is not the shape a chemist expects —
   a cyclohexane starts as a chair. The wedges still fix each centre's
-  configuration; the ring's conformation is chosen for it. Acyclic bonds
-  keep the rule above.
+  configuration; the ring's conformation is chosen for it — a six-membered
+  ring on its own in the chair with the fewer heavy atoms axial, each group
+  weighed by its heavy atoms (the textbook rule that bulky groups go
+  equatorial; `tests/ring-flip.test.ts`). Acyclic bonds keep the rule above.
 - **Keep optimising** (2026-10-24): a free run that stops short offers it in
   the header — another run from the best structure reached, with a fresh
   budget, as often as the user likes; no unlimited mode.
 - **The app opens on Structure** (2026-11-04): the atoms and bonds alone,
   element labels; VSEPR and the bonding models are views a click away. Its
   panel holds what bears on the geometry itself — its tools (Turn a bond,
-  Measure: one at a time, off outside the view and back with it), the spin
+  Flip a ring, Measure: one at a time, off outside the view and back with it), the spin
   and Refine, Snap to point group — not Settings. Where a structure comes from
   is chosen before it is built: "Build locally with GFN2-xTB", which skips
   PubChem and CIR, sits under Build 3D (2026-11-09).
@@ -191,6 +193,18 @@ Made with the user; the reasons are in NOTES.md under the date.
   otherwise behind the button. A relaxed scan is for later, against xtb's
   `$scan`. Where GFN2 shares electrons between frontier orbitals that have
   met (a twisted π bond), the panel says the energy there runs high.
+- **Flip a ring** (2026-11-24): the Structure view's chair flip, for the
+  axial/equatorial relationships of cis and trans cyclohexanes. A click on a
+  ring atom optimises the ring's two chairs with GFN2-xTB — the one on screen
+  and the other, every group kept on its own face — and the panel lists both,
+  each group axial or equatorial, with each chair's energy and the chair on
+  screen's ΔE; the button, or a click on a chair, shows it, the camera kept.
+  Both are minima, shown as any structure is; one that is not the molecule
+  drawn, not a chair, or not the other chair is refused with the reason, and
+  so are a fused, bridged, spiro or unsaturated ring. A ring carrying OH
+  groups gets a note: GFN2-xTB puts a sugar's chairs far too close. The
+  Labels option "Axial / equatorial" marks every group on a ring in a chair,
+  ax or eq, on the atom bonded to the ring.
 - **The structure card; the views' fine print folded** (2026-11-09): what
   is known of the structure on screen, wherever it came from, is in the card
   its source chip opens under the header — source, charge, spin, how the run
@@ -290,7 +304,8 @@ Each module's header comment says what it does and why; this list says where.
   `worker-client.ts` (the two engines' worker plumbing),
   `mmff94-molecule.ts`, `parameter-warnings.ts`, `stereo-wedge.ts`,
   `bond-integrity.ts`, `ring-pucker.ts`, `symmetrize.ts`, `torsion.ts` (a
-  bond turned by hand)
+  bond turned by hand), `ring-flip.ts` (a chair flipped by hand, and the
+  chair a build starts in)
 - `src/render/` — the Three.js layer, files named for what they draw:
   `bonds.ts`, `lobes.ts`, `hybrid-orbitals.ts` (VSEPR), `mo-lobes.ts` (MOs),
   `pi-systems.ts`, `atom-styles.ts`, `labels.ts`, `label-colors.ts`,
@@ -301,7 +316,7 @@ Each module's header comment says what it does and why; this list says where.
   `model-views.ts`, `controls.ts`, `jsme-panel.ts`, `sketcher-toolbar.ts`,
   `x-atom-labels.ts`, `periodic-table.ts`, `functional-groups.ts`,
   `mo-diagram.ts`, `thermo-panel.ts`, `thermo-readout.ts`, `hf-panel.ts`,
-  `turn-panel.ts`, `long-runs.ts` (the 15 s gate they share), `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
+  `turn-panel.ts`, `flip-panel.ts`, `long-runs.ts` (the 15 s gate they share), `tooltip.ts`, `context-menu.ts`, `examples.ts`, the export
   (`sdf-data.ts`, `mo-data.ts`), `theme.ts` (the three looks)
 - `src/utils/` — generic math, no chemistry: `vec3.ts`, `eigen.ts`,
   `march-tetrahedra.ts`
@@ -459,6 +474,13 @@ Deliberate; the evidence is in NOTES.md or the test named.
 - GFN2-xTB bends NaOH where experiment and GFN1 have it linear: an ionic
   contact's bend is flat, and a semiempirical model tips it; the oracle
   agrees (`tests/gfn2.test.ts`).
+- GFN2-xTB puts a sugar's two chairs far too close: at the app's own
+  β-glucose minima it has the all-axial chair level with the all-equatorial
+  one, or below it, where DFT at the same geometries keeps the textbook order
+  by several kcal/mol (NOTES.md, 2026-11-24). For alkyl cyclohexanes its ΔE
+  between chairs runs a little under experiment's A-values, in their order
+  (`tests/ring-flip.test.ts`). The flip panel says so for a ring with OH
+  groups.
 - GFN2-xTB reverses Br₂'s quadrupole along the bond, so its ESP has no
   σ-holes — negative tips, a positive belt, where DFT has the reverse; the
   oracle agrees (`tests/gfn2.test.ts`; NOTES.md, 2026-11-10). On the methyl

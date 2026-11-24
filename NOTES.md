@@ -6363,3 +6363,62 @@ Not yet measured: where today's embedder lands substituted cyclohexanes
 (which chair, or a twist-boat), cis-decalin, the glucose anomers and endo
 norbornene-carbaldehyde, against xtb reference minima — the benchmark any
 OpenChemLib ring start has to win.
+
+## Chairs: the one a build starts in, and flipping to the other (2026-11-24)
+
+Asked for by the user, whose ring lessons are mostly polysubstituted
+cyclohexanes, cis and trans, shown as proper chairs.
+
+**Where builds landed before.** Measured on JSME's own wedged drawings, the
+local pipeline: every start and every result was already a chair — the
+embedder's alternating ±0.25 Å pucker makes one — but which chair was
+whatever the pucker gave. trans-1,2-Dimethylcyclohexane came out diaxial,
+1.97 kcal/mol above its diequatorial chair; menthol started all-axial and
+GFN2 found no geometry from there; cis-1,3-dimethylcyclohexane started
+1,3-diaxial, its methyl carbons close enough that GFN2 bonded them (C1–C7
+1.53 Å), and the app showed the unoptimised start. A ring on its own now
+starts in the chair with fewer heavy atoms axial, each group weighed by its
+heavy atoms (tert-butyl four, methyl or OH one); every sketch in the set then
+builds with GFN2 in 1.4 s or less, in the textbook chair.
+
+**The flip.** The ring reflected through its mean plane turns its pucker
+over; each substituent then takes the slot on its own face of the new chair,
+its group carried rigidly, so every bond length and configuration is kept
+(`tests/ring-flip.test.ts`). Two things learned on the way: assigning each
+substituent a slot by the face its bond points to sent both H's of a CH₂ to
+one slot when the embedder had built the equatorial H level with the ring
+(two H's on one point); and reading axial/equatorial by each bond's angle to
+the ring's normal misread the embedder's H's, which sit up to 33° off ideal.
+Both are now read from the two slots the ring bonds leave, the upper
+substituent in the upper slot.
+
+A wedge's swap left cis-1,2-dimethylcyclohexane's methyl with an H 1.46 Å from
+ring C6 (3.38 Å drawn without wedges): the swap turns the branch rigidly and
+leaves its rotor where that lands. The clash-turning pass now runs again after
+the wedges; a rigid turn about an acyclic bond cannot change a configuration.
+
+**ΔE between the chairs**, the other chair less the textbook one, kcal/mol;
+the app's GFN2 against xtb 6.7.1 re-optimising each chair from the app's
+(`--ohess vtight`, every one a minimum, no imaginary mode):
+
+| | app | xtb | experiment, roughly |
+|---|---|---|---|
+| methylcyclohexane | 1.50 | 1.51 | 1.74 |
+| trans-1,2-dimethyl, aa − ee | 1.98 | — | ~2.6 |
+| cis-1,3-dimethyl, aa − ee | 4.85 | 4.85 | ~5.4 |
+| trans-1,4-dimethyl, aa − ee | 2.99 | 3.00 | ~3.4 |
+| cis-4-tert-butylcyclohexanol | 4.35 | — | ~4 |
+| menthol, all-axial | 3.72 | — | — |
+| cis-1,2 / trans-1,3 / cis-1,4 | ≈ 0 | — | 0 |
+
+**Sugars.** GFN2's β-glucose chairs depend on the OH rotamers it lands in:
+all-axial ¹C₄ 1.4 kcal/mol below ⁴C₁ in one run, 0.03 above in another, 2.7
+below from PubChem's conformer. ωB97X-D3/def2-TZVP single points at the app's
+two minima (the 0.03 pair; `~/orca_calcs/glucose-chairs/`) put ⁴C₁ 4.33
+kcal/mol below ¹C₄. So GFN2 understates a sugar's chair preference badly; the
+flip panel says so for any ring carrying OH groups, and the textbook ⁴C₁ is
+what a build starts in, by the heavy-atom rule, whatever GFN2's ΔE.
+
+**The labels** were first drawn at the ring–substituent bond's midpoint, as
+the bond orders are; in a small pane they were specks half-hidden between
+atoms. They sit on the substituent atom now, where the element symbol would.
