@@ -6422,3 +6422,33 @@ what a build starts in, by the heavy-atom rule, whatever GFN2's ΔE.
 **The labels** were first drawn at the ring–substituent bond's midpoint, as
 the bond orders are; in a small pane they were specks half-hidden between
 atoms. They sit on the substituent atom now, where the element symbol would.
+
+## The ωB97X-D spec draft, checked (2026-11-24)
+
+Measured for the user's `wb97xd-spec-draft.md` (runs and README in
+`~/orca_calcs/dft-spec-checks/`). ORCA 6.1.1, def2-SVP, single points:
+
+| def2-SVP | β-glucose ¹C₄ − ⁴C₁, kcal/mol | water μ, D | F₂ De at 1.412 Å, kcal/mol |
+|---|---|---|---|
+| HF | +5.50 | 2.14 | −38.5, unbound |
+| B3LYP-D3(BJ) | +1.55 | — | — |
+| ωB97X | +1.97 | — | — |
+| ωB97X-D3 | +1.56 | 2.03 | +37.0 |
+| ωB97M-V | +1.17 | 1.99 | +39.6 |
+| ωB97X-D3/def2-TZVP | +4.33 | 2.09 (2026-11-11) | — |
+| GFN2-xTB | +0.03 | 2.25 | — |
+| experiment | — | 1.855 | ≈38.2 |
+
+- The glucose chairs (at the app's two GFN2 minima): every method keeps the
+  textbook order that GFN2 loses, HF/def2-SVP included — the engine Valence
+  already ships. At def2-SVP the hybrids give a third of their own def2-TZVP
+  gap; the basis moves this number more than the functional does.
+- The water dipole misses experiment by 0.14–0.29 D for every method at
+  def2-SVP: the basis, not the functional, sets that floor.
+- F₂ is the clean pass/fail: HF/def2-SVP unbound by 38.5 kcal/mol, the
+  hybrids bound within 2 kcal/mol of experiment's De, at a fixed geometry.
+
+OCC (the 0.9.6 tree): range-separated hybrids (ωB97X, ωB97M-V) and VV10 are
+in; ωB97X's damping parameters are in its DFT-D3(BJ) and D4 tables, the
+dispersion run by the command-line driver but not by the JS bindings. The
+2008 ωB97X-D (Chai–Head-Gordon's own dispersion) is not in OCC.
