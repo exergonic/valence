@@ -13,12 +13,14 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+# Two jobs, as GitHub's own Pages workflows have it: the deploy looks the
+# artifact up by name, and GitHub can take a moment to list one just uploaded.
+# In one job the lookup came 0.23 s after the upload finalized and found
+# nothing (2026-11-24); a second job starts seconds later, and a failed deploy
+# can be re-run alone.
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v5
       - uses: oven-sh/setup-bun@v2
@@ -32,5 +34,13 @@ jobs:
       - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
       - id: deployment
         uses: actions/deploy-pages@v5
