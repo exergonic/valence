@@ -6287,3 +6287,51 @@ while the other ring keeps the flat seed, so the bond between them starts at
 whatever length that leaves: 2-phenylnorbornane's starts at 1.77 Å (the guard's
 limit 1.98), and GFN2 converges to the molecule drawn. Larger mismatches are
 possible in principle; none seen.
+
+## The new MolView's 3D builder, measured against the embedder (2026-11-24)
+
+The user saw app.molview.com build norbornene the moment it was drawn. The
+classic molview.org (github.com/molview/molview) builds nothing: its 2D→3D is a
+PubChem CID → 3D SDF lookup with CIR as fallback, Valence's steps 3–4. The new
+app (its own sketcher, Mol* viewer, RDKit.js only for 2D Clean) builds offline
+in a worker with openchemlib-js 9.25.1: `ConformerGenerator(seed 0)`,
+`initializeConformers(mol, {strategy: LIKELY_SYSTEMATIC})`, the first
+conformer, then `ForceFieldMMFF94(…, "MMFF94").minimise()` with any error
+swallowed. Its data, embedded: bond lengths and a torsion library (preferred
+angles, frequencies, ranges) from the Crystallography Open Database, and the
+MMFF94/94s tables. An auto-resolve toggle rebuilds on every edit. Nothing is
+validated: bicyclo[1.1.1]pentane came out with two of C3's hydrogens on the
+same point, and PCl₅ returned in 6 ms, MMFF94 having nothing for P(V).
+
+Both starts, for 27 molecules, through Valence's own GFN2 (Berny, in the app;
+Valence's from JSME's drawing, OCL's from the SMILES; steps, and the GFN2
+energy of OCL's result less Valence's):
+
+| molecule | Valence start | OCL + MMFF94 start | ΔE kcal/mol |
+|---|---|---|---|
+| the 14 bridged sketches (2026-11-23) | 5–12 steps | 4–7 steps | 0 (tropine −0.5) |
+| bicyclo[1.1.1]pentane | 7 | broken start, not converged, set aside | — |
+| cyclohexane | 12 | 5 | 0 |
+| cyclooctane | 14 | 4 | −0.07 |
+| cyclododecane | 34 (4.1 s) | 4 (0.6 s) | −0.21 |
+| trans-decalin | 12 | 4 | 0 |
+| β-D-glucose | 24 | 7 | +4.9 |
+| hexan-2-amine | 6 | 6 | −0.5 |
+| 1,1-diphenylethane | 19 | 7 | 0 |
+| ibuprofen | 22 | 8 | −0.7 |
+| alanine dipeptide (Ac-Ala-NHMe) | 22 | 13 | +1.5 |
+| biphenyl | 12 | 14 | 0 |
+| PCl₅ | 9 | 9 | 0 |
+| SF₄ | 7 | 22 | 0 |
+| acetate | 8 | 19 | 0 |
+
+OCL's generation took 45–970 ms a molecule (norbornane 0.46 s), so for small
+molecules the wall time is a wash. What its crystal-structure knowledge buys is
+the start: rings and chains reach GFN2's minimum in 2–8× fewer steps, the
+flat-seeded rings most of all. Valence's VSEPR starts win where MMFF94 has no
+parameters or a charge (SF₄, acetate). Neither picks the better conformer
+reliably: OCL's lands lower on cyclododecane, ibuprofen and tropine, higher on
+glucose and the dipeptide. Adopting the library would break two rules — no
+cheminformatics libraries, and the embedder not guessing a torsion (the
+bromonium lesson, 2026-10-24) — so it is the user's call; the steps it saves
+point at ring seeding as the embedder's weak part.
