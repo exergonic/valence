@@ -80,7 +80,7 @@ export interface ColorSettings {
 export interface DisplaySettings {
   atomScale: number;
   bondScale: number;
-  labelMode: 'atom' | 'atom-id' | 'orbital' | 'hybrid' | 'charge' | 'bond-order' | 'spin' | 'off';
+  labelMode: 'atom' | 'atom-id' | 'orbital' | 'hybrid' | 'charge' | 'bond-order' | 'spin' | 'axial' | 'off';
   orbitalPreset: 'glass' | 'glossy' | 'matte' | 'metallic';
   atomStyle: AtomStyle;
   bgColor: string;

@@ -3,7 +3,8 @@ import { activeIsoValue, isGfn2ChargeModel, isHfChargeModel, type ChargeModel, t
 import { renderAtoms } from './atoms';
 import { renderBonds } from './bonds';
 import { renderHybridOrbitals } from './hybrid-orbitals';
-import { renderLabels, renderChargeLabels, renderHybridizationLabels, renderBondOrderLabels, renderSpinLabels } from './labels';
+import { renderLabels, renderChargeLabels, renderHybridizationLabels, renderBondOrderLabels, renderSpinLabels, renderAxialLabels } from './labels';
+import { chairPositions } from '../geometry/ring-flip';
 import { renderOrbitalLabels } from './orbital-labels';
 import { renderPiSystems, tintPiSystemLobes } from './pi-systems';
 import { renderDipole } from './dipole';
@@ -477,6 +478,15 @@ function syncLabelModeControl(properties: Gfn2Properties | null) {
   option.textContent = properties.spin === null ? 'Spin density (closed shell: none)' : 'Spin density';
 }
 
+/** Axial and equatorial are on offer only with a ring in a chair on screen;
+ *  the option says why when there is none. */
+function syncAxialLabelControl(anyChair: boolean) {
+  const option = document.querySelector<HTMLOptionElement>('#ctrl-label-mode option[value="axial"]');
+  if (!option) return;
+  option.disabled = !anyChair;
+  option.textContent = anyChair ? 'Axial / equatorial' : 'Axial / equatorial (no ring in a chair)';
+}
+
 /**
  * GFN2's ESP surface for the single point on screen, or null while the worker
  * builds it (or when it could not) — asking for it if nobody has yet.
@@ -630,6 +640,9 @@ function redrawScene(ctx: SceneContext) {
   // GFN2's single point at this geometry: bond orders, spin (null while it runs)
   const properties = gfn2PropertiesOnScreen(ctx);
   syncLabelModeControl(properties);
+  // every group on a six-membered ring in a chair, axial or equatorial
+  const chairs = chairPositions(ctx.currentMolecule);
+  syncAxialLabelControl(chairs.length > 0);
   if (labelMode === 'atom' || labelMode === 'atom-id') {
     // Element symbol labels (C, N, O...), or numbered as the orbital lists name them (C1, H7)
     renderLabels(ctx.labelGroup, ctx.currentMolecule, labelMode === 'atom-id');
@@ -654,6 +667,10 @@ function redrawScene(ctx: SceneContext) {
     ctx.orbitalLabelGroup.visible = false;
   } else if (labelMode === 'bond-order' && properties) {
     renderBondOrderLabels(ctx.labelGroup, ctx.currentMolecule, properties.bondOrders);
+    ctx.labelGroup.visible = true;
+    ctx.orbitalLabelGroup.visible = false;
+  } else if (labelMode === 'axial' && chairs.length > 0) {
+    renderAxialLabels(ctx.labelGroup, ctx.currentMolecule, chairs);
     ctx.labelGroup.visible = true;
     ctx.orbitalLabelGroup.visible = false;
   } else if (labelMode === 'spin' && properties?.spin) {

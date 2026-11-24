@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import type { Molecule } from '../mol-parser';
 import { getCovalentRadius } from './chem-data';
 import type { AtomOrbitals } from '../chem/vsepr/assign-orbitals';
+import type { RingPosition } from '../geometry/ring-flip';
 
 // How far each label is pushed toward the camera, as a multiple of the
 // atom's own orbital-cloud radius (covalent radius + padding). The orbital
@@ -72,6 +73,17 @@ export function renderBondOrderLabels(group: THREE.Group, molecule: Molecule, bo
     sprite.userData = { atomX: mx, atomY: my, atomZ: mz, push: 0.35 };
     group.add(sprite);
   });
+}
+
+/**
+ * Axial or equatorial, on every group of every six-membered ring in a chair:
+ * "ax" or "eq" on the atom bonded to the ring — each hydrogen, a methyl's
+ * carbon, an OH's oxygen — where the element symbol would sit. Read from the
+ * ring's two slots at each atom (geometry/ring-flip.ts, chairPositions).
+ */
+export function renderAxialLabels(group: THREE.Group, molecule: Molecule, positions: RingPosition[]): void {
+  const label = new Map(positions.map((p) => [p.substituent, p.axial ? 'ax' : 'eq']));
+  placeAtomLabels(group, molecule, (i) => label.get(i) ?? null);
 }
 
 /** A spin population: "0.83", "−0.12" (U+2212 minus) — where the unpaired
