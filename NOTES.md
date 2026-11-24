@@ -6237,3 +6237,53 @@ the app: the inspector is 420 px on and 300 off; clicks in the zoomed ledger,
 the card's placement under the header and the tooltip at the pointer all land
 where they should. The button sits under Settings rather than in the drawer,
 the user's choice: a lesson should not need a detour to see better.
+
+## Bridged rings: placed from the bond graph, not the drawing (2026-11-23)
+
+A student's norbornene burst apart. Every bridged sketch tried — norbornane
+(plain, and wedged on both bridge bonds as the user drew it), norbornene,
+norbornadiene, camphor, bicyclo[2.2.2]octane, [3.2.1], [3.3.1], [1.1.1],
+[2.1.1], 2-oxabicyclo[2.1.1]hex-5-ene, adamantane, cubane, quinuclidine,
+tropine — started with unbonded
+atoms inside bonding distance of each other, and none came back as the molecule
+drawn: held, set aside, or the bare start. The cause was the ring seed: every
+ring is laid flat from the sketch and puckered ±0.25 Å, and a bridged system
+has no flat drawing. JSME puts norbornane's C7 inside the hexagon, 41° from
+C3–C4 and nearer C4 than C3; scaled, that is C7···C4 at 1.26 Å. The ring-H
+rule (one axial, one outward from a ring plane) then pointed C7's hydrogens
+into the ring, 1.20 Å from C4 and C5 after the overlap pass. GFN2 closed the
+C4–C7 three-membered ring (Wiberg 0.99) — the user's held structure.
+
+The guard alone does not see it: C7 and C4 share C3, and a 1,3 pair is left
+to its angle. So a system's drawing is judged by the guard's rule *and* "no two
+ring bonds at an atom closer than a three-membered ring's 60° unless their ends
+are bonded"; only a system with an atom on three ring bonds is judged (diborane's
+B–H–B–H rhombus is narrow at B, and right). Of the suite's examples and
+sketches none is flagged, so no existing start changed.
+
+A flagged system is placed by classical metric-matrix embedding — distance
+geometry's first step, one Jacobi diagonalisation, no minimiser — of the
+distances the bonds imply: a bond its own length, a 1,3 pair 1.63 bonds, each
+bond beyond +0.3 (cyclohexane's 1,4 is 1.93). It is laid onto the drawing by
+orthogonal Procrustes (where it was drawn, turned as drawn), and of the two
+mirror images that fit a flat drawing alike, the drawn wedges choose: one on a
+bond inside the system, or from a bridgehead, whose fourth bond can only point
+away from its three ring bonds. The substituents go in the slots the ring bonds
+leave open (`getLonePairDirections`, the same geometry as a lone pair's).
+
+Measured on JSME's own drawings, local GFN2: all fourteen converge in 5–12
+steps, 0.2–1.2 s, keeping the bonds drawn. Each result re-optimised by xtb 6.7.1
+(`--ohess vtight`) is a minimum, no imaginary mode, at the app's energy within
+2 × 10⁻⁶ Eh — except bicyclo[2.2.2]octane, 2.2 × 10⁻⁴ Eh (0.14 kcal/mol) above,
+on its 87 cm⁻¹ twist: the loose gate on a soft mode. Lowest modes: quinuclidine
+33 cm⁻¹, camphor 100, norbornane 151, cubane 623. Stereo, checked by Open Babel
+reading each result back as canonical isomeric SMILES: (1R)- and (1S)-camphor,
+camphor wedged only at its C1 methyl, exo- and endo-norborneol, a
+2-methylnorbornane and wedged norbornene all match the SMILES drawn. Exo-
+norborneol is 1.6 kcal/mol below endo under GFN2.
+
+A bridged system joined to a flat-seeded ring is laid where the drawing puts it
+while the other ring keeps the flat seed, so the bond between them starts at
+whatever length that leaves: 2-phenylnorbornane's starts at 1.77 Å (the guard's
+limit 1.98), and GFN2 converges to the molecule drawn. Larger mismatches are
+possible in principle; none seen.

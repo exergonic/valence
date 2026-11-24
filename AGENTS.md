@@ -277,7 +277,8 @@ Each module's header comment says what it does and why; this list says where.
     `elements.ts`, `d-electron-count.ts`
 - `src/geometry/` — the 3D pipeline (it consumes the VSEPR directions, so it
   sits above `chem/`): `resolve3d.ts` + `validate-structure.ts`, `place3d.ts`
-  (the embedder), `embed.ts`, `local-geometry.ts`, `gfn2-refine.ts` +
+  (the embedder), `bridged-rings.ts` (a bridged ring system, placed from its
+  bond graph), `embed.ts`, `local-geometry.ts`, `gfn2-refine.ts` +
   `.worker.ts` (the engine and the background single point),
   `hf-single-point.ts` + `.worker.ts` (the on-demand Hartree–Fock engine),
   `esp-surface.ts` (the 0.001 au surface either engine's density gives),
