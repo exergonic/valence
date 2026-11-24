@@ -12,6 +12,7 @@ import type { Molecule } from '../mol-parser';
 import { fillMissingHydrogens } from '../chem/fill-hydrogens';
 import { place3D, hasRingBonds } from './place3d';
 import { applyWedgeStereo } from './stereo-wedge';
+import { chairWithGroupsEquatorial } from './ring-flip';
 
 /** Deterministic ±0.5 hash of the atom index (reproducible tests). */
 function hash(i: number, seed: number): number {
@@ -115,12 +116,13 @@ export function finite(molecule: Molecule): boolean {
 export function embed3D(molecule: Molecule): { sketch: Molecule; placed: Molecule; separated: Molecule } {
   const withH = fillMissingHydrogens(molecule);
   const coords = place3D(withH);
-  const placed: Molecule = {
+  // a ring on its own starts in the chair with its bulkier groups equatorial
+  const placed = chairWithGroupsEquatorial({
     ...withH,
     atoms: withH.atoms.map((a, i) => ({
       ...a, x: coords[i][0], y: coords[i][1], z: coords[i][2],
     })),
-  };
+  });
   // `sketch` is the drawing with its hydrogens, still in the page's 2D frame:
   // the wedges are read against it (honourWedges), never against a 3D model.
   return { sketch: withH, placed, separated: separateOverlaps(placed) };

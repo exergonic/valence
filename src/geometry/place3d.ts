@@ -95,7 +95,7 @@ function setTorsion(
  * H-H at 0.90 Å). Ring atoms are therefore seeded from the 2D input
  * coordinates, which are a proper polygon.
  */
-function ringBonds(molecule: Molecule): Set<string> {
+export function ringBonds(molecule: Molecule): Set<string> {
   const adj: number[][] = Array.from({ length: molecule.atoms.length }, () => []);
   for (const bond of molecule.bonds) {
     adj[bond.atom1Index].push(bond.atom2Index);
@@ -557,6 +557,13 @@ export function place3D(molecule: Molecule): [number, number, number][] {
   // Its warnings are deliberately dropped here — the final enforcement happens
   // after the optimisation (embed.ts, honourWedges), which collects them.
   applyWedgeStereo(molecule, pos);
+  // The wedges' swap turns a branch rigidly onto its partner's direction and
+  // leaves the branch's own rotor wherever that puts it: a wedged
+  // cis-1,2-dimethylcyclohexane's methyl came out with an H 1.46 Å from the
+  // ring's C6 (2026-11-24). A rigid turn about an acyclic bond keeps every
+  // configuration — each centre's neighbours turn together, or lie on the
+  // axis — so the clashes the swap left are turned out again.
+  turnClashingRings(molecule, pos, adj, rings, ringAtoms);
 
   // Unplaced atoms (isolated) keep their 2D input coordinates.
   return pos.map((p, i) => p || [molecule.atoms[i].x, molecule.atoms[i].y, 0]);
