@@ -6335,3 +6335,31 @@ glucose and the dipeptide. Adopting the library would break two rules — no
 cheminformatics libraries, and the embedder not guessing a torsion (the
 bromonium lesson, 2026-10-24) — so it is the user's call; the steps it saves
 point at ring seeding as the embedder's weak part.
+
+## OpenChemLib allowed; rings start in their own shape (2026-11-24)
+
+Decided with the user. "No cheminformatics libraries" dates from when Valence
+drew idealised VSEPR shapes in pure TypeScript; the app has since vendored two
+wasm engines (OCC's GFN2 and HF) and mmff94-ts, and three known limitations
+are hand-rolled perception with gaps (kekulization of monocycles only, no
+aromatic bond order 4, the H filler at ±1 only). The 2026-09-24 survey set
+OpenChemLib aside on a headless probe that threw ("unconfirmed, not
+disproven"); app.molview.com now runs its ConformerGenerator and MMFF94 in a
+worker (the entry above). So OpenChemLib is allowed — and only it — for
+reading structures and for ring conformations, never for what the views
+teach, never for an acyclic torsion, and never unchecked: the guard judges
+its structure and the embedder's start stands in when it fails, as it would
+have for bicyclo[1.1.1]pentane, which OpenChemLib broke.
+
+What the user teaches with rings, in order of weight: polysubstituted
+cyclohexanes, cis and trans, for axial/equatorial relationships — shown as a
+proper chair, which is what students expect; norbornene, with an endo
+aldehyde for the endo rule; a few sugars, glucose foremost. Large rings
+(cyclododecane) not. Hence the amendment to "Wedges say what leaves the
+plane": a ring's conformation is chosen for it, a chair for cyclohexane,
+while acyclic bonds keep the drawing's plane.
+
+Not yet measured: where today's embedder lands substituted cyclohexanes
+(which chair, or a twist-boat), cis-decalin, the glucose anomers and endo
+norbornene-carbaldehyde, against xtb reference minima — the benchmark any
+OpenChemLib ring start has to win.

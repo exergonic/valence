@@ -162,6 +162,11 @@ Made with the user; the reasons are in NOTES.md under the date.
   Stating what is in the plane and what is not is a teaching point in its
   own right: the 2-bromoethyl cation closes to the bromonium only with its
   Br wedged; on a plain bond it stays open, a minimum 20 kcal/mol higher.
+  **Rings are the exception** (2026-11-24): a ring's bonds cannot turn
+  freely, and a flat or twisted ring is not the shape a chemist expects —
+  a cyclohexane starts as a chair. The wedges still fix each centre's
+  configuration; the ring's conformation is chosen for it. Acyclic bonds
+  keep the rule above.
 - **Keep optimising** (2026-10-24): a free run that stops short offers it in
   the header — another run from the best structure reached, with a fresh
   budget, as often as the user likes; no unlimited mode.
@@ -331,7 +336,14 @@ Each module's header comment says what it does and why; this list says where.
   method; `bun run smoke` covers them.
 
 ## Conventions
-- No cheminformatics libraries — MOL parsing is hand-rolled from JSME's output.
+- **One cheminformatics library: OpenChemLib** (2026-11-24, replacing "no
+  cheminformatics libraries"). It may do what Valence does not teach and
+  would otherwise hand-roll with gaps: reading a structure (kekulization,
+  aromaticity, stereo, hydrogens) and ring conformations. Never the chemistry
+  the views teach — the VSEPR picture, the orbitals, the charges — and never
+  an acyclic torsion (Wedges say what leaves the plane). Nothing it produces
+  is trusted: its structure passes the same guard, and the embedder's own
+  start stands in when it fails. Any other toolkit, ask first.
 - Hybridization is an electron-domain count from the bond graph (σ bonds + lone
   pairs, shifted by formal charge) — never a measured angle, which is the output.
 - Orbital lobes are surfaces of revolution → `THREE.LatheGeometry`.
