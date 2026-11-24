@@ -19,6 +19,7 @@ import { setupModelViews } from './ui/model-views';
 import { setupThermoPanel } from './ui/thermo-panel';
 import { setupHfPanel } from './ui/hf-panel';
 import { setupTurnPanel } from './ui/turn-panel';
+import { setupFlipPanel } from './ui/flip-panel';
 import { setupAnnotations } from './ui/annotations';
 import { saveViewToFile, loadViewFromFile, buildShareLink, parseShareLink, applyViewState } from './ui/view-state';
 import { parseMolBlock, type Molecule } from './mol-parser';
@@ -255,6 +256,7 @@ async function main() {
   setupHfPanel(ctx);
   // after the orbital panel: it chains that panel's hooks for the single point
   setupTurnPanel(ctx);
+  setupFlipPanel(ctx);
   setupKeyboardShortcuts();
   setupMeasureMode(ctx, measure);
   setupViewStateUI(ctx, annotations);

@@ -336,6 +336,7 @@
             <span class="ctrl-label">Tools</span>
             <div class="preset-row" role="group" aria-label="What a click on the molecule does">
               <button class="view-preset-btn" data-structure-tool="turn" aria-pressed="false" title="Turn a bond: click a bond, then turn it with the slider, by a click on the energy curve, or by dragging any atom beside it across the scene. One side turns rigidly about the bond, as in a Newman projection; nothing else moves.">Turn a bond</button>
+              <button class="view-preset-btn" data-structure-tool="flip" aria-pressed="false" title="Flip a ring: click an atom of a six-membered ring in a chair. The ring flips to its other chair — every axial group equatorial, every equatorial one axial, each on its own face — optimised with GFN2-xTB, with the energy of each chair.">Flip a ring</button>
               <button class="view-preset-btn" data-structure-tool="measure" aria-pressed="false" title="Measure: click 2 atoms for a distance, 3 for an angle, 4 for a dihedral.">Measure</button>
             </div>
 
@@ -369,6 +370,29 @@
                 </details>
               </div>
               <p id="turn-refusal" class="measure-hint hidden"></p>
+            </div>
+
+            <div id="flip-tool" class="hidden">
+              <p id="flip-hint" class="measure-hint">Click an atom of a six-membered ring to flip it between its two chairs.</p>
+              <div id="flip-ring" class="hidden">
+                <div class="turn-head">
+                  <span id="flip-name" class="turn-name"></span>
+                  <span id="flip-energy" class="turn-energy"></span>
+                </div>
+                <div id="flip-chairs" class="flip-chairs" role="group" aria-label="The ring's two chairs"></div>
+                <p id="flip-status" class="measure-hint hidden"></p>
+                <button id="flip-button" class="refine-btn">Flip the ring</button>
+                <p id="flip-note" class="measure-hint turn-note hidden"></p>
+                <details class="view-notes" id="flip-computed">
+                  <summary>How it was computed</summary>
+                  <div class="view-notes-body">
+                    <p>The other chair is built by reflecting the ring through its own mean plane, which turns its pucker over, and moving each group to the open position on the same face of its ring atom. A group that was up stays up, so cis stays cis and every configuration is kept; axial and equatorial trade places.</p>
+                    <p>Both chairs are then optimised with GFN2-xTB, and each must still be a chair and still the molecule drawn. ΔE is GFN2-xTB’s energy of the chair on screen less the other’s: two minima in the gas phase, each with its groups turned as the optimisation left them.</p>
+                    <p>Axial and equatorial are read from the two positions the ring bonds leave at each ring atom: the one nearer the ring’s axis is axial.</p>
+                  </div>
+                </details>
+              </div>
+              <p id="flip-refusal" class="measure-hint hidden"></p>
             </div>
 
             <div id="measure-tool" class="hidden">

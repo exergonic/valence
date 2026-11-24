@@ -516,6 +516,22 @@ export function optimiseOnScreen(): Promise<void> {
   return refineOnScreen();
 }
 
+/**
+ * A GFN2-xTB minimum put on screen as a refinement's is — snapped to its point
+ * group, its run said in the card, `note` first among the card's facts — with
+ * the camera kept, so a ring flipped by hand is seen to flip where it is.
+ * Returns the structure shown.
+ */
+export function showGfn2Structure(ctx: SceneContext, refined: Gfn2Result, note: string): Molecule {
+  const snapped = snapToSymmetry(refined.molecule);
+  const next = snapped.molecule;
+  showMolecule(ctx, next, refined.charges, refined.vibrations, null, true);
+  const notes = joinNotes({ info: [note] }, gfn2RunNotes(refined), gfn2ShapeNotes(next), { info: [...snapped.info, GFN2_NOTE] });
+  showMoleculeHeader(next, { source: 'gfn2', ...notes });
+  if (!refined.converged) offerContinue();
+  return next;
+}
+
 /** The header's "Keep optimising", offered when a free GFN2 run stopped short
  *  (its 30 s budget, or its step budgets): another run from the best structure
  *  it reached, with a fresh budget, as often as the user likes — a person

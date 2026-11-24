@@ -11,7 +11,7 @@ import { collectSdfData, sdfDataFields, type SdfField } from './sdf-data';
 import { vecSub, vecDot, vecLength, dihedralAngle, type Vec3 } from '../utils/vec3';
 
 /** The Structure view's tools; a click on the molecule goes to the one on. */
-export type StructureTool = 'turn' | 'measure';
+export type StructureTool = 'turn' | 'flip' | 'measure';
 
 /** The measuring tool's state, which the canvas click handler (main.ts) adds
  *  picked atoms to. */
@@ -295,6 +295,7 @@ export function setupControls(ctx: SceneContext): { measure: MeasureTool } {
       button.setAttribute('aria-pressed', String(on));
     }
     document.getElementById('turn-tool')!.classList.toggle('hidden', tool !== 'turn');
+    document.getElementById('flip-tool')!.classList.toggle('hidden', tool !== 'flip');
     document.getElementById('measure-tool')!.classList.toggle('hidden', tool !== 'measure');
     if (tool !== 'measure') clearMeasure();
     document.dispatchEvent(new CustomEvent<StructureTool | null>('structure-tool', { detail: tool }));

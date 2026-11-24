@@ -1939,6 +1939,13 @@ html.projector #tooltip { font-size: 17px; padding: 6px 12px; }
 .turn-note { color: var(--note); }
 
 #turn-tool.hidden,
+#flip-tool.hidden,
+#flip-hint.hidden,
+#flip-ring.hidden,
+#flip-status.hidden,
+#flip-button.hidden,
+#flip-note.hidden,
+#flip-refusal.hidden,
 #measure-tool.hidden,
 #turn-hint.hidden,
 #turn-refusal.hidden,
@@ -1956,6 +1963,41 @@ html.projector #tooltip { font-size: 17px; padding: 6px 12px; }
 #hf-note.hidden,
 #measure-points:empty,
 #measure-result:empty { display: none; }
+
+/* ── Flip a ring: its two chairs, the one on screen marked ── */
+
+.flip-chairs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 8px 0;
+}
+
+.flip-chair {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  padding: 5px 8px;
+  text-align: left;
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.flip-chair[aria-pressed="true"] {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.flip-chair:disabled { cursor: default; opacity: 0.7; }
+.flip-chair .flip-chair-name { font-weight: 600; }
+.flip-chair .flip-chair-energy { font-family: var(--font-mono); text-align: right; }
+.flip-chair .flip-chair-groups { grid-column: 1 / -1; font-family: var(--font-mono); font-size: 10.5px; }
 
 /* ── Floating Action Buttons ── */
 
